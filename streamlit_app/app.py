@@ -30,7 +30,8 @@ from utils.metrics import (
     calculate_summary_stats,
     calculate_percentile_rank,
     detect_anomalies,
-    calculate_trend_direction
+    calculate_trend_direction,
+    format_currency
 )
 from utils.components import (
     render_summary_cards,
@@ -121,20 +122,53 @@ def main():
         with st.sidebar:
             st.header("Prescriber Selection")
 
-            # Quick filters
-            quick_npi = render_quick_filters(df, prescriber_list)
-
-            st.markdown("---")
-
-            # Main selector
+            # Initialize session state
             if 'selected_npi' not in st.session_state:
                 st.session_state.selected_npi = prescriber_list[0, 'PRESCRIBER_NPI_NBR']
 
+            # Quick filters
+            quick_npi = render_quick_filters(df, prescriber_list)
+
+            # Update session state if quick filter was clicked
             if quick_npi is not None:
                 st.session_state.selected_npi = quick_npi
+                st.rerun()
 
-            selected_npi = render_prescriber_selector(prescriber_list, key="main_selector")
-            st.session_state.selected_npi = selected_npi
+            st.markdown("---")
+
+            # Main selector - use index to control selection
+            # Find the index of the currently selected NPI
+            current_npi = st.session_state.selected_npi
+            prescriber_npis = prescriber_list['PRESCRIBER_NPI_NBR'].to_list()
+
+            try:
+                current_index = prescriber_npis.index(current_npi)
+            except ValueError:
+                current_index = 0
+                st.session_state.selected_npi = prescriber_npis[0]
+
+            # Create display strings
+            prescriber_options = [
+                f"{row['prescriber_name']} (NPI: {row['PRESCRIBER_NPI_NBR']}) - "
+                f"{format_currency(row['lifetime_revenue'])} - {row['specialty']}"
+                for row in prescriber_list.iter_rows(named=True)
+            ]
+
+            selected_option = st.selectbox(
+                "Select Prescriber",
+                options=prescriber_options,
+                index=current_index,
+                key="prescriber_selectbox",
+                help="Search by name, NPI, or specialty"
+            )
+
+            # Extract NPI from selected option and update session state
+            selected_npi = prescriber_npis[prescriber_options.index(selected_option)]
+
+            # Only update and rerun if the selection actually changed
+            if selected_npi != st.session_state.selected_npi:
+                st.session_state.selected_npi = selected_npi
+                st.rerun()
 
             st.markdown("---")
 
@@ -144,7 +178,7 @@ def main():
             st.markdown("---")
 
             # Export options
-            prescriber_data = filter_prescriber_data(df, selected_npi, start_date, end_date)
+            prescriber_data = filter_prescriber_data(df, st.session_state.selected_npi, start_date, end_date)
             prescriber_name = prescriber_data['prescriber_name'][0] if len(prescriber_data) > 0 else "Unknown"
             render_export_options(prescriber_data, prescriber_name)
 
@@ -158,7 +192,7 @@ def main():
 
         # Display prescriber info
         st.header(f"📋 {prescriber_name}")
-        st.markdown(f"**NPI:** {selected_npi} | **Specialty:** {stats['specialty']} | **State:** {stats['state']}")
+        st.markdown(f"**NPI:** {st.session_state.selected_npi} | **Specialty:** {stats['specialty']} | **State:** {stats['state']}")
 
         # Summary cards
         render_summary_cards(stats)
@@ -237,7 +271,7 @@ def main():
         col7, col8, col9 = st.columns(3)
 
         with col7:
-            percentile = calculate_percentile_rank(df, selected_npi, 'total_revenue')
+            percentile = calculate_percentile_rank(df, st.session_state.selected_npi, 'total_revenue')
             st.metric("Revenue Percentile", f"{percentile}%", help="Where this prescriber ranks among all prescribers")
 
         with col8:
@@ -321,7 +355,6 @@ def main():
             with col3:
                 st.metric("Total Prescribers", f"{total_prescribers:,}")
             with col4:
-                from utils.metrics import format_currency
                 st.metric("Total Revenue", format_currency(total_revenue))
             with col5:
                 st.metric("Avg Monthly Revenue", format_currency(avg_monthly_rev))
@@ -416,7 +449,6 @@ def main():
 
             # Format for display
             tier_stats_display = tier_stats.to_pandas()
-            from utils.metrics import format_currency
             tier_stats_display['avg_monthly_revenue'] = tier_stats_display['avg_monthly_revenue'].apply(format_currency)
             tier_stats_display['total_tier_revenue'] = tier_stats_display['total_tier_revenue'].apply(format_currency)
             tier_stats_display['pct_of_total_revenue'] = tier_stats_display['pct_of_total_revenue'].apply(lambda x: f"{x:.1f}%")
