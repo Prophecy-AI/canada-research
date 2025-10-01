@@ -519,20 +519,188 @@ def main():
         prescribers = get_prescriber_list(df)
 
     # =============================================================================
-    # SIDEBAR
+    # TAB NAVIGATION
     # =============================================================================
 
-    st.sidebar.header("🔍 Prescriber Selection")
+    tab1, tab2 = st.tabs(["📊 Individual Dashboard", "📋 Prescriber Directory"])
 
-    # Quick filters
-    filter_option = st.sidebar.radio(
-        "Quick Filters:",
-        ["Custom Search", "Top 10 by Revenue", "Top 10 by Volume", "Random Prescriber"]
-    )
+    # =============================================================================
+    # TAB 2: PRESCRIBER DIRECTORY
+    # =============================================================================
 
-    selected_npi = None
+    with tab2:
+        st.header("📋 Prescriber Directory")
+        st.markdown("Browse all prescribers and click to view detailed analytics")
 
-    if filter_option == "Top 10 by Revenue":
+        # Add filters for directory
+        col1, col2, col3 = st.columns(3)
+
+        with col1:
+            # Specialty filter
+            all_specialties = (
+                df.select('specialty')
+                .unique()
+                .filter(pl.col('specialty').is_not_null())
+                .sort('specialty')
+                .to_series()
+                .to_list()
+            )
+            specialty_filter = st.multiselect(
+                "Filter by Specialty:",
+                options=all_specialties,
+                default=None
+            )
+
+        with col2:
+            # State filter
+            all_states = (
+                df.select('state')
+                .unique()
+                .filter(pl.col('state').is_not_null())
+                .sort('state')
+                .to_series()
+                .to_list()
+            )
+            state_filter = st.multiselect(
+                "Filter by State:",
+                options=all_states,
+                default=None
+            )
+
+        with col3:
+            # Payment filter
+            payment_filter = st.selectbox(
+                "Payment Status:",
+                options=["All", "Receives Payments", "No Payments"]
+            )
+
+        # Search box
+        search_directory = st.text_input("🔍 Search by name or NPI:", key="directory_search")
+
+        # Prepare directory dataframe
+        directory_df = prescribers
+
+        # Join with latest month data for specialty/state
+        latest_months = (
+            df.group_by('PRESCRIBER_NPI_NBR')
+            .agg([
+                pl.col('month').max().alias('latest_month')
+            ])
+        )
+
+        latest_data = df.join(latest_months, on='PRESCRIBER_NPI_NBR').filter(
+            pl.col('month') == pl.col('latest_month')
+        ).select([
+            'PRESCRIBER_NPI_NBR',
+            'specialty',
+            'state',
+            'receives_payments'
+        ])
+
+        directory_df = directory_df.join(latest_data, on='PRESCRIBER_NPI_NBR', how='left')
+
+        # Apply filters
+        if specialty_filter:
+            directory_df = directory_df.filter(pl.col('specialty').is_in(specialty_filter))
+
+        if state_filter:
+            directory_df = directory_df.filter(pl.col('state').is_in(state_filter))
+
+        if payment_filter == "Receives Payments":
+            directory_df = directory_df.filter(pl.col('receives_payments') == 1)
+        elif payment_filter == "No Payments":
+            directory_df = directory_df.filter(
+                (pl.col('receives_payments') == 0) | pl.col('receives_payments').is_null()
+            )
+
+        # Apply search
+        if search_directory:
+            directory_df = directory_df.filter(
+                (pl.col('prescriber_name').str.to_lowercase().str.contains(search_directory.lower())) |
+                (pl.col('PRESCRIBER_NPI_NBR').cast(pl.Utf8).str.contains(search_directory))
+            )
+
+        # Sort and format for display
+        directory_df = directory_df.sort('lifetime_revenue', descending=True)
+
+        # Add formatted columns
+        directory_display = directory_df.with_columns([
+            pl.col('lifetime_revenue').map_elements(lambda x: format_currency(x), return_dtype=pl.Utf8).alias('Revenue'),
+            pl.col('active_months').map_elements(lambda x: format_number(x), return_dtype=pl.Utf8).alias('Active Months'),
+            pl.col('receives_payments').map_elements(lambda x: "✅" if x == 1 else "❌", return_dtype=pl.Utf8).alias('Payments')
+        ]).select([
+            pl.col('PRESCRIBER_NPI_NBR').alias('NPI'),
+            pl.col('prescriber_name').alias('Name'),
+            pl.col('specialty').alias('Specialty'),
+            pl.col('state').alias('State'),
+            pl.col('Revenue'),
+            pl.col('Active Months'),
+            pl.col('Payments')
+        ])
+
+        # Display count
+        st.info(f"📊 Showing {len(directory_display):,} prescribers")
+
+        # Convert to pandas for display (streamlit dataframe works better with pandas)
+        display_pd = directory_display.to_pandas()
+
+        # Show dataframe with row selection
+        st.markdown("**Click on a row to view detailed analytics:**")
+
+        event = st.dataframe(
+            display_pd,
+            use_container_width=True,
+            hide_index=True,
+            height=600,
+            on_select="rerun",
+            selection_mode="single-row"
+        )
+
+        # Handle row selection
+        if event.selection and len(event.selection.rows) > 0:
+            selected_row_idx = event.selection.rows[0]
+            selected_npi_from_table = display_pd.iloc[selected_row_idx]['NPI']
+
+            # Store in session state and switch to dashboard tab
+            st.session_state['selected_npi'] = int(selected_npi_from_table)
+            st.session_state['switch_to_dashboard'] = True
+            st.rerun()
+
+    # =============================================================================
+    # TAB 1: INDIVIDUAL DASHBOARD
+    # =============================================================================
+
+    with tab1:
+        # =============================================================================
+        # SIDEBAR
+        # =============================================================================
+
+        st.sidebar.header("🔍 Prescriber Selection")
+
+        # Check if coming from directory tab
+        if 'switch_to_dashboard' in st.session_state and st.session_state['switch_to_dashboard']:
+            selected_npi = st.session_state['selected_npi']
+            st.session_state['switch_to_dashboard'] = False
+
+            # Display info about selected prescriber
+            selected_info = prescribers.filter(pl.col('PRESCRIBER_NPI_NBR') == selected_npi)
+            if len(selected_info) > 0:
+                st.sidebar.success(
+                    f"✅ Selected from directory:\n\n"
+                    f"**{selected_info['prescriber_name'][0]}**\n\n"
+                    f"NPI: {selected_npi}"
+                )
+        else:
+            selected_npi = None
+
+        # Quick filters
+        filter_option = st.sidebar.radio(
+            "Quick Filters:",
+            ["Custom Search", "Top 10 by Revenue", "Top 10 by Volume", "Random Prescriber"]
+        )
+
+        if selected_npi is None:
+            if filter_option == "Top 10 by Revenue":
         top_10 = prescribers.head(10)
         options = [
             f"{row['prescriber_name']} (NPI: {row['PRESCRIBER_NPI_NBR']}) - {format_currency(row['lifetime_revenue'])}"
