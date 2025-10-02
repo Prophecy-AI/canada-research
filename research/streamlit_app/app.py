@@ -122,53 +122,50 @@ def main():
         with st.sidebar:
             st.header("Prescriber Selection")
 
-            # Initialize session state
-            if 'selected_npi' not in st.session_state:
-                st.session_state.selected_npi = prescriber_list[0, 'PRESCRIBER_NPI_NBR']
-
-            # Quick filters
-            quick_npi = render_quick_filters(df, prescriber_list)
-
-            # Update session state if quick filter was clicked
-            if quick_npi is not None:
-                st.session_state.selected_npi = quick_npi
-                st.rerun()
-
-            st.markdown("---")
-
-            # Main selector - use index to control selection
-            # Find the index of the currently selected NPI
-            current_npi = st.session_state.selected_npi
+            # Create NPI list and options
             prescriber_npis = prescriber_list['PRESCRIBER_NPI_NBR'].to_list()
-
-            try:
-                current_index = prescriber_npis.index(current_npi)
-            except ValueError:
-                current_index = 0
-                st.session_state.selected_npi = prescriber_npis[0]
-
-            # Create display strings
             prescriber_options = [
                 f"{row['prescriber_name']} (NPI: {row['PRESCRIBER_NPI_NBR']}) - "
                 f"{format_currency(row['lifetime_revenue'])} - {row['specialty']}"
                 for row in prescriber_list.iter_rows(named=True)
             ]
 
-            selected_option = st.selectbox(
+            # Initialize widget state directly if needed
+            if 'prescriber_selector' not in st.session_state:
+                st.session_state.prescriber_selector = 0
+
+            if 'selected_npi' not in st.session_state:
+                st.session_state.selected_npi = prescriber_npis[0]
+
+            # Quick filters
+            quick_npi = render_quick_filters(df, prescriber_list)
+
+            # If quick filter was clicked, update the widget state directly
+            if quick_npi is not None:
+                try:
+                    new_index = prescriber_npis.index(quick_npi)
+                    st.session_state.prescriber_selector = new_index
+                    st.session_state.selected_npi = quick_npi
+                except ValueError:
+                    pass
+                st.rerun()
+
+            st.markdown("---")
+
+            # Callback for selectbox change
+            def on_prescriber_select():
+                selected_idx = st.session_state.prescriber_selector
+                st.session_state.selected_npi = prescriber_npis[selected_idx]
+
+            # Main selector
+            st.selectbox(
                 "Select Prescriber",
-                options=prescriber_options,
-                index=current_index,
-                key="prescriber_selectbox",
+                options=range(len(prescriber_options)),
+                format_func=lambda i: prescriber_options[i],
+                key="prescriber_selector",
+                on_change=on_prescriber_select,
                 help="Search by name, NPI, or specialty"
             )
-
-            # Extract NPI from selected option and update session state
-            selected_npi = prescriber_npis[prescriber_options.index(selected_option)]
-
-            # Only update and rerun if the selection actually changed
-            if selected_npi != st.session_state.selected_npi:
-                st.session_state.selected_npi = selected_npi
-                st.rerun()
 
             st.markdown("---")
 
