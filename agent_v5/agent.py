@@ -75,18 +75,26 @@ class ResearchAgent:
         if not bg_process:
             return "Process not found"
         
+        last_new_output_ts = time.time()
         while bg_process.process.returncode is None:
             await asyncio.sleep(30)
-            
+
             new_output = bg_process.stdout_data[bg_process.stdout_cursor:].decode('utf-8', errors='replace')
             new_output += bg_process.stderr_data[bg_process.stderr_cursor:].decode('utf-8', errors='replace')
-            
+
             if new_output.strip():
+                last_new_output_ts = time.time()
                 log(f"→ {shell_id} output: {new_output[:200]}")
                 bg_process.stdout_cursor = len(bg_process.stdout_data)
                 bg_process.stderr_cursor = len(bg_process.stderr_data)
             else:
-                log(f"→ Still waiting for {shell_id} (runtime: {time.time() - bg_process.start_time:.0f}s)")
+                idle = time.time() - last_new_output_ts
+                log(f"→ No output from {shell_id} for {idle:.0f}s (runtime: {time.time() - bg_process.start_time:.0f}s)")
+                if idle >= 60:
+                    return (
+                        f"[STALE_OUTPUT_WARNING] {shell_id} has produced no output for {idle:.0f}s. "
+                        f"Consider killing the job with KillShell and relaunching with more verbose logging."
+                    )
         
         final_output = bg_process.stdout_data[bg_process.stdout_cursor:].decode('utf-8', errors='replace')
         final_output += bg_process.stderr_data[bg_process.stderr_cursor:].decode('utf-8', errors='replace')
