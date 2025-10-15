@@ -20,6 +20,7 @@ from agent_v5.tools.grep import GrepTool
 from agent_v5.tools.todo import TodoWriteTool, ReadTodoListTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
+from agent_v5.tools.list_bash_processes import ListBashProcessesTool
 
 
 class ResearchAgent:
@@ -47,10 +48,10 @@ class ResearchAgent:
         self.tools.register(GlobTool(self.workspace_dir))
         self.tools.register(GrepTool(self.workspace_dir))
         self.tools.register(TodoWriteTool(self.workspace_dir))
-        self.tools.register(CohortDefinitionTool(self.workspace_dir))
-        # Additional tools to strengthen R&D loop
+        #self.tools.register(CohortDefinitionTool(self.workspace_dir))
         self.tools.register(RunSummaryTool(self.workspace_dir))
         self.tools.register(ReadTodoListTool(self.workspace_dir))
+        self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
 
     async def cleanup(self) -> None:
         """
