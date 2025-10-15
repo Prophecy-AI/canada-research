@@ -126,17 +126,25 @@ class ReadBashOutputTool(BaseTool):
                     f"(Full output stored in memory, only recent output shown to save context)\n\n"
                 )
             
+            # Add hint to wait for more progress (only if still running)
+            progress_hint = ""
+            if bg_process.process.returncode is None:
+                progress_hint = (
+                    f"\n\n💡 Consider: Bash(command='sleep 30', background=false) to let the process make more progress before polling again"
+                )
+            
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
                 f"Command: {bg_process.command}\n"
                 f"{stalled_hint}"
                 f"{truncation_notice}\n"
                 f"{new_output}"
+                f"{progress_hint}"
             )
             debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "")
         else:
             # No new output - give agent options: wait or kill
-            wait_time = 15 if time_since_last_output < 60 else 30
+            wait_time = 30 if time_since_last_output < 60 else 60
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
                 f"Command: {bg_process.command}\n"
