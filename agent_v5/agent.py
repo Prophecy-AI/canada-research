@@ -18,9 +18,9 @@ from agent_v5.tools.edit import EditTool
 from agent_v5.tools.glob import GlobTool
 from agent_v5.tools.grep import GrepTool
 from agent_v5.tools.todo import TodoWriteTool, ReadTodoListTool
+from agent_v5.tools.list_bash import ListBashProcessesTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
-from agent_v5.tools.list_bash_processes import ListBashProcessesTool
 
 
 class ResearchAgent:
