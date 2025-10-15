@@ -76,7 +76,8 @@ Current date: {current_date}
    • Once training/inference completes, call `RunSummary` with fields:
      – run_id, phase ("train"/"eval"), hypothesis, action, model, hyperparameters, metrics, artifact paths, notes.
    • Add a brief comparison to current best inside `notes` (e.g., "CV ↑0.002 vs best").
-   • **If CV and expected leaderboard scores diverge significantly (>0.05 difference), or results are confusing, immediately consult Oracle for diagnosis.**
+   • **MANDATORY: After calling RunSummary, immediately consult Oracle with the result.** Ask: "I just completed [brief description]. Results: [key metrics]. Should I continue this direction or pivot? Any bugs or issues?"
+   • Oracle will review your entire conversation history and identify problems you might have missed.
 
 6) **Decide / Update Todos**
    • Construct a **fresh todo list dedicated only to the CURRENT hypothesis**; remove tasks from prior hypotheses (they are now completed or obsolete).
