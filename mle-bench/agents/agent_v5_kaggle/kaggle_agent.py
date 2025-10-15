@@ -45,31 +45,47 @@ Current date: {current_date}
 - RunSummary: Append a structured run log entry (JSONL) after each major phase
 
 **R&D Loop – Best-Practice Guardrails (follow every iteration):**
-0) **Sync tasks**  → ReadTodoList; if empty seed a todo list with TodoWrite (one in_progress item only).
-   – If ReadTodoList shows 0 or >1 in_progress tasks, immediately reconcile by marking exactly one task in_progress via TodoWrite or other appropriate changes to the todo list.
+0) **Sync Tasks**  ⇒ Call `ReadTodoList` at the very start of each turn.
+   • If no todos exist, create a list via `TodoWrite` with ONE task marked `in_progress`.
+   • If >1 tasks are `in_progress`, immediately fix the list so that exactly one remains active.
+   • Rationale: tight task focus prevents context drift and makes wait-states (long training) explicit.
 
-1) **Formulate a Hypothesis**  → Distinguish:
-   – *Insight* (lesson learned from analogous problems).
-   – *Experience* (lesson learned from this competition so far).
-   State one clear hypothesis in plain English; briefly justify with data clues and/or prior runs.
+1) **Formulate a Hypothesis**
+   • Specify whether it stems from an *Insight* (observation from other competitions) or *Experience* (result of previous runs here).
+   • Phrase it as: “I believe X will improve metric Y because Z.”
+   • Keep it atomic—one main idea to test per iteration.
 
-2) **Pick an Action**  → Choose exactly one of:
-   – Feature engineering · Feature processing · Model feature selection · Model tuning.
-   Be explicit *why* this action best tests the hypothesis.
+2) **Pick an Action**
+   • Choose one of four actions (Feature engineering / Feature processing / Model feature selection / Model tuning).
+   • Briefly link the action to the hypothesis: “We choose Feature engineering because ….”
+   • Avoid mixing categories in the same iteration—makes attribution of improvements easier.
 
-3) **Design Experiments**  → List concrete steps (scripts to write, commands to run, metrics to collect).  Prefer simple high-leverage moves first; escalate complexity only if wins plateau.
+3) **Design Experiments**
+   • Outline concrete artefacts: scripts to write, parameters to sweep, metrics to capture.
+   • Prefer low-cost, high-signal experiments first (e.g., add a single aggregate feature before training a deeper NN).
+   • Define expected runtime and GPU memory so you can schedule appropriately.
 
-4) **Execute**  →
-   – Use Bash(background=true) for anything >30 s; monitor via ReadBashOutput; kill if stuck.
-   – Use Write/Edit to implement scripts; keep training in `train.py`, inference in `predict.py`.
+4) **Execute**
+   • For any command expected to exceed 30 s: `Bash(background=true)` and monitor with `ReadBashOutput` every ~1 min.
+   • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
+   • Keep training in `train.py`; keep inference in `predict.py` so that predict.py can run fast during submission.
 
-5) **Record & Evaluate**  →
-   – Immediately call RunSummary with: hypothesis, action, model, params, key metrics, artifact paths.
-   – Compare against prior best; include concise bullet commentary in RunSummary.notes.
+5) **Record & Evaluate**
+   • Once training/inference completes, call `RunSummary` with fields:
+     – run_id, phase (“train”/“eval”), hypothesis, action, model, hyperparameters, metrics, artifact paths, notes.
+   • Add a brief comparison to current best inside `notes` (e.g., “CV ↑0.002 vs best”).
 
-6) **Decide**  → If the hypothesis helped, push further along same idea (deeper model, richer feature).  If not, adjust or pivot; update TodoWrite accordingly so exactly one new task is in_progress.
+6) **Decide / Update Todos**
+   • If metric improved: refine or scale the same idea (e.g., deeper model, more folds).
+   • If not: pivot—new hypothesis or different action.
+   • Immediately update `TodoWrite`:
+     – Set completed tasks to `completed`.
+     – Add the next step with `status`=`in_progress` (exactly one).
 
-7) **Auto-Stop Rule** → If **three** consecutive iterations fail to improve the cross-validation metric (or public LB if CV unavailable), gracefully going in the direction of the hypothesis and mark all todos completed.  Emit a clear “STOP_CRITERION_MET” message.
+7) **Auto-Stop Rule**
+   • Maintain a counter of consecutive non-improving iterations (compare primary CV metric).
+   • After **3** successive misses, emit message `STOP_CRITERION_MET` and mark every todo `completed`.
+   • This prevents endless tuning loops when marginal gains dry up.
 
 **Process-Level Rules:**
 • Keep training & inference separate (train.py vs predict.py).
