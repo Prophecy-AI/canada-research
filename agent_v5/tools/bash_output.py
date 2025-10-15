@@ -5,6 +5,10 @@ from typing import Dict, Optional
 from .base import BaseTool
 from .bash_process_registry import BashProcessRegistry
 
+# Maximum output size to return to agent (to prevent context window overflow)
+# Training logs can be megabytes - we only need recent output
+MAX_OUTPUT_SIZE = 20 * 1024  # 20KB (~5K tokens, ~200 lines)
+
 
 class ReadBashOutputTool(BaseTool):
     """Read new output from background bash process (cursor-based incremental reading)"""
@@ -80,6 +84,14 @@ class ReadBashOutputTool(BaseTool):
         # Combine stdout and stderr (preserve chronological order as much as possible)
         # Note: Perfect chronological ordering isn't possible with separate streams
         new_output = new_stdout + new_stderr
+        
+        # Truncate output if too large (keep most recent output only)
+        total_new_bytes = len(new_stdout) + len(new_stderr)
+        truncated = False
+        if len(new_output) > MAX_OUTPUT_SIZE:
+            truncated = True
+            # Keep last MAX_OUTPUT_SIZE characters (most recent output)
+            new_output = new_output[-MAX_OUTPUT_SIZE:]
 
         # Update cursors (mark this output as read)
         bg_process.stdout_cursor = len(bg_process.stdout_data)
@@ -97,12 +109,20 @@ class ReadBashOutputTool(BaseTool):
 
         # Format output
         if new_output.strip():
+            truncation_notice = ""
+            if truncated:
+                truncation_notice = (
+                    f"\n⚠️  Output truncated: showing last {MAX_OUTPUT_SIZE:,} chars of {total_new_bytes:,} total chars\n"
+                    f"(Full output stored in memory, only recent output shown to save context)\n\n"
+                )
+            
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
-                f"Command: {bg_process.command}\n\n"
+                f"Command: {bg_process.command}\n"
+                f"{truncation_notice}\n"
                 f"{new_output}"
             )
-            debug_summary = f"{status}, {len(new_output)} new bytes"
+            debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "")
         else:
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
