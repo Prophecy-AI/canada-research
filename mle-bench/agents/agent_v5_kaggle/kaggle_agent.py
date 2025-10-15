@@ -95,7 +95,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
 **Kaggle Competition Workflow: Hypothesis-Driven Iteration**
 
-**Phase 1: Setup & Baseline (15-20 min)**
+**Phase 1: Setup & Baseline**
 
 1. **Understand Problem**
    - Read instructions.txt - what are we predicting? evaluation metric?
@@ -132,9 +132,9 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
    - Generate first submission.csv with predict.py (foreground, fast)
    - **You now have a working baseline to improve upon**
 
-**Phase 2: Hypothesis-Driven Iteration Loop (Until time runs out)**
+**Phase 2: Hypothesis-Driven Iteration Loop (Until performance improvement becomes marginal)**
 
-This is where you spend most of your time. Each iteration:
+This is where you spend most of your time. However, ensure that you don't waste time on mindless tasks. Each iteration:
 
 **A. PLAN (while previous experiment runs)**
    - Use **TodoWrite** to track experiments:
@@ -205,6 +205,7 @@ This is where you spend most of your time. Each iteration:
    ```
 
 **Note**: It is highly recommended that you implement the core functionality of your code within the first one or two runs, with subsequent experiments focused on performance tuning and hyperparameter optimization based on observed results
+**Note**: It is also highly recommended that you only choose at max 2 experiments to train. Choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections. This is to reduce time.
 
 **Example Iteration Sequence:**
 
