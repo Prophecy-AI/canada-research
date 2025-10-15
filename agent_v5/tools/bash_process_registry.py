@@ -33,6 +33,9 @@ class BackgroundProcess:
     # Memory limit per stream
     max_buffer_size: int = DEFAULT_MAX_BUFFER_SIZE
 
+    # PTY master file descriptor (optional). If >=0, ReadBashOutput can pull directly from PTY.
+    master_fd: int = -1
+
     # Collector task (for cleanup)
     collector_task: Optional[asyncio.Task] = None
 

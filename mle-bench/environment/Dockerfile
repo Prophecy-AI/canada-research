@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y \
     vim \
     nano \
     unzip \
+    util-linux \
     zip \
     p7zip-full \
     python3 \

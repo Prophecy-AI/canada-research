@@ -51,7 +51,7 @@ class BashTool(BaseTool):
                     },
                     "background": {
                         "type": "boolean",
-                        "description": "REQUIRED: Explicitly choose execution mode. If true, run command in background and return shell_id immediately. Use ReadBashOutput(shell_id) to monitor progress and KillShell(shell_id) to stop it. Perfect for long-running tasks like model training. If false, command blocks until completion (max 120s timeout)."
+                        "description": "REQUIRED: Explicitly choose execution mode. If true, run command in background and return shell_id immediately. Use ReadBashOutput(shell_id='{shell_id}') to monitor progress and KillShell(shell_id='{shell_id}') to stop it. Perfect for long-running tasks like model training. If false, command blocks until completion (max 120s timeout)."
                     }
                 },
                 "required": ["command", "background"]
@@ -78,11 +78,19 @@ class BashTool(BaseTool):
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
+            # Allocate pseudo-TTY via util-linux 'script' for real-time flushing
+            shell_id = f"bash_{uuid.uuid4().hex[:8]}"
+            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
+            os.makedirs(log_dir, exist_ok=True)
+            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
+
+            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+
             process = await asyncio.create_subprocess_shell(
-                command,
+                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.workspace_dir,  # Use cwd parameter, not cd &&
+                cwd=self.workspace_dir,
                 env=env
             )
 
@@ -137,11 +145,17 @@ class BashTool(BaseTool):
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
+            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
+            os.makedirs(log_dir, exist_ok=True)
+            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
+
+            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+
             process = await asyncio.create_subprocess_shell(
-                command,
+                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.workspace_dir,  # Use cwd parameter, not cd &&
+                cwd=self.workspace_dir,
                 env=env
             )
 
@@ -149,7 +163,8 @@ class BashTool(BaseTool):
             bg_process = BackgroundProcess(
                 process=process,
                 command=command,
-                start_time=time.time()
+                start_time=time.time(),
+                master_fd=-1
             )
 
             # Register in registry
