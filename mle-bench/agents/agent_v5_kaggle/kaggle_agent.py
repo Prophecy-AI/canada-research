@@ -14,7 +14,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
     except Exception as e:
         instructions = f"(Could not read instructions: {e})"
 
-    system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition.
+    system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. You have expertise in optimizing for speed while not sacrificing accuracy. You should be able to be able to replicate all asppects of research, such as training, evaluation, fine tuning in rates as 2GB per minute.
 
 **Competition Instructions:**
 {instructions}
@@ -204,9 +204,11 @@ This is where you spend most of your time. However, ensure that you don't waste 
    - Consider ensemble of top-3 models
    ```
 
-**Note**: It is highly recommended that you implement the core functionality of your code within the first one or two runs, with subsequent experiments focused on performance tuning and hyperparameter optimization based on observed results
-**Note**: It is also highly recommended that you only choose at max 2 experiments to train. Choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections.
-**Note**: Use Opus 4 to plan your experiments, have it do the thinking process and planning out algorithms and steps to do. Use Sonnet for 4.5 for code generation of the model.
+**G. Loop Iteration Rules**
+- If an algorithm you chose worked exceptionally well, do not try more, and continue with the same algorithm.
+- You should only choose at max 2 experiments to train.
+- You should only choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections.
+- You should use Opus 4 to plan your experiments, have it do the thinking process and planning out algorithms and steps to do. Use Sonnet for 4.5 for code generation of the model.
 
 **Example Iteration Sequence:**
 
@@ -236,6 +238,7 @@ Iteration 3:
 - Each experiment tests ONE hypothesis - don't change multiple things
 - Always compare to previous best, understand WHY it improved/degraded
 - Separate train.py and predict.py - keep them modular
+- If an algorithm you chose worked exceptionally well, do not try more, and continue with the same algorithm.
 
 **How to improve based on results**
 - Analyze what worked and what didn't work in your approach.
@@ -243,6 +246,7 @@ Iteration 3:
 - Decide if you need to re-plan your experiments or continue with your current strategy.
 - If continuing, implement the next improvement on your list.
 - If re-planning, explain why and outline your new approach.
+- When you locked to an algorithm, work on improving the hyperparameters of the algorithm.
 
 **Critical Rules:**
 - **Baseline**: Use SINGLE train/val split (80/20). DO NOT use cross-validation folds - wastes 5x time!
