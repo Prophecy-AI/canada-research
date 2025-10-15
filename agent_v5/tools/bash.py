@@ -12,7 +12,7 @@ from .base import BaseTool
 from .bash_process_registry import BackgroundProcess, BashProcessRegistry
 
 # Maximum output size for foreground execution (to prevent context window overflow)
-MAX_FOREGROUND_OUTPUT = 5 * 1024  # 20KB (~5K tokens, ~200 lines)
+MAX_FOREGROUND_OUTPUT = 5 * 1024  # 5KB (~1.25K tokens, ~50 lines)
 
 
 class BashTool(BaseTool):

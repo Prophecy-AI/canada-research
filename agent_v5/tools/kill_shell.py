@@ -1,6 +1,7 @@
 """
 Kill a background bash process
 """
+import asyncio
 from typing import Dict, Optional
 from .base import BaseTool
 from .bash_process_registry import BashProcessRegistry
@@ -71,13 +72,29 @@ class KillShellTool(BaseTool):
         # Check if process is still running
         was_running = bg_process.process.returncode is None
 
-        # Kill process if still running
+        # Kill process immediately - most aggressive approach
         try:
+            # Step 1: Cancel collector task immediately (don't wait)
+            if bg_process.collector_task and not bg_process.collector_task.done():
+                bg_process.collector_task.cancel()
+            
+            # Step 2: Close streams to unblock any pending reads
+            try:
+                if bg_process.process.stdout:
+                    bg_process.process.stdout.close()
+                if bg_process.process.stderr:
+                    bg_process.process.stderr.close()
+            except Exception:
+                pass
+            
+            # Step 3: SIGKILL the process (most brutal)
             if was_running:
-                bg_process.process.kill()
-                await bg_process.process.wait()
-
-            # Remove from registry (cleanup)
+                try:
+                    bg_process.process.kill()
+                except Exception:
+                    pass  # Already dead, fine
+            
+            # Step 4: Remove from registry immediately (don't wait for cleanup)
             self.process_registry.remove(shell_id)
 
             # Calculate runtime
