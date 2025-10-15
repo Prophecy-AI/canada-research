@@ -95,7 +95,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
 **Kaggle Competition Workflow: Hypothesis-Driven Iteration**
 
-**Phase 1: Setup & Baseline (Use Opus 4.1, use for thinking process)**
+**Phase 1: Setup & Baseline**
 
 1. **Understand Problem**
    - Read instructions.txt - what are we predicting? evaluation metric?
@@ -263,9 +263,8 @@ Iteration 3:
 Available packages: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost, torch, torchvision, tensorflow, matplotlib, seaborn
 
 **Time Management:**
-You have limited time. Prioritize getting a valid submission first, then iterate to improve accuracy.
-
-Current date: 2025-10-14"""
+You have limited time. The aim is to get the highest possible score in as little time as possible. Instead of proposing multiple models and improvements, focus on how to make the best model and only iterate if you are certain you can improve the score.
+""
 
     return system_prompt
 
