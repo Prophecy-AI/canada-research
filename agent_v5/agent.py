@@ -65,54 +65,81 @@ class ResearchAgent:
             log(f"✓ Cleaned up {killed} background processes", 1)
 
     def _should_wait_for_process(self, tool_uses: List[Dict], tool_results: List[Dict]) -> bool:
-        if len(tool_uses) != 1 or tool_uses[0]["name"] != "ReadBashOutput":
+        # Always enter polling loop if the last tool use was ReadBashOutput and the
+        # process is still running.  The loop will now return a heartbeat every
+        # ~60 s, even when no new output arrives, allowing the LLM to decide
+        # whether to kill or continue the job.
+
+        if len(tool_uses) != 1:
             return False
+
+        if tool_uses[0]["name"] != "ReadBashOutput":
+            return False
+
         content = tool_results[0]["content"]
-        return "[RUNNING]" in content and "(no new output since last read)" in content
+        return "[RUNNING]" in content
 
     async def _wait_for_process(self, shell_id: str) -> str:
         bg_process = self.process_registry.get(shell_id)
         if not bg_process:
             return "Process not found"
         
-        last_new_output_ts = time.time()
-        while bg_process.process.returncode is None:
-            await asyncio.sleep(30)
+        POLL_INTERVAL = 5
+        HEARTBEAT_INTERVAL = 60
 
-            new_output = bg_process.stdout_data[bg_process.stdout_cursor:].decode('utf-8', errors='replace')
-            new_output += bg_process.stderr_data[bg_process.stderr_cursor:].decode('utf-8', errors='replace')
+        loop_start = time.time()
 
-            if new_output.strip():
-                last_new_output_ts = time.time()
-                log(f"→ {shell_id} output: {new_output[:200]}")
-                bg_process.stdout_cursor = len(bg_process.stdout_data)
-                bg_process.stderr_cursor = len(bg_process.stderr_data)
-            else:
-                idle = time.time() - last_new_output_ts
-                log(f"→ No output from {shell_id} for {idle:.0f}s (runtime: {time.time() - bg_process.start_time:.0f}s)")
-                if idle >= 60:
-                    return (
-                        f"[STALE_OUTPUT_WARNING] {shell_id} has produced no output for {idle:.0f}s. "
-                        f"Consider killing the job with KillShell and relaunching with more verbose logging."
-                    )
-        
-        final_output = bg_process.stdout_data[bg_process.stdout_cursor:].decode('utf-8', errors='replace')
-        final_output += bg_process.stderr_data[bg_process.stderr_cursor:].decode('utf-8', errors='replace')
-        bg_process.stdout_cursor = len(bg_process.stdout_data)
-        bg_process.stderr_cursor = len(bg_process.stderr_data)
-        
+        while True:
+            # Finish immediately if process ended
+            if bg_process.process.returncode is not None:
+                break
+
+            await asyncio.sleep(POLL_INTERVAL)
+
+            # Break for heartbeat every HEARTBEAT_INTERVAL
+            if time.time() - loop_start >= HEARTBEAT_INTERVAL:
+                break
+
         runtime = time.time() - bg_process.start_time
+
+        if bg_process.process.returncode is None:
+            # Still running – return whatever incremental output exists (may be empty)
+            new_stdout = bg_process.stdout_data[bg_process.stdout_cursor:]
+            new_stderr = bg_process.stderr_data[bg_process.stderr_cursor:]
+            bg_process.stdout_cursor = len(bg_process.stdout_data)
+            bg_process.stderr_cursor = len(bg_process.stderr_data)
+
+            combined = (new_stdout + new_stderr).decode("utf-8", errors="replace")
+
+            if combined.strip():
+                hint = (
+                    "[HINT] If metrics or logs above show no meaningful improvement, "
+                    "you could end this job early with KillShell to save compute."
+                )
+            else:
+                hint = (
+                    "[HINT] No output for a full minute – likely stalled. Consider KillShell "
+                    "to stop wasting resources."
+                )
+
+            return (
+                f"[RUNNING] {shell_id} (runtime: {runtime:.0f}s)\n"
+                f"Command: {bg_process.command}\n\n"
+                f"{combined if combined.strip() else '(no new output)'}\n\n"
+                f"{hint}"
+            )
+
+        # Completed – return final output
+        final_out = bg_process.stdout_data.decode("utf-8", errors="replace")
+        final_out += bg_process.stderr_data.decode("utf-8", errors="replace")
         exit_code = bg_process.process.returncode
-        
+
         log(f"✓ {shell_id} completed (exit code: {exit_code}, runtime: {runtime:.0f}s)", 1)
-        
-        all_output = bg_process.stdout_data.decode('utf-8', errors='replace')
-        all_output += bg_process.stderr_data.decode('utf-8', errors='replace')
-        
+
         return (
             f"[COMPLETED] {shell_id} (exit code: {exit_code}, runtime: {runtime:.0f}s)\n"
             f"Command: {bg_process.command}\n\n"
-            f"{all_output}"
+            f"{final_out}"
         )
 
     async def run(self, user_message: str) -> AsyncGenerator[Dict, None]:
