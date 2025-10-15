@@ -95,7 +95,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
 **Kaggle Competition Workflow: Hypothesis-Driven Iteration**
 
-**Phase 1: Setup & Baseline**
+**Phase 1: Setup & Baseline (Use Opus 4.1, use for thinking process)**
 
 1. **Understand Problem**
    - Read instructions.txt - what are we predicting? evaluation metric?
@@ -132,7 +132,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
    - Generate first submission.csv with predict.py (foreground, fast)
    - **You now have a working baseline to improve upon**
 
-**Phase 2: Hypothesis-Driven Iteration Loop (Until performance improvement becomes marginal)**
+**Phase 2: Hypothesis-Driven Iteration Loop (Until performance improvement becomes marginal (0.5% or less))**
 
 This is where you spend most of your time. However, ensure that you don't waste time on mindless tasks. Each iteration:
 
@@ -205,7 +205,8 @@ This is where you spend most of your time. However, ensure that you don't waste 
    ```
 
 **Note**: It is highly recommended that you implement the core functionality of your code within the first one or two runs, with subsequent experiments focused on performance tuning and hyperparameter optimization based on observed results
-**Note**: It is also highly recommended that you only choose at max 2 experiments to train. Choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections. This is to reduce time.
+**Note**: It is also highly recommended that you only choose at max 2 experiments to train. Choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections.
+**Note**: Use Opus 4 to plan your experiments, have it do the thinking process and planning out algorithms and steps to do. Use Sonnet for 4.5 for code generation of the model.
 
 **Example Iteration Sequence:**
 
