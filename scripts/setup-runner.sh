@@ -10,10 +10,10 @@ echo "=========================================="
 echo ""
 
 # Prompt for machine number
-read -p "Which GPU machine is this? (1 or 2): " MACHINE_NUM
+read -p "Which GPU machine is this? (1 or 2 or 3 or 4): " MACHINE_NUM
 
-if [ "$MACHINE_NUM" != "1" ] && [ "$MACHINE_NUM" != "2" ]; then
-    echo "❌ ERROR: Please enter 1 or 2"
+if [ "$MACHINE_NUM" != "1" ] && [ "$MACHINE_NUM" != "2" ] && [ "$MACHINE_NUM" != "3" ] && [ "$MACHINE_NUM" != "4" ]; then
+    echo "❌ ERROR: Please enter 1 or 2 or 3 or 4"
     exit 1
 fi
 
