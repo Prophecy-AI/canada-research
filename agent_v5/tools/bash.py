@@ -5,6 +5,8 @@ import asyncio
 import os
 import uuid
 import time
+import pty
+import tty
 from typing import Dict, Optional
 from .base import BaseTool
 from .bash_process_registry import BackgroundProcess, BashProcessRegistry
@@ -78,11 +80,19 @@ class BashTool(BaseTool):
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
+            # Foreground: allocate PTY via util-linux 'script' for unbuffered output
+            shell_id = f"bash_{uuid.uuid4().hex[:8]}"
+            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
+            os.makedirs(log_dir, exist_ok=True)
+            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
+
+            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+
             process = await asyncio.create_subprocess_shell(
-                command,
+                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.workspace_dir,  # Use cwd parameter, not cd &&
+                cwd=self.workspace_dir,
                 env=env
             )
 
@@ -132,16 +142,20 @@ class BashTool(BaseTool):
         shell_id = f"bash_{uuid.uuid4().hex[:8]}"
 
         try:
-            # Set PYTHONUNBUFFERED=1 to force Python to flush stdout/stderr immediately
-            # This ensures print() statements appear in real-time when running Python scripts
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
+            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
+            os.makedirs(log_dir, exist_ok=True)
+            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
+
+            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+
             process = await asyncio.create_subprocess_shell(
-                command,
+                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.workspace_dir,  # Use cwd parameter, not cd &&
+                cwd=self.workspace_dir,
                 env=env
             )
 
@@ -149,7 +163,8 @@ class BashTool(BaseTool):
             bg_process = BackgroundProcess(
                 process=process,
                 command=command,
-                start_time=time.time()
+                start_time=time.time(),
+                master_fd=-1  # not used in script wrapper but reserved
             )
 
             # Register in registry
