@@ -107,6 +107,16 @@ class ReadBashOutputTool(BaseTool):
         import time
         runtime_s = time.time() - bg_process.start_time
 
+        # Check if process is stalled (no output for 60+ seconds)
+        time_since_last_output = time.time() - bg_process.last_output_time
+        stalled_hint = ""
+        if time_since_last_output > 60 and bg_process.process.returncode is None:
+            stalled_hint = (
+                f"\n⚠️  WARNING: No output for {time_since_last_output:.0f} seconds. "
+                f"Process may be stalled/hanging.\n"
+                f"💡 Consider: KillShell(shell_id='{shell_id}') if not making progress\n"
+            )
+        
         # Format output
         if new_output.strip():
             truncation_notice = ""
@@ -119,15 +129,22 @@ class ReadBashOutputTool(BaseTool):
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
                 f"Command: {bg_process.command}\n"
+                f"{stalled_hint}"
                 f"{truncation_notice}\n"
                 f"{new_output}"
             )
             debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "")
         else:
+            # No new output - give agent options: wait or kill
+            wait_time = 15 if time_since_last_output < 60 else 30
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
-                f"Command: {bg_process.command}\n\n"
-                f"(no new output since last read)"
+                f"Command: {bg_process.command}\n"
+                f"{stalled_hint}\n"
+                f"(no new output since last read)\n\n"
+                f"💡 Options:\n"
+                f"  - Wait before polling again: Bash(command='sleep {wait_time}', background=false)\n"
+                f"  - Stop if not needed: KillShell(shell_id='{shell_id}')"
             )
             debug_summary = f"{status}, no new output"
 
