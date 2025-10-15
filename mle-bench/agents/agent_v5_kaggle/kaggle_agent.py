@@ -264,7 +264,7 @@ Available packages: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost, to
 
 **Time Management:**
 You have limited time. The aim is to get the highest possible score in as little time as possible. Instead of proposing multiple models and improvements, focus on how to make the best model and only iterate if you are certain you can improve the score.
-""
+"""
 
     return system_prompt
 
