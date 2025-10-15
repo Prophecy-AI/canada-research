@@ -21,6 +21,7 @@ from agent_v5.tools.todo import TodoWriteTool, ReadTodoListTool
 from agent_v5.tools.list_bash import ListBashProcessesTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
+from agent_v5.tools.oracle import OracleTool
 
 
 class ResearchAgent:
@@ -52,6 +53,7 @@ class ResearchAgent:
         self.tools.register(RunSummaryTool(self.workspace_dir))
         self.tools.register(ReadTodoListTool(self.workspace_dir))
         self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
+        self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
 
     async def cleanup(self) -> None:
         """

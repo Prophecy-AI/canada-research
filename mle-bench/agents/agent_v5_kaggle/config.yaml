@@ -4,5 +4,6 @@ agent_v5_kaggle:
   kwargs: {}
   env_vars:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
     DEBUG: "1"
   privileged: false
