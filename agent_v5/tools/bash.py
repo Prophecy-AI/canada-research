@@ -11,6 +11,9 @@ from typing import Dict, Optional
 from .base import BaseTool
 from .bash_process_registry import BackgroundProcess, BashProcessRegistry
 
+# Maximum output size for foreground execution (to prevent context window overflow)
+MAX_FOREGROUND_OUTPUT = 5 * 1024  # 20KB (~5K tokens, ~200 lines)
+
 
 class BashTool(BaseTool):
     """Execute shell commands in workspace directory"""
@@ -103,10 +106,15 @@ class BashTool(BaseTool):
 
             output = stdout.decode() + stderr.decode()
             exit_code = process.returncode
-
-            # Truncate output for display
-            if len(output) > 30000:
-                output = output[:30000] + "\n... (output truncated)"
+            
+            # Truncate output for display (keep most recent output)
+            original_length = len(output)
+            if len(output) > MAX_FOREGROUND_OUTPUT:
+                output = (
+                    f"⚠️  Output truncated: showing last {MAX_FOREGROUND_OUTPUT:,} chars of {original_length:,} total chars\n"
+                    f"(Full output not stored, only recent output shown to save context)\n\n"
+                    + output[-MAX_FOREGROUND_OUTPUT:]
+                )
 
             # Truncate debug_summary too (prevent massive strings in logs)
             debug_output = output.replace('\n', ' | ')
