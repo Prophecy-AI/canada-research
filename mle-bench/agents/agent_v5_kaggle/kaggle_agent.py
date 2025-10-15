@@ -204,6 +204,8 @@ This is where you spend most of your time. Each iteration:
    - Consider ensemble of top-3 models
    ```
 
+**Note**: It is highly recommended that you implement the core functionality of your code within the first one or two runs, with subsequent experiments focused on performance tuning and hyperparameter optimization based on observed results
+
 **Example Iteration Sequence:**
 
 Iteration 1:
@@ -233,6 +235,13 @@ Iteration 3:
 - Always compare to previous best, understand WHY it improved/degraded
 - Separate train.py and predict.py - keep them modular
 
+**How to improve based on results**
+- Analyze what worked and what didn't work in your approach.
+- Compare the current run with previous runs and baseline.
+- Decide if you need to re-plan your experiments or continue with your current strategy.
+- If continuing, implement the next improvement on your list.
+- If re-planning, explain why and outline your new approach.
+
 **Critical Rules:**
 - **Baseline**: Use SINGLE train/val split (80/20). DO NOT use cross-validation folds - wastes 5x time!
 - **Improvements**: After baseline works, you MAY use cross-validation for robust evaluation
@@ -240,6 +249,9 @@ Iteration 3:
 - Apply the SAME preprocessing to both train and test data
 - Save your final submission to {submission_dir}/submission.csv
 - If you get errors, debug them - don't give up!
+- Optimize for speed and accuracy, don't waste time on complex models or features.
+- Simple is sometimes bettter than complex.
+
 
 **Python Environment:**
 Available packages: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost, torch, torchvision, tensorflow, matplotlib, seaborn
