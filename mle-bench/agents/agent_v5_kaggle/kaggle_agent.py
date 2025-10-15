@@ -66,7 +66,7 @@ Current date: {current_date}
    • Define expected runtime and GPU memory so you can schedule appropriately.
 
 4) **Execute**
-   • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. Your training script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Lack of output for >60 s will trigger an early warning suggesting you terminate and relaunch with verbose logging.
+   • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
    • Keep training in `train.py`; keep inference in `predict.py` so that predict.py can run fast during submission.
 
