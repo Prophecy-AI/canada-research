@@ -129,7 +129,7 @@ Special Requirements: [Any constraints or special rules]
 - **Mixed/Multi-modal**: 
   * Separate pipelines → Late fusion ensemble
 
-**Phase 1: Foundation & Quick Win (15-30 minutes)**
+**Phase 1: Foundation & Quick Win (15-30 minutes) - Use Opus 4.1 for thinking/planning**
 
 1. **Comprehensive EDA** (write `eda.py`, run foreground)
    ```python
@@ -408,6 +408,11 @@ Special Cases (Skip tree models):
 ├─ Clear clusters in data → KMeans features + simple model
 └─ Sequential patterns → LSTM/GRU (but usually overkill)
 ```
+
+**CRITICAL NOTES:**
+- **Use Opus 4.1 for planning**: Have it do the thinking process and planning out algorithms and steps
+- **Use Opus 4.1 for analysis**: Let it analyze results and decide on next experiments
+- **Switch models strategically**: Opus for strategy, other models for implementation
 
 **REAL Speed-Focused Iteration:**
 
