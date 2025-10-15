@@ -17,7 +17,6 @@ cd ~
 git clone https://github.com/Prophecy-AI/canada-research.git
 cd canada-research
 git lfs install
-git checkout workflow
 
 # Install Docker
 # Add Docker's official GPG key:

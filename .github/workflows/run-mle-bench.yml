@@ -34,11 +34,13 @@ on:
           - any
           - gpu-1
           - gpu-2
+          - gpu-3
+          - gpu-4
         default: 'any'
 
 jobs:
   run-agent:
-    # Support concurrency: 2 (no group = both can run simultaneously)
+    # Support concurrency: 4 (no group = all can run simultaneously)
     runs-on:
       - self-hosted
       - gpu
@@ -131,6 +133,7 @@ jobs:
         timeout-minutes: 1400  # 23.3 hours (slightly less than job timeout for cleanup)
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           IMAGE_TAG: agent_v5_kaggle:run-${{ github.run_id }}
           RUN_ID: ${{ github.run_id }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
