@@ -50,14 +50,21 @@ class BashTool(BaseTool):
         command = input["command"]
         
         try:
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            
             process = await asyncio.create_subprocess_shell(
                 f"cd {self.workspace_dir} && {command}",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE
+                stderr=asyncio.subprocess.PIPE,
+                env=env
             )
             
             stdout, stderr = await process.communicate()
             output = stdout.decode() + stderr.decode()
+            
+            if len(output) > 30000:
+                output = output[:30000] + "\n... (output truncated)"
             
             return {
                 "content": output,
@@ -165,11 +172,16 @@ class WriteTool(BaseTool):
     async def execute(self, input: Dict) -> Dict:
         file_path = input["file_path"]
         content = input["content"]
-        full_path = Path(self.workspace_dir) / file_path
         
         try:
-            full_path.parent.mkdir(parents=True, exist_ok=True)
-            full_path.write_text(content)
+            if not file_path.startswith('/'):
+                file_path = os.path.join(self.workspace_dir, file_path)
+            
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            
+            with open(file_path, 'w') as f:
+                f.write(content)
+            
             return {
                 "content": f"File written successfully: {file_path}",
                 "is_error": False
