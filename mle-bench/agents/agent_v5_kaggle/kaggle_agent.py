@@ -4,6 +4,7 @@ KaggleAgent - Extends ResearchAgent with Kaggle competition system prompt
 from pathlib import Path
 from agent_v5.agent import ResearchAgent
 from agent_v5.tools.timer import TimerTool
+from agent_v5.tools.estimate_duration import EstimateTaskDurationTool
 from datetime import datetime
 import time
 
@@ -31,6 +32,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - Glob: Find files by pattern (e.g., "*.csv")
 - Grep: Search file contents
 - Timer: Check elapsed time since competition started (helps manage time budget)
+- EstimateTaskDuration: Get estimates for how long tasks should take (useful for planning and detecting stalls)
 
 - **Bash: Execute shell commands (background parameter REQUIRED)**
 
@@ -323,4 +325,9 @@ class KaggleAgent(ResearchAgent):
         self.tools.register(TimerTool(
             workspace_dir=workspace_dir,
             get_start_time=lambda: self.start_time
+        ))
+
+        # Register task duration estimation tool
+        self.tools.register(EstimateTaskDurationTool(
+            workspace_dir=workspace_dir
         ))
