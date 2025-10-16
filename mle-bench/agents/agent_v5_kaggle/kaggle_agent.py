@@ -158,8 +158,11 @@ Current date: {current_date}
 • LightGBM: params = {{'device': 'gpu', 'gpu_platform_id': 0, 'gpu_device_id': 0, ...}}
 • TensorFlow/Keras: GPU auto-detected (verify with tf.config.list_physical_devices('GPU'))
 • CatBoost: task_type='GPU'
-• Scikit-learn: CPU-only (acceptable for fast models like LogisticRegression, but prefer GPU alternatives)
-• **predict.py MUST load models to GPU before inference** - model.to('cuda') immediately after loading
+• **cuML is pre-installed — use it instead of scikit-learn whenever possible.** Example:
+  from cuml.feature_extraction.text import TfidfVectorizer
+  from cuml.linear_model import LogisticRegression  # GPU-accelerated
+If you accidentally import scikit-learn and the task runs >30 s on CPU, **abort**, rewrite with cuML, and consult Oracle.
+• **predict.py MUST load models to GPU before inference** – e.g., model.to('cuda') immediately after loading
 • **If training OR inference seems slow, immediately check GPU usage with nvidia-smi or print(torch.cuda.is_available())**
 • CPU training/inference is 10-100x slower - treat it as a bug to fix immediately
 

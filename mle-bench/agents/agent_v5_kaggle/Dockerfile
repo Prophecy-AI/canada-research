@@ -46,6 +46,15 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
     --index-url https://download.pytorch.org/whl/cu118 \
     && conda clean -afy
 
+# ------------------------------------------------------------------
+# Install RAPIDS cuML (GPU-accelerated scikit-learn replacement)
+# CUDA 11.8 build – matches PyTorch wheel above
+# ------------------------------------------------------------------
+RUN conda run -n ${CONDA_ENV_NAME} \
+    conda install -y -c rapidsai -c nvidia -c conda-forge \
+        cuml=24.04 python=${PYTHON_VERSION} cudatoolkit=11.8 && \
+    conda clean -afy
+
 # Install TensorFlow with GPU support (optional, for flexibility)
 RUN conda run -n ${CONDA_ENV_NAME} pip install \
     tensorflow>=2.13.0 \
