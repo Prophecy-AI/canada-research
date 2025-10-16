@@ -21,13 +21,13 @@ class Orchestrator:
         data_dir: str,
         submission_dir: str,
         workspace_dir: str,
-        instructions: str
+        instructions_path: str
     ):
         self.competition_id = competition_id
         self.data_dir = data_dir
         self.submission_dir = submission_dir
         self.workspace_dir = workspace_dir
-        self.instructions = instructions
+        self.instructions_path = instructions_path
         
         self.best_score = 0.0
         self.best_experiment = None
@@ -87,7 +87,7 @@ class Orchestrator:
         prompt = format_eda_prompt(
             competition_id=self.competition_id,
             data_dir=self.data_dir,
-            instructions=self.instructions
+            instructions_path=self.instructions_path
         )
         
         agent = Agent(str(eda_workspace), prompt, tools)

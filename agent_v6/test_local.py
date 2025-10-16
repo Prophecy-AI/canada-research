@@ -20,7 +20,8 @@ async def main():
     workspace_dir = test_dir / "workspace"
     workspace_dir.mkdir(exist_ok=True)
     
-    instructions = """This is a simple binary classification competition.
+    instructions_path = test_dir / "instructions.txt"
+    instructions_path.write_text("""This is a simple binary classification competition.
 
 Dataset:
 - train.csv: Training data with features and target column 'Transported'
@@ -29,7 +30,7 @@ Dataset:
 
 Evaluation: Accuracy
 
-Goal: Predict whether passengers were transported to another dimension."""
+Goal: Predict whether passengers were transported to another dimension.""")
     
     (data_dir / "train.csv").write_text("""PassengerId,Age,Fare,Transported
 1,25,50.0,True
@@ -59,7 +60,7 @@ Goal: Predict whether passengers were transported to another dimension."""
         data_dir=str(data_dir),
         submission_dir=str(submission_dir),
         workspace_dir=str(workspace_dir),
-        instructions=instructions
+        instructions_path=str(instructions_path)
     )
     
     await orchestrator.run(max_rounds=2)

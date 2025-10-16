@@ -16,23 +16,18 @@ async def main():
     code_dir = os.environ.get('CODE_DIR', '/home/code')
     instructions_path = "/home/instructions.txt"
     
-    try:
-        instructions = Path(instructions_path).read_text()
-    except Exception as e:
-        print(f"Error reading instructions: {e}")
-        instructions = "Competition instructions not available"
-    
     print(f"Starting Agent V6 for competition: {competition_id}")
     print(f"Data: {data_dir}")
     print(f"Workspace: {code_dir}")
     print(f"Submission: {submission_dir}")
+    print(f"Instructions: {instructions_path}")
     
     orchestrator = Orchestrator(
         competition_id=competition_id,
         data_dir=data_dir,
         submission_dir=submission_dir,
         workspace_dir=code_dir,
-        instructions=instructions
+        instructions_path=instructions_path
     )
     
     await orchestrator.run()

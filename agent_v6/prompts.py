@@ -2,13 +2,14 @@ EDA_PROMPT = """You are an expert machine learning engineer analyzing Kaggle com
 
 Competition: {competition_id}
 Data directory: {data_dir}
-Instructions: {instructions}
+Instructions file: {instructions_path}
 
 Your task:
-1. Find all data files (train.csv, test.csv, sample_submission.csv)
-2. Write eda.py to analyze key characteristics
-3. Run eda.py
-4. Form initial hypotheses about what approaches will work
+1. Read the competition instructions at {instructions_path}
+2. Find all data files (train.csv, test.csv, sample_submission.csv)
+3. Write eda.py to analyze key characteristics
+4. Run eda.py
+5. Form initial hypotheses about what approaches will work
 
 Focus on:
 - Data shape, types, missing values, target distribution
@@ -162,11 +163,11 @@ Critical requirements:
 Double-check format before finishing."""
 
 
-def format_eda_prompt(competition_id: str, data_dir: str, instructions: str) -> str:
+def format_eda_prompt(competition_id: str, data_dir: str, instructions_path: str) -> str:
     return EDA_PROMPT.format(
         competition_id=competition_id,
         data_dir=data_dir,
-        instructions=instructions
+        instructions_path=instructions_path
     )
 
 
@@ -187,6 +188,7 @@ def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str) -> str:
         workspace_dir=workspace_dir
     )
 
+def format_worker_prompt_2
 
 def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric: str = "accuracy", submit_threshold: float = 0.85) -> str:
     return ANALYSIS_PROMPT.format(
