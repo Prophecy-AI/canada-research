@@ -168,11 +168,13 @@ class BashTool(BaseTool):
             )
 
             # Create background process object
+            current_time = time.time()
             bg_process = BackgroundProcess(
                 process=process,
                 command=command,
-                start_time=time.time(),
-                master_fd=-1
+                start_time=current_time,
+                master_fd=-1,
+                last_output_time=current_time
             )
 
             # Register in registry

@@ -40,6 +40,7 @@ class BackgroundProcess:
     collector_task: Optional[asyncio.Task] = None
 
     # Track last output time (for stall detection)
+    # Must come after all fields with defaults to satisfy dataclass ordering
     last_output_time: float = field(default_factory=time.time)
 
     def append_stdout(self, data: bytes) -> None:
