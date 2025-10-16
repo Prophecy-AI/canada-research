@@ -60,7 +60,7 @@ Current date: {current_date}
    "Competition: [name]. Task: [classification/regression/time-series/etc]. Metric: [RMSE/AUC/F1/etc].
    Data: Train [X rows, Y cols], Test [Z rows]. Features: [A numerical, B categorical, C text/image].
    Target: [balanced/imbalanced/range]. Missing: [patterns]. Notable: [temporal/spatial patterns if any].
-   Resources: {os.cpu_count()} CPU cores, A10 GPU 24GB, [X]GB RAM.
+   Resources: {{os.cpu_count()}} CPU cores, A10 GPU 24GB, [X]GB RAM.
 
    What's the optimal gold-medal strategy? Recommend: competition archetype, winning approaches from similar competitions, high-leverage techniques, optimal models (XGB/LGB/NN/ensemble), fastest path to top-1%. Think deeply about winning patterns from past gold-medal solutions."
 
@@ -191,7 +191,7 @@ Current date: {current_date}
 • **Monitor:** Run `watch -n 1 nvidia-smi` during training. Target >80% GPU util. Low util = batch too small or CPU bottleneck.
 • **MANDATORY print at start:**
   ```python
-  print(f"RESOURCES: {os.cpu_count()} CPU cores, batch={BATCH_SIZE}, GPU={torch.cuda.get_device_name(0)}, Mixed Precision={'ON' if USE_AMP else 'OFF'}")
+  print(f"RESOURCES: {{os.cpu_count()}} CPU cores, batch={{BATCH_SIZE}}, GPU={{torch.cuda.get_device_name(0)}}, Mixed Precision={{'ON' if USE_AMP else 'OFF'}}")
   ```
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**
