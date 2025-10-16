@@ -3,7 +3,7 @@ KaggleAgent - Extends ResearchAgent with Kaggle competition system prompt
 """
 from pathlib import Path
 from agent_v5.agent import ResearchAgent
-
+from datetime import datetime
 
 def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submission_dir: str) -> str:
     """Generate Kaggle-specific system prompt"""
@@ -16,8 +16,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
     system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. You have expertise in optimizing for speed while not sacrificing accuracy. You should be able to be able to replicate all asppects of research, such as training, evaluation, fine tuning in rates as 2GB per minute.
 
-**Competition Instructions:**
-{instructions}
+    system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. Your explicit objective is to deliver **gold-medal (top-1%) leaderboard performance** within the resource and time limits.
 
 **Your Environment:**
 - Data directory: {data_dir}/ (contains train/test data and any other competition files)

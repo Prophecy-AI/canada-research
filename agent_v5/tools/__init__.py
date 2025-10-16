@@ -13,6 +13,7 @@ from .edit import EditTool
 from .glob import GlobTool
 from .grep import GrepTool
 from .todo import TodoWriteTool
+from .oracle import OracleTool
 
 __all__ = [
     "BaseTool",
@@ -28,4 +29,5 @@ __all__ = [
     "GlobTool",
     "GrepTool",
     "TodoWriteTool",
+    "OracleTool",
 ]

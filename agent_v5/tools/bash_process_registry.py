@@ -41,6 +41,9 @@ class BackgroundProcess:
 
     def append_stdout(self, data: bytes) -> None:
         """Append stdout data, enforcing max buffer size"""
+        if data:  # Only update timestamp if we got actual data
+            self.last_output_time = time.time()
+        
         self.stdout_data.extend(data)
 
         # Drop old data if over limit (keep most recent)
@@ -52,6 +55,9 @@ class BackgroundProcess:
 
     def append_stderr(self, data: bytes) -> None:
         """Append stderr data, enforcing max buffer size"""
+        if data:  # Only update timestamp if we got actual data
+            self.last_output_time = time.time()
+        
         self.stderr_data.extend(data)
 
         if len(self.stderr_data) > self.max_buffer_size:

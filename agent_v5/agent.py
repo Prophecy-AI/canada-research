@@ -2,8 +2,6 @@
 ResearchAgent - Main agentic loop for Agent V5
 """
 import os
-import asyncio
-import time
 from typing import List, Dict, AsyncGenerator
 from anthropic import Anthropic
 from agent_v5.tools.registry import ToolRegistry
@@ -17,8 +15,11 @@ from agent_v5.tools.write import WriteTool
 from agent_v5.tools.edit import EditTool
 from agent_v5.tools.glob import GlobTool
 from agent_v5.tools.grep import GrepTool
-from agent_v5.tools.todo import TodoWriteTool
+from agent_v5.tools.todo import TodoWriteTool, ReadTodoListTool
+from agent_v5.tools.list_bash import ListBashProcessesTool
+from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
+from agent_v5.tools.oracle import OracleTool
 
 
 class ResearchAgent:
@@ -46,7 +47,11 @@ class ResearchAgent:
         self.tools.register(GlobTool(self.workspace_dir))
         self.tools.register(GrepTool(self.workspace_dir))
         self.tools.register(TodoWriteTool(self.workspace_dir))
-        self.tools.register(CohortDefinitionTool(self.workspace_dir))
+        #self.tools.register(CohortDefinitionTool(self.workspace_dir))
+        self.tools.register(RunSummaryTool(self.workspace_dir))
+        self.tools.register(ReadTodoListTool(self.workspace_dir))
+        self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
+        self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
 
     async def cleanup(self) -> None:
         """
@@ -238,12 +243,6 @@ class ResearchAgent:
                         "tool_input": tool_use["input"],
                         "tool_output": result["content"]
                     }
-
-            if self._should_wait_for_process(tool_uses, tool_results):
-                shell_id = tool_uses[0]["input"]["shell_id"]
-                log(f"→ Detected waiting, sleeping until {shell_id} completes")
-                completion_result = await self._wait_for_process(shell_id)
-                tool_results[0]["content"] = completion_result
 
             self.conversation_history.append({
                 "role": "user",

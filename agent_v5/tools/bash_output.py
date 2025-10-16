@@ -5,6 +5,10 @@ from typing import Dict, Optional
 from .base import BaseTool
 from .bash_process_registry import BashProcessRegistry
 
+# Maximum output size to return to agent (to prevent context window overflow)
+# Training logs can be megabytes - we only need recent output
+MAX_OUTPUT_SIZE = 20 * 1024  # 20KB (~5K tokens, ~200 lines)
+
 
 class ReadBashOutputTool(BaseTool):
     """Read new output from background bash process (cursor-based incremental reading)"""
@@ -80,6 +84,14 @@ class ReadBashOutputTool(BaseTool):
         # Combine stdout and stderr (preserve chronological order as much as possible)
         # Note: Perfect chronological ordering isn't possible with separate streams
         new_output = new_stdout + new_stderr
+        
+        # Truncate output if too large (keep most recent output only)
+        total_new_bytes = len(new_stdout) + len(new_stderr)
+        truncated = False
+        if len(new_output) > MAX_OUTPUT_SIZE:
+            truncated = True
+            # Keep last MAX_OUTPUT_SIZE characters (most recent output)
+            new_output = new_output[-MAX_OUTPUT_SIZE:]
 
         # Update cursors (mark this output as read)
         bg_process.stdout_cursor = len(bg_process.stdout_data)
@@ -95,19 +107,52 @@ class ReadBashOutputTool(BaseTool):
         import time
         runtime_s = time.time() - bg_process.start_time
 
+        # Check if process is stalled (no output for 60+ seconds)
+        time_since_last_output = time.time() - bg_process.last_output_time
+        stalled_hint = ""
+        if time_since_last_output > 60 and bg_process.process.returncode is None:
+            stalled_hint = (
+                f"\n⚠️  WARNING: No output for {time_since_last_output:.0f} seconds. "
+                f"Process may be stalled/hanging.\n"
+                f"💡 Consider: KillShell(shell_id='{shell_id}') if not making progress\n"
+            )
+        
         # Format output
         if new_output.strip():
+            truncation_notice = ""
+            if truncated:
+                truncation_notice = (
+                    f"\n⚠️  Output truncated: showing last {MAX_OUTPUT_SIZE:,} chars of {total_new_bytes:,} total chars\n"
+                    f"(Full output stored in memory, only recent output shown to save context)\n\n"
+                )
+            
+            # Add hint to wait for more progress (only if still running)
+            progress_hint = ""
+            if bg_process.process.returncode is None:
+                progress_hint = (
+                    f"\n\n💡 Consider: Bash(command='sleep 30', background=false) to let the process make more progress before polling again"
+                )
+            
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
-                f"Command: {bg_process.command}\n\n"
+                f"Command: {bg_process.command}\n"
+                f"{stalled_hint}"
+                f"{truncation_notice}\n"
                 f"{new_output}"
+                f"{progress_hint}"
             )
-            debug_summary = f"{status}, {len(new_output)} new bytes"
+            debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "")
         else:
+            # No new output - give agent options: wait or kill
+            wait_time = 30 if time_since_last_output < 60 else 60
             content = (
                 f"[{status}] {shell_id} (runtime: {runtime_s:.1f}s)\n"
-                f"Command: {bg_process.command}\n\n"
-                f"(no new output since last read)"
+                f"Command: {bg_process.command}\n"
+                f"{stalled_hint}\n"
+                f"(no new output since last read)\n\n"
+                f"💡 Options:\n"
+                f"  - Wait before polling again: Bash(command='sleep {wait_time}', background=false)\n"
+                f"  - Stop if not needed: KillShell(shell_id='{shell_id}')"
             )
             debug_summary = f"{status}, no new output"
 

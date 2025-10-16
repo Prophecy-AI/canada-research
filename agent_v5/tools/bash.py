@@ -5,9 +5,14 @@ import asyncio
 import os
 import uuid
 import time
+import pty
+import tty
 from typing import Dict, Optional
 from .base import BaseTool
 from .bash_process_registry import BackgroundProcess, BashProcessRegistry
+
+# Maximum output size for foreground execution (to prevent context window overflow)
+MAX_FOREGROUND_OUTPUT = 5 * 1024  # 5KB (~1.25K tokens, ~50 lines)
 
 
 class BashTool(BaseTool):
@@ -46,7 +51,7 @@ class BashTool(BaseTool):
                     },
                     "timeout": {
                         "type": "number",
-                        "description": "Timeout in milliseconds (max 600000, only applies to foreground execution)",
+                        "description": "Timeout in milliseconds (default is 2 minutes, CHNAGE IT IF YOU WANT TO USE THIS FOR BLOCKING TASKS THAT WILL TAKE MORE THAN 2 MINUTES TO COMPLETE, only applies to foreground execution)",
                         "default": 120000
                     },
                     "background": {
@@ -67,7 +72,7 @@ class BashTool(BaseTool):
             return await self._execute_background(command)
         else:
             timeout_ms = input.get("timeout", 120000)
-            timeout_s = min(timeout_ms / 1000, 600)
+            timeout_s = min(timeout_ms / 1000, 1000)
             return await self._execute_foreground(command, timeout_s)
 
     async def _execute_foreground(self, command: str, timeout_s: float) -> Dict:
@@ -88,8 +93,10 @@ class BashTool(BaseTool):
 
             process = await asyncio.create_subprocess_shell(
                 wrapped_cmd,
+                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=self.workspace_dir,
                 cwd=self.workspace_dir,
                 env=env
             )
@@ -101,10 +108,15 @@ class BashTool(BaseTool):
 
             output = stdout.decode() + stderr.decode()
             exit_code = process.returncode
-
-            # Truncate output for display
-            if len(output) > 30000:
-                output = output[:30000] + "\n... (output truncated)"
+            
+            # Truncate output for display (keep most recent output)
+            original_length = len(output)
+            if len(output) > MAX_FOREGROUND_OUTPUT:
+                output = (
+                    f"⚠️  Output truncated: showing last {MAX_FOREGROUND_OUTPUT:,} chars of {original_length:,} total chars\n"
+                    f"(Full output not stored, only recent output shown to save context)\n\n"
+                    + output[-MAX_FOREGROUND_OUTPUT:]
+                )
 
             # Truncate debug_summary too (prevent massive strings in logs)
             debug_output = output.replace('\n', ' | ')
@@ -140,8 +152,6 @@ class BashTool(BaseTool):
         shell_id = f"bash_{uuid.uuid4().hex[:8]}"
 
         try:
-            # Set PYTHONUNBUFFERED=1 to force Python to flush stdout/stderr immediately
-            # This ensures print() statements appear in real-time when running Python scripts
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
@@ -151,10 +161,18 @@ class BashTool(BaseTool):
 
             wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
 
+            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
+            os.makedirs(log_dir, exist_ok=True)
+            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
+
+            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+
             process = await asyncio.create_subprocess_shell(
+                wrapped_cmd,
                 wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                cwd=self.workspace_dir,
                 cwd=self.workspace_dir,
                 env=env
             )

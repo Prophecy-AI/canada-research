@@ -19,7 +19,7 @@ async def test_agent_initialization():
 
         assert agent.session_id == "test"
         assert agent.workspace_dir == tmpdir
-        assert len(agent.tools.tools) == 10  # Bash, ReadBashOutput, KillShell, Read, Write, Edit, Glob, Grep, TodoWrite, DefineCohort
+        assert len(agent.tools.tools) == 12  # Bash, ReadBashOutput, KillShell, Read, Write, Edit, Glob, Grep, TodoWrite, DefineCohort
         assert "Bash" in agent.tools.tools
         assert "ReadBashOutput" in agent.tools.tools
         assert "KillShell" in agent.tools.tools
@@ -200,4 +200,4 @@ async def test_agent_registers_mcp_tools():
         agent.tools.register(mcp_tool)
 
         assert "mcp__bigquery__query" in agent.tools.tools
-        assert len(agent.tools.tools) == 11  # 10 core tools + 1 MCP tool
+        assert len(agent.tools.tools) == 13  # 10 core tools + 1 MCP tool
