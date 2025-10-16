@@ -18,7 +18,7 @@ Instructions: {instructions_path}
 NO model suggestions. NO iteration. ONE script, ONE run."""
 
 
-PLANNING_PROMPT = """Design experiments. OPTIMIZE FOR SPEED. Output ONLY JSON.
+PLANNING_PROMPT = """Design 2-3 experiments testing different approaches. OPTIMIZE FOR SPEED. Output ONLY JSON.
 
 Competition: {competition_id}
 Round: {round_num}
@@ -26,24 +26,32 @@ Best: {best_score}
 
 Data: {context}
 
-**DO MINIMUM EXPERIMENTS. Start with 1. Use fewer epochs (10-15, not 25-30).**
+**STRATEGY: Design 2-3 experiments with DIFFERENT architectures/approaches. Run in parallel to find best quickly.**
+**SPEED: Use 10-15 epochs (not 25-30), large batch sizes (128-256), early stopping.**
 
 Models: XGBoost (gpu_hist), LightGBM (gpu), CatBoost, RandomForest, LogisticRegression, Ridge
-For images: ResNet18/MobileNet (pretrained, fast)
+For images: ResNet18/MobileNet/EfficientNet (pretrained)
 
-**Output ONLY JSON:**
+**Output ONLY JSON (2-3 diverse experiments):**
 
 [
   {{
     "id": "exp_1",
     "model": "ResNet18",
     "features": {{"type": "pretrained_cnn", "pretrained": true}},
-    "hyperparameters": {{"device": "cuda", "epochs": 10, "lr": 0.001, "batch_size": 256}},
-    "hypothesis": "Fast baseline"
+    "hyperparameters": {{"device": "cuda", "epochs": 12, "lr": 0.001, "batch_size": 256}},
+    "hypothesis": "Transfer learning baseline"
+  }},
+  {{
+    "id": "exp_2",
+    "model": "XGBoost",
+    "features": {{"type": "raw_pixels", "engineered": true}},
+    "hyperparameters": {{"tree_method": "gpu_hist", "device": "cuda", "n_estimators": 300}},
+    "hypothesis": "Gradient boosting alternative"
   }}
 ]
 
-1 experiment default. Minimize epochs. Maximize batch size for speed."""
+2-3 experiments. Different approaches. Fast training (10-15 epochs)."""
 
 
 WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
