@@ -3,7 +3,9 @@ KaggleAgent - Extends ResearchAgent with Kaggle competition system prompt
 """
 from pathlib import Path
 from agent_v5.agent import ResearchAgent
+from agent_v5.tools.timer import TimerTool
 from datetime import datetime
+import time
 
 def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submission_dir: str) -> str:
     """Generate Kaggle-specific system prompt"""
@@ -28,6 +30,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - Edit: Modify existing files
 - Glob: Find files by pattern (e.g., "*.csv")
 - Grep: Search file contents
+- Timer: Check elapsed time since competition started (helps manage time budget)
 
 - **Bash: Execute shell commands (background parameter REQUIRED)**
 
@@ -300,6 +303,7 @@ class KaggleAgent(ResearchAgent):
         self.data_dir = data_dir
         self.submission_dir = submission_dir
         self.instructions_path = instructions_path
+        self.start_time = time.time()  # Initialize start time
 
         # Generate Kaggle-specific system prompt
         system_prompt = create_kaggle_system_prompt(
@@ -314,3 +318,9 @@ class KaggleAgent(ResearchAgent):
             workspace_dir=workspace_dir,
             system_prompt=system_prompt
         )
+
+        # Register timer tool
+        self.tools.register(TimerTool(
+            workspace_dir=workspace_dir,
+            get_start_time=lambda: self.start_time
+        ))

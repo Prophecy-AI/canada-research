@@ -93,10 +93,8 @@ class BashTool(BaseTool):
 
             process = await asyncio.create_subprocess_shell(
                 wrapped_cmd,
-                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.workspace_dir,
                 cwd=self.workspace_dir,
                 env=env
             )
@@ -161,18 +159,10 @@ class BashTool(BaseTool):
 
             wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
 
-            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
-            os.makedirs(log_dir, exist_ok=True)
-            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
-
-            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
-
             process = await asyncio.create_subprocess_shell(
-                wrapped_cmd,
                 wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                cwd=self.workspace_dir,
                 cwd=self.workspace_dir,
                 env=env
             )

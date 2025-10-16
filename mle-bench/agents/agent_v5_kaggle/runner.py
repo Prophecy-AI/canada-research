@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import time
 
 # Add agent_v5 to path
 AGENT_DIR = os.environ.get('AGENT_DIR', '/home/agent')
@@ -27,10 +28,14 @@ async def main():
     instructions_path = "/home/instructions.txt"
     competition_id = os.environ.get('COMPETITION_ID', 'unknown')
 
+    # Start global timer
+    start_time = time.time()
+
     log(f"🏆 Starting Kaggle Agent for competition: {competition_id}")
     log(f"📊 Data: {data_dir}")
     log(f"💻 Workspace: {code_dir}")
     log(f"📤 Submission: {submission_dir}")
+    log(f"⏱️  Start time: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(start_time))}")
 
     # Create directories
     Path(code_dir).mkdir(exist_ok=True, parents=True)
@@ -45,6 +50,9 @@ async def main():
         submission_dir=submission_dir,
         instructions_path=instructions_path
     )
+
+    # Store start time for agent to access
+    agent.start_time = start_time
 
     # Security handled by Docker container isolation
 
@@ -79,7 +87,16 @@ async def main():
         await agent.cleanup()
 
     print("\n")
+
+    # Calculate and log total runtime
+    end_time = time.time()
+    total_runtime = end_time - start_time
+    hours = int(total_runtime // 3600)
+    minutes = int((total_runtime % 3600) // 60)
+    seconds = int(total_runtime % 60)
+
     log("✓ Agent run complete")
+    log(f"⏱️  Total runtime: {hours}h {minutes}m {seconds}s ({total_runtime:.1f}s)", 1)
 
     # Check if submission was created
     submission_path = Path(submission_dir) / "submission.csv"
