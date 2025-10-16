@@ -46,11 +46,15 @@ Based on dataset characteristics, select models that are:
   * For larger datasets: use train_split 0.9-0.95
   * Never use train_split > 0.9 for datasets with many classes relative to size
 
-**Model Selection Guidance (you can use ANY model, these are suggestions):**
+**Model Selection Guidance:**
+- **CRITICAL: ONLY use models from standard libraries (torchvision.models, transformers, sklearn, xgboost, lightgbm)**
+- **DO NOT propose custom architectures or models implemented from scratch - worker will fail**
 - Images (small dataset <50K): DenseNet161, DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
 - Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
 - Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
 - **For images: Use input size 128-224px (not 32x32), train split 90-95%**
+- **For image augmentation: ONLY use simple torchvision transforms (RandomHorizontalFlip, RandomRotation, ColorJitter, RandomCrop, RandomResizedCrop)**
+- **DO NOT propose: AutoAugment, RandAugment, Mixup, CutMix, Cutout, RandomErasing - worker cannot implement these**
 - Tabular: XGBoost (tree_method='hist'), LightGBM (CPU only), CatBoost, simple MLPClassifier
 - **For tabular: Prefer gradient boosting over neural networks (simpler, more reliable)**
 - Text: **ONLY use HuggingFace transformers** (distilbert-base-uncased, bert-base-uncased, roberta-base)
@@ -105,6 +109,7 @@ Data: {data_dir}
    - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format (avoid 1202.0.jpg)
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
+   - **CRITICAL: ONLY use models from libraries (torchvision.models.resnet18, etc.) - DO NOT implement custom architectures from scratch**
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
    - **For text data:**
      * Use: `from transformers import AutoTokenizer, AutoModelForSequenceClassification`
@@ -165,9 +170,14 @@ Round time: {round_time_minutes:.1f} minutes
 **Instructions:**
 Decide whether to SUBMIT or CONTINUE based on:
 1. Is the score competitive/good enough?
-2. Is there a clear hypothesis for >0.5% improvement?
+2. Is there a **fundamentally different architecture** worth trying?
 3. Have we exhausted promising approaches?
 4. **Time efficiency: Is continuing worth the time investment?**
+
+**CRITICAL - What counts as "worth trying":**
+- ✅ **CONTINUE only if:** Completely different model family (e.g., CNN → Transformer, DenseNet → XGBoost)
+- ❌ **DO NOT continue for:** More epochs, different learning rate, minor hyperparameter tweaks, same architecture with variations
+- **Goal: Get a good solution FAST, not perfect. Competition rewards speed.**
 
 Remember metric direction when evaluating score quality:
 - LOWER is better: smaller scores are better (e.g., logloss 0.1 > logloss 1.0)
@@ -175,9 +185,9 @@ Remember metric direction when evaluating score quality:
 
 **Time-based criteria (competition efficiency):**
 - **If cumulative time >= 30 min: SUBMIT immediately (hard stop)**
-- If cumulative time 20-30 min: SUBMIT unless CLEAR evidence of >1% improvement
-- If cumulative time 10-20 min: Be conservative, need strong hypothesis for >0.5% improvement
-- If cumulative time <10 min: Normal criteria apply
+- If cumulative time 20-30 min: SUBMIT unless CLEAR evidence of >1% improvement from fundamentally different architecture
+- If cumulative time 10-20 min: Be conservative, SUBMIT unless untried architecture family exists
+- If cumulative time <10 min: SUBMIT if score is decent, CONTINUE only for major architecture changes
 
 Output format (no other text):
 
@@ -186,8 +196,10 @@ BEST_MODEL: exp_2
 REASONING: Best logloss 0.62 is competitive, no clear path to major improvement
 
 Criteria:
-- SUBMIT if: Score is good AND (no clear improvement path OR round >= 3 OR time-constrained)
-- CONTINUE if: Clear hypothesis exists for meaningful improvement AND time-efficient AND cumulative time <30 min"""
+- SUBMIT if: Score is decent AND (no fundamentally different architecture OR round >= 3 OR time-constrained)
+- CONTINUE if: Untried architecture family exists AND strong hypothesis for >1% improvement AND time-efficient AND cumulative time <30 min
+
+**Remember: Speed > Perfection. Minor tweaks waste time. SUBMIT early and often.**"""
 
 
 SUBMISSION_PROMPT = """Create submission.csv. Fast.
