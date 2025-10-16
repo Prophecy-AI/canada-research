@@ -239,7 +239,7 @@ class Orchestrator:
             }
         
         try:
-            print(f"  → {exp_id}: Running train.py...")
+            print(f"  → {exp_id}: Starting training...")
             
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
@@ -251,19 +251,34 @@ class Orchestrator:
                 env=env
             )
             
-            stdout, _ = await process.communicate()
-            output = stdout.decode()
+            output_lines = []
+            
+            while True:
+                line = await process.stdout.readline()
+                if not line:
+                    break
+                line_str = line.decode().strip()
+                output_lines.append(line_str)
+                
+                if line_str:
+                    print(f"  [{exp_id}] {line_str}")
+            
+            await process.wait()
+            output = "\n".join(output_lines)
             
             error_log = workspace / "train_error.log"
             error_log.write_text(output)
             
             if process.returncode != 0:
-                print(f"  ❌ {exp_id}: train.py failed (exit code {process.returncode})")
+                print(f"\n  ❌ {exp_id}: FAILED (exit code {process.returncode})")
+                print(f"  Last 10 lines:")
+                for line in output_lines[-10:]:
+                    print(f"     {line}")
                 return {
                     "id": exp_id,
                     "status": "error",
                     "score": None,
-                    "output": output[-1000:] if len(output) > 1000 else output,
+                    "output": output[-2000:] if len(output) > 2000 else output,
                     "model": exp.get('model'),
                     "hypothesis": exp.get('hypothesis')
                 }
@@ -273,28 +288,33 @@ class Orchestrator:
             score = float(match.group(1)) if match else None
             
             if score is None:
-                print(f"  ⚠️ {exp_id}: No score found in output")
+                print(f"\n  ⚠️ {exp_id}: No VALIDATION_SCORE found")
+                print(f"  Last 10 lines of output:")
+                for line in output_lines[-10:]:
+                    print(f"     {line}")
                 return {
                     "id": exp_id,
                     "status": "no_score",
                     "score": None,
-                    "output": output[-1000:] if len(output) > 1000 else output,
+                    "output": output[-2000:] if len(output) > 2000 else output,
                     "model": exp.get('model'),
                     "hypothesis": exp.get('hypothesis')
                 }
             
-            print(f"  ✓ {exp_id}: Score {score:.4f}")
+            print(f"\n  ✓ {exp_id}: VALIDATION_SCORE: {score:.6f}")
             return {
                 "id": exp_id,
                 "status": "success",
                 "score": score,
-                "output": output[-500:] if len(output) > 500 else output,
+                "output": output[-1000:] if len(output) > 1000 else output,
                 "model": exp.get('model'),
                 "hypothesis": exp.get('hypothesis')
             }
         
         except Exception as e:
-            print(f"  ❌ {exp_id}: Exception - {str(e)[:100]}")
+            print(f"\n  ❌ {exp_id}: Exception - {str(e)}")
+            import traceback
+            traceback.print_exc()
             return {
                 "id": exp_id,
                 "status": "error",
