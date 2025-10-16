@@ -107,30 +107,26 @@ Data: {data_dir}
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
      * Multi-label classification (multiple labels per sample): `nn.BCEWithLogitsLoss()`
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
-   - **Train/validation split - CRITICAL:**
+   - **Train/validation split (copy this pattern for multiclass):**
      ```python
-     # For multiclass: ensure val_size >= num_classes
-     total = len(df)
-     test_size = 0.15 if total < 10 * num_classes else 0.10
+     test_size = 0.15 if len(df) < 5000 else 0.10
      try:
          X_train, X_val, y_train, y_val = train_test_split(
-             X, y, test_size=test_size, stratify=y, random_state=42
-         )
-     except ValueError:  # Not enough samples per class
+             X, y, test_size=test_size, stratify=y, random_state=42)
+     except ValueError:
          X_train, X_val, y_train, y_val = train_test_split(
-             X, y, test_size=test_size, random_state=42
-         )
+             X, y, test_size=test_size, random_state=42)
      ```
    - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
-   - Early stopping with immediate perfect score termination:
+   - Early stopping with perfect score termination (copy this pattern):
      ```python
      if val_metric > best_metric:
          best_metric = val_metric
-         save_model()
+         torch.save(model.state_dict(), 'model.pth')
          patience = 0
-         if val_metric >= 0.9999:  # Perfect or near-perfect
-             print(f"Perfect score reached: {val_metric:.4f}, stopping")
+         if val_metric >= 0.9999:
+             print(f"Perfect score reached: {{val_metric:.4f}}, stopping")
              break
      else:
          patience += 1
