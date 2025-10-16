@@ -20,6 +20,7 @@ from agent_v5.tools.list_bash import ListBashProcessesTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
 from agent_v5.tools.oracle import OracleTool
+from agent_v5.tools.deepseek_planner import DeepSeekPlannerTool
 
 
 class ResearchAgent:
@@ -51,6 +52,7 @@ class ResearchAgent:
         self.tools.register(RunSummaryTool(self.workspace_dir))
         self.tools.register(ReadTodoListTool(self.workspace_dir))
         self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
+        self.tools.register(DeepSeekPlannerTool(self.workspace_dir, lambda: self.conversation_history))
         self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
 
     async def cleanup(self) -> None:
