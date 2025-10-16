@@ -24,31 +24,43 @@ class Agent:
             response_content = []
             tool_uses = []
 
-            with self.client.messages.stream(
-                model="claude-sonnet-4-5-20250929",
-                max_tokens=20000,
-                system=self.system_prompt,
-                messages=self.conversation_history,
-                tools=self.tools.get_schemas(),
-                temperature=0,
-            ) as stream:
-                for event in stream:
-                    if event.type == "content_block_delta":
-                        if event.delta.type == "text_delta":
-                            text = event.delta.text
-                            response_content.append({"type": "text", "text": text})
-                            full_response.append(text)
-                            print(text, end="", flush=True)
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    with self.client.messages.stream(
+                        model="claude-sonnet-4-5-20250929",
+                        max_tokens=20000,
+                        system=self.system_prompt,
+                        messages=self.conversation_history,
+                        tools=self.tools.get_schemas(),
+                        temperature=0,
+                    ) as stream:
+                        for event in stream:
+                            if event.type == "content_block_delta":
+                                if event.delta.type == "text_delta":
+                                    text = event.delta.text
+                                    response_content.append({"type": "text", "text": text})
+                                    full_response.append(text)
+                                    print(text, end="", flush=True)
 
-                final_message = stream.get_final_message()
-                for block in final_message.content:
-                    if block.type == "tool_use":
-                        tool_uses.append({
-                            "type": "tool_use",
-                            "id": block.id,
-                            "name": block.name,
-                            "input": block.input
-                        })
+                        final_message = stream.get_final_message()
+                        for block in final_message.content:
+                            if block.type == "tool_use":
+                                tool_uses.append({
+                                    "type": "tool_use",
+                                    "id": block.id,
+                                    "name": block.name,
+                                    "input": block.input
+                                })
+                    break
+                except Exception as e:
+                    if attempt < max_retries - 1:
+                        print(f"\n⚠️  API error (attempt {attempt + 1}/{max_retries}): {str(e)[:100]}")
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    else:
+                        print(f"\n❌ API error after {max_retries} attempts: {str(e)}")
+                        raise
 
             self.conversation_history.append({
                 "role": "assistant",
