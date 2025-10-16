@@ -42,12 +42,15 @@ Based on dataset characteristics, select models that are:
 - Fast to train (10-15 epochs, early stopping)
 - Batch size 32-64 for parallel GPU training
 
-**Model Selection Guidance:**
-- Images (small dataset <50K): ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
-- Images (large dataset >50K): ResNet50, EfficientNet-B1/B2, Vision Transformer
+**Model Selection Guidance (you can use ANY model, these are suggestions):**
+- Images (small dataset <50K): DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
+- Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
+- Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
 - Tabular: XGBoost, LightGBM, CatBoost, Neural Networks (TabNet)
 - Text: BERT-based, RoBERTa, DistilBERT (pretrained)
 - Time-series: LSTM, GRU, Temporal CNNs, XGBoost
+
+**Feel free to propose other models (VGG, Inception, SENet, etc.) if they fit the task better.**
 
 **Step 3: Output ONLY JSON (NO text before/after):**
 
@@ -73,7 +76,9 @@ WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
 
 Experiment: {spec}
 Data: {data_dir}
-EDA: {eda_context}
+
+**EDA Context (use this to understand the problem):**
+{eda_context}
 
 **CRITICAL: Your ONLY job is to write train.py. DO NOT:**
 - Run train.py (orchestrator will run it)
@@ -88,11 +93,15 @@ EDA: {eda_context}
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
+   - **Correct loss function:**
+     * Binary classification (2 classes): `nn.BCEWithLogitsLoss()`
+     * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
+     * Regression: `nn.MSELoss()` or `nn.L1Loss()`
    - train_test_split (test_size=0.2, random_state=42)
-   - GPU training
+   - GPU training (model.to(device), data.to(device))
    - Early stopping (stop when validation plateaus for 3-5 epochs)
-   - Print validation score as "VALIDATION_SCORE: X.XXXX"
-   - Save model
+   - Print validation score as "VALIDATION_SCORE: X.XXXX" (accuracy or metric value)
+   - Save model with `torch.save(model.state_dict(), 'model.pth')`
 4. Respond "READY" immediately
 
 Tools: Bash, Read, Write"""
