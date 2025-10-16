@@ -168,7 +168,7 @@ else
     # The symlinks in agent_v6/ point to ../../../agent_v6
     cd ..
     echo $(pwd)
-    docker build --platform=linux/amd64 -t "$IMAGE_TAG" -t "agent_v6:latest" \
+    docker build --no-cache --platform=linux/amd64 -t "$IMAGE_TAG" -t "agent_v6:latest" \
       -f mle-bench/agents/agent_v6/Dockerfile \
       . \
       --build-arg SUBMISSION_DIR=$SUBMISSION_DIR \
