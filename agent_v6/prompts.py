@@ -27,8 +27,9 @@ Best: {best_score}
 {context}
 
 **CRITICAL: DO NOT REPEAT any previous experiments above. Must try DIFFERENT models/approaches.**
-**STRATEGY: 2-3 experiments with DIFFERENT architectures. Run in parallel.**
-**SPEED: 10-15 epochs, batch size 128-256, early stopping.**
+**STRATEGY: 2-3 experiments with DIFFERENT architectures. Run in parallel on SAME GPU.**
+**SPEED: 10-15 epochs, early stopping.**
+**BATCH SIZE: Use 32-64 (smaller batches to fit 2-3 models in GPU memory simultaneously).**
 
 Models: XGBoost (gpu_hist), LightGBM (gpu), CatBoost, RandomForest, LogisticRegression, Ridge
 Images: ResNet18/ResNet50/MobileNet/EfficientNet (pretrained)
@@ -40,14 +41,14 @@ Images: ResNet18/ResNet50/MobileNet/EfficientNet (pretrained)
     "id": "exp_1",
     "model": "ResNet50",
     "features": {{"type": "pretrained_cnn", "pretrained": true, "augmentation": true}},
-    "hyperparameters": {{"device": "cuda", "epochs": 12, "lr": 0.001, "batch_size": 128}},
+    "hyperparameters": {{"device": "cuda", "epochs": 12, "lr": 0.001, "batch_size": 32}},
     "hypothesis": "Deeper architecture with data augmentation"
   }},
   {{
     "id": "exp_2",
     "model": "EfficientNet",
     "features": {{"type": "pretrained_cnn", "pretrained": true}},
-    "hyperparameters": {{"device": "cuda", "epochs": 10, "lr": 0.0005, "batch_size": 256}},
+    "hyperparameters": {{"device": "cuda", "epochs": 10, "lr": 0.0005, "batch_size": 48}},
     "hypothesis": "More efficient architecture"
   }}
 ]"""
@@ -69,12 +70,13 @@ EDA: {eda_context}
 1. Check data structure (use Bash: ls, zipinfo, head CSV)
 2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
 3. Write train.py with:
+   - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
-   - Model/features/hyperparameters from spec
+   - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
    - train_test_split (test_size=0.2, random_state=42)
    - GPU training
    - Early stopping (stop when validation plateaus for 3-5 epochs)
-   - Print validation score
+   - Print validation score as "VALIDATION_SCORE: X.XXXX"
    - Save model
 4. Respond "READY" immediately
 
