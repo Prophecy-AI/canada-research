@@ -67,141 +67,41 @@ Based on the data characteristics above, select appropriate models and design ex
 Output 1 experiment if confident in approach, 2-3 if testing different hypotheses."""
 
 
-WORKER_PROMPT = """Write train.py. NO exploration, NO running. Just write file.
+WORKER_PROMPT = """Write train.py implementing this experiment. NO exploration, NO iteration.
 
-Spec: {spec}
-EDA: {eda_context}
-Data: {data_dir}
+Experiment Spec: {spec}
+Data Context: {eda_context}
+Data Directory: {data_dir}
 Workspace: {workspace_dir}
 
-**Template for TABULAR/XGBoost/LightGBM:**
-```python
-import os, io, numpy as np, pandas as pd, pickle
-from zipfile import ZipFile
-from PIL import Image
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
+**Requirements:**
+1. **Import all needed modules** (os, io, numpy, pandas, zipfile, PIL, sklearn, pickle, torch if using CNN)
+2. **Load data** from {data_dir} (images in train.zip, labels in train.csv)
+3. **Implement model** with exact features/hyperparameters from spec
+4. **80/20 train/val split** (random_state=42, stratify=y)
+5. **Print score** in exact format: "VALIDATION_SCORE: 0.847123"
+6. **Save model** as model.pkl
+7. **Wrap in try/except** with error printing
 
-try:
-    df = pd.read_csv('{data_dir}/train.csv')
-    
-    # Load images from zip and flatten
-    def load_images(zip_path, img_ids):
-        images = []
-        with ZipFile(zip_path, 'r') as z:
-            for img_id in img_ids:
-                img = Image.open(io.BytesIO(z.read(f'train/{{img_id}}')))
-                images.append(np.array(img))
-        return np.array(images)
-    
-    X = load_images('{data_dir}/train.zip', df['id'])
-    y = df['has_cactus'].values
-    X = X.reshape(len(X), -1)  # Flatten to (N, 3072)
-    
-    X_train, X_val, y_train, y_val = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
-    )
-    
-    # Train XGBoost/LightGBM with spec hyperparameters
-    # model = xgboost.XGBClassifier(tree_method='gpu_hist', device='cuda', ...)
-    # model.fit(X_train, y_train)
-    
-    y_pred = model.predict_proba(X_val)[:, 1]
-    score = roc_auc_score(y_val, y_pred)
-    print(f"VALIDATION_SCORE: {{score:.6f}}")
-    pickle.dump(model, open('model.pkl', 'wb'))
+**For IMAGE data from zip files:**
+- Use ZipFile to read images: `z.read(f'train/{{img_id}}')`
+- Use PIL to open: `Image.open(io.BytesIO(img_bytes))`
+- For XGBoost/LightGBM: Flatten images to vectors, engineer features if specified
+- For CNNs (ResNet/EfficientNet): Create PyTorch Dataset, DataLoader, use transforms
 
-except Exception as e:
-    print(f"ERROR: {{e}}")
-    import traceback; traceback.print_exc()
-```
+**For PRETRAINED models (ResNet18/EfficientNet/MobileNet):**
+- Load with torchvision.models: `models.resnet18(pretrained=True)`
+- Replace final layer for binary classification: `model.fc = nn.Linear(..., 1)`
+- Use model.cuda(), train on GPU
+- Resize images to 224x224, normalize with ImageNet stats
+- Use BCEWithLogitsLoss, Adam optimizer
 
-**Template for PRETRAINED CNN (ResNet/EfficientNet):**
-```python
-import os, io, numpy as np, pandas as pd, torch, pickle
-from zipfile import ZipFile
-from PIL import Image
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import roc_auc_score
-from torch.utils.data import Dataset, DataLoader
-import torchvision.models as models
-import torchvision.transforms as transforms
+**GPU Settings:**
+- XGBoost: tree_method='gpu_hist', device='cuda'
+- LightGBM: device='gpu'
+- PyTorch: model.cuda(), images.cuda()
 
-try:
-    df = pd.read_csv('{data_dir}/train.csv')
-    
-    class ImageDataset(Dataset):
-        def __init__(self, zip_path, img_ids, labels, transform=None):
-            self.zip_path = zip_path
-            self.img_ids = img_ids
-            self.labels = labels
-            self.transform = transform
-        
-        def __len__(self):
-            return len(self.img_ids)
-        
-        def __getitem__(self, idx):
-            with ZipFile(self.zip_path, 'r') as z:
-                img = Image.open(io.BytesIO(z.read(f'train/{{self.img_ids[idx]}}')))
-                if self.transform:
-                    img = self.transform(img)
-                return img, self.labels[idx]
-    
-    transform = transforms.Compose([
-        transforms.Resize(224),  # ResNet expects 224x224
-        transforms.ToTensor(),
-        transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
-    ])
-    
-    train_ids, val_ids, y_train, y_val = train_test_split(
-        df['id'].values, df['has_cactus'].values, test_size=0.2, random_state=42, stratify=df['has_cactus']
-    )
-    
-    train_dataset = ImageDataset('{data_dir}/train.zip', train_ids, y_train, transform)
-    val_dataset = ImageDataset('{data_dir}/train.zip', val_ids, y_val, transform)
-    
-    train_loader = DataLoader(train_dataset, batch_size=128, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=128)
-    
-    # Load pretrained model
-    model = models.resnet18(pretrained=True)
-    model.fc = torch.nn.Linear(model.fc.in_features, 1)  # Binary classification
-    model = model.cuda()
-    
-    criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
-    
-    # Train for specified epochs
-    for epoch in range(20):
-        model.train()
-        for images, labels in train_loader:
-            images, labels = images.cuda(), labels.float().cuda()
-            optimizer.zero_grad()
-            outputs = model(images).squeeze()
-            loss = criterion(outputs, labels)
-            loss.backward()
-            optimizer.step()
-    
-    # Evaluate
-    model.eval()
-    all_preds, all_labels = [], []
-    with torch.no_grad():
-        for images, labels in val_loader:
-            images = images.cuda()
-            outputs = torch.sigmoid(model(images).squeeze()).cpu().numpy()
-            all_preds.extend(outputs)
-            all_labels.extend(labels.numpy())
-    
-    score = roc_auc_score(all_labels, all_preds)
-    print(f"VALIDATION_SCORE: {{score:.6f}}")
-    torch.save(model.state_dict(), 'model.pkl')
-
-except Exception as e:
-    print(f"ERROR: {{e}}")
-    import traceback; traceback.print_exc()
-```
-
-Implement spec EXACTLY. Respond "READY".
+Implement experiment from spec. Respond "READY".
 
 Tools: Write"""
 
