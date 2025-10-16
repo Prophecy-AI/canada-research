@@ -179,8 +179,7 @@ class OracleTool(BaseTool):
             response = client.chat.completions.create(
                 model="o3",  # MUST be exactly "o3"
                 messages=messages,
-                max_completion_tokens=8192, 
-                temperature=1.0  # Default for reasoning models
+                max_completion_tokens=8192,
             )
 
             oracle_response = response.choices[0].message.content
