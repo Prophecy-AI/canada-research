@@ -73,21 +73,24 @@ Best: {best_score}
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
 **Recommendation for Round 1:**
-- **Images <50K:** 
-  * exp_1: Multi-model bottleneck (e.g., ResNet50 + InceptionV3 or EfficientNet-B2 + DenseNet121 + ResNet50)
-  * exp_2: Single-model bottleneck (e.g., EfficientNet-B0 for speed comparison)
-  * exp_3: Fine-tuning (e.g., DenseNet161 to see if training helps)
-- **Images >50K:** Try 2-3 different fine_tuning models
+- **Images <50K (espescially for small sample sizes):** 
+  * **FOCUS ON BOTTLENECK ONLY** - fine-tuning wastes time and gets worse scores
+  * exp_1: Multi-model bottleneck (ResNet50 + InceptionV3)
+  * exp_2: Multi-model bottleneck (EfficientNet-B2 + DenseNet161)
+  * exp_3: Multi-model bottleneck (Wide_ResNet50_2 + RegNetY_8GF) OR single EfficientNet-B0 for speed
+  * This explores WHICH model combinations work best, all finish in 3-5 min each
+- **Images >50K:** Try 2-3 different fine_tuning models (enough data to train)
 - **Tabular:** Try 2-3 different gradient boosting models
-- **Multi-model bottleneck gets best scores** (based on winning solutions)
+- **Multi-model bottleneck >> fine-tuning for small datasets** (faster AND better scores)
 
 **Experiment Design Guidelines:**
-- **For images <50K: ALWAYS include multi-model bottleneck as exp_1** (proven to get best scores)
+- **For images <50K: Use ONLY bottleneck strategies (skip fine-tuning - wastes time and gets worse results)**
 - **Multi-model selection:** Choose 2-3 complementary backbones with different architectures:
-  * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2
+  * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2, EfficientNet-B2 + ResNet50
   * Good triplets: EfficientNet-B2 + DenseNet121 + ResNet50
   * Different architectures capture different features
-- **Different models:** Use different backbones/models across experiments
+- **Different model combinations:** Each experiment should try different backbone combinations to find best ensemble
+- **For images >50K: Use fine_tuning (enough data to train full networks)**
 - **Batch size:** 32-64 for GPU training
 - **Train split:** <5000 samples use 0.85, larger use 0.9-0.95
 - **Image augmentation:** ONLY RandomHorizontalFlip, RandomRotation, ColorJitter, RandomCrop, RandomResizedCrop
