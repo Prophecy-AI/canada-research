@@ -35,54 +35,75 @@ Best: {best_score}
 - Target: classification/regression? Binary/multiclass? Imbalanced?
 - Metric: what does it optimize for?
 
-**Step 2: Choose appropriate models**
-Based on dataset characteristics, select models that are:
-- DIFFERENT from previous experiments (do not repeat)
-- Appropriate for the data type and size
-- Fast to train (10-15 epochs, early stopping)
-- Batch size 32-64 for parallel GPU training
-- **For train_split hyperparameter:**
-  * For small datasets (<5000 samples): use train_split 0.85 (leaves 15% for validation)
-  * For larger datasets: use train_split 0.9-0.95
-  * Never use train_split > 0.9 for datasets with many classes relative to size
+**Step 2: Choose strategy and models based on data characteristics**
 
-**Model Selection Guidance:**
-- **CRITICAL: ONLY use models from standard libraries (torchvision.models, transformers, sklearn, xgboost, lightgbm)**
-- **DO NOT propose custom architectures or models implemented from scratch - worker will fail**
-- Images (small dataset <50K): DenseNet161, DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
-- Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
-- Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
-- **For images: Use input size 128-224px (not 32x32), train split 90-95%**
-- **For image augmentation: ONLY use simple torchvision transforms (RandomHorizontalFlip, RandomRotation, ColorJitter, RandomCrop, RandomResizedCrop)**
-- **DO NOT propose: AutoAugment, RandAugment, Mixup, CutMix, Cutout, RandomErasing - worker cannot implement these**
-- Tabular: XGBoost (tree_method='hist'), LightGBM (CPU only), CatBoost, simple MLPClassifier
-- **For tabular: Prefer gradient boosting over neural networks (simpler, more reliable)**
-- Text: **ONLY use HuggingFace transformers** (distilbert-base-uncased, bert-base-uncased, roberta-base)
-  * Use AutoTokenizer + AutoModelForSequenceClassification from transformers library
-  * OR simple baselines: TF-IDF + LogisticRegression/XGBoost
-- **DO NOT propose: Custom LSTM, BiLSTM, TextCNN, GloVe/FastText embeddings - libraries not installed**
-- Time-series: XGBoost, LightGBM (gradient boosting works well), simple LSTM if needed
+**CRITICAL: ONLY use models from standard libraries (torchvision.models, transformers, sklearn, xgboost, lightgbm)**
+**DO NOT propose custom architectures or models implemented from scratch - worker will fail**
 
-**Feel free to propose other models (VGG, Inception, SENet, etc.) if they fit the task better.**
+**Available Strategies (choose mix based on EDA context above):**
+
+**Strategy 1: "bottleneck_features"** (feature extraction + simple classifier)
+- **When to try:** Images + Classification, especially with <50K samples
+- **How it works:** Extract features from pretrained CNN (no training), train LogisticRegression/XGBoost on features
+- **Pros:** Very fast (trains in seconds), often better with limited data, low memory
+- **Models:** EfficientNet-B0, ResNet50, DenseNet121, MobileNetV2
+- **Example:** {{"strategy": "bottleneck_features", "model": "EfficientNet-B0", "classifier": "LogisticRegression"}}
+
+**Strategy 2: "fine_tuning"** (standard deep learning)
+- **When to try:** Images + Classification, any dataset size
+- **How it works:** Full CNN training with pretrained weights, train 10-15 epochs
+- **Pros:** Can learn task-specific features, proven approach
+- **Models:** DenseNet161, EfficientNet-B0/B1, ResNet18/50, MobileNet
+- **Example:** {{"strategy": "fine_tuning", "model": "ResNet50", "epochs": 12}}
+
+**Strategy 3: "gradient_boosting"** (for tabular)
+- **When to try:** Tabular data
+- **Models:** XGBoost (tree_method='hist'), LightGBM (CPU), CatBoost
+
+**Strategy 4: "transformer_features"** (for text)
+- **When to try:** Text data
+- **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
+
+**Recommendation for Round 1:**
+- **Images <50K:** Try BOTH bottleneck_features (exp_1) AND fine_tuning (exp_2) to compare
+- **Images >50K:** Try 2-3 different fine_tuning models
+- **Tabular:** Try 2-3 different gradient boosting models
+- **Mix strategies** to find what works best for THIS dataset
+
+**Experiment Design Guidelines:**
+- **Diversify strategies:** If images <50K, propose at least ONE bottleneck_features AND ONE fine_tuning
+- **Different models:** Use different backbones/models across experiments
+- **Batch size:** 32-64 for GPU training
+- **Train split:** <5000 samples use 0.85, larger use 0.9-0.95
+- **Image augmentation:** ONLY RandomHorizontalFlip, RandomRotation, ColorJitter, RandomCrop, RandomResizedCrop
+- **DO NOT use:** AutoAugment, RandAugment, Mixup, CutMix, Cutout, RandomErasing, Custom LSTM, BiLSTM, GloVe/FastText
 
 **Step 3: Output ONLY JSON (NO text before/after):**
 
 [
   {{
     "id": "exp_1",
+    "strategy": "bottleneck_features OR fine_tuning OR gradient_boosting",
     "model": "<model_name>",
     "features": {{"type": "<feature_type>", "details": "..."}},
     "hyperparameters": {{"device": "cuda", "epochs": 10-15, "lr": 0.0001-0.01, "batch_size": 32-64}},
-    "hypothesis": "<why this model is appropriate for THIS dataset>"
+    "hypothesis": "<why this strategy and model are appropriate for THIS dataset>"
   }},
   {{
     "id": "exp_2",
+    "strategy": "<different_strategy_if_possible>",
     "model": "<different_model>",
     "features": {{"type": "<feature_type>", "details": "..."}},
     "hyperparameters": {{"device": "cuda", "epochs": 10-15, "lr": 0.0001-0.01, "batch_size": 32-64}},
-    "hypothesis": "<why this model complements exp_1>"
+    "hypothesis": "<why this complements exp_1>"
   }}
-]"""
+]
+
+**Important:** 
+- Always include "strategy" field in each experiment
+- Try DIFFERENT strategies across experiments (bottleneck vs fine_tuning) to explore what works
+- If strategy omitted, worker defaults to "fine_tuning"
+- Round 1: Explore diverse strategies. Round 2+: Double down on what worked."""
 
 
 WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
@@ -105,11 +126,74 @@ Data: {data_dir}
 3. **Verify imports before using them:**
    - Only use functions/classes that exist in standard libraries (torch, torchvision, sklearn, xgboost, etc.)
    - Prefer simple, proven implementations over complex custom code
-4. Write train.py with:
-   - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format (avoid 1202.0.jpg)
+4. **Check strategy from spec** (spec['strategy'] or default to 'fine_tuning')
+5. Write train.py based on strategy:
+
+**STRATEGY: "bottleneck_features"** (extract features, train simple classifier):
+```python
+import torch
+import torch.nn as nn
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+import numpy as np
+
+# Load pretrained model, remove classifier
+backbone = torchvision.models.{model_name}(pretrained=True)
+if hasattr(backbone, 'fc'):
+    backbone.fc = nn.Identity()
+elif hasattr(backbone, 'classifier'):
+    backbone.classifier = nn.Identity()
+elif hasattr(backbone, 'head'):
+    backbone.head = nn.Identity()
+backbone.eval()
+backbone.to(device)
+
+# Extract features (no gradients)
+with torch.no_grad():
+    train_features = []
+    train_labels = []
+    for images, labels in train_loader:
+        feats = backbone(images.to(device)).cpu().numpy()
+        train_features.append(feats)
+        train_labels.extend(labels.numpy())
+    X_train = np.vstack(train_features)
+    y_train = np.array(train_labels)
+    
+    # Same for validation
+    val_features = []
+    val_labels = []
+    for images, labels in val_loader:
+        feats = backbone(images.to(device)).cpu().numpy()
+        val_features.append(feats)
+        val_labels.extend(labels.numpy())
+    X_val = np.vstack(val_features)
+    y_val = np.array(val_labels)
+
+# Train LogisticRegression on features
+scaler = StandardScaler()
+X_train = scaler.fit_transform(X_train)
+X_val = scaler.transform(X_val)
+
+clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000, random_state=42)
+clf.fit(X_train, y_train)
+
+# Validation
+val_probs = clf.predict_proba(X_val)
+val_metric = log_loss(y_val, val_probs)  # or other metric
+print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
+
+# Save both models
+torch.save(backbone.state_dict(), 'backbone.pth')
+import joblib
+joblib.dump(clf, 'classifier.pkl')
+joblib.dump(scaler, 'scaler.pkl')
+```
+
+**STRATEGY: "fine_tuning"** (standard CNN training):
+   - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
-   - **CRITICAL: ONLY use models from libraries (torchvision.models.resnet18, etc.) - DO NOT implement custom architectures from scratch**
+   - Load pretrained model, replace final layer with num_classes
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
    - **For text data:**
      * Use: `from transformers import AutoTokenizer, AutoModelForSequenceClassification`
@@ -148,9 +232,13 @@ Data: {data_dir}
      * Example: "VALIDATION_SCORE: 0.623456" or "VALIDATION_SCORE: 0.954321"
      * All experiments MUST report the same metric for fair comparison
      * Do NOT print other metrics on lines containing "VALIDATION_SCORE"
-   - Save model with `torch.save(model.state_dict(), 'model.pth')`
+   - **Save model appropriately:**
+     * bottleneck_features: Save backbone + classifier + scaler
+     * fine_tuning: Save `torch.save(model.state_dict(), 'model.pth')`
    - **DO NOT generate test predictions in train.py - that's done separately in submission phase**
-4. Respond "READY" immediately
+6. Respond "READY" immediately
+
+**FALLBACK:** If strategy is unclear or missing, default to "fine_tuning" (standard approach)
 
 Tools: Bash, Read, Write"""
 
@@ -175,7 +263,9 @@ Decide whether to SUBMIT or CONTINUE based on:
 4. **Time efficiency: Is continuing worth the time investment?**
 
 **CRITICAL - What counts as "worth trying":**
-- ✅ **CONTINUE only if:** Completely different model family (e.g., CNN → Transformer, DenseNet → XGBoost)
+- ✅ **CONTINUE only if:** 
+  * Completely different model family (e.g., CNN → Transformer, DenseNet → XGBoost)
+  * OR different strategy (e.g., fine_tuning → bottleneck_features, or vice versa)
 - ❌ **DO NOT continue for:** More epochs, different learning rate, minor hyperparameter tweaks, same architecture with variations
 - **Goal: Get a good solution FAST, not perfect. Competition rewards speed.**
 
@@ -212,14 +302,58 @@ Output: {submission_dir}/submission.csv
 
 DO:
 1. Read {data_dir}/sample_submission.csv to get test IDs (use dtype={{'id': str}} to preserve format)
-2. Write predict.py:
-   - Load model from {best_workspace}/model.pth
-   - Load ONLY test images/data (match sample_submission.csv IDs exactly)
-   - Predict probabilities
-   - Save to {submission_dir}/submission.csv with EXACT same format/order as sample_submission.csv
-3. Run predict.py
-4. Verify row count matches sample_submission.csv
-5. Respond "DONE"
+2. Check what files exist in {best_workspace}/ to determine strategy:
+   - If backbone.pth + classifier.pkl + scaler.pkl exist: Use **bottleneck_features** approach
+   - If model.pth exists: Use **fine_tuning** approach
+3. Write predict.py based on strategy:
+
+**STRATEGY: bottleneck_features**
+```python
+# Load backbone
+backbone = torchvision.models.{model_name}(pretrained=True)
+backbone.load_state_dict(torch.load('backbone.pth'))
+if hasattr(backbone, 'fc'): backbone.fc = nn.Identity()
+elif hasattr(backbone, 'classifier'): backbone.classifier = nn.Identity()
+elif hasattr(backbone, 'head'): backbone.head = nn.Identity()
+backbone.eval().to(device)
+
+# Load classifier and scaler
+import joblib
+clf = joblib.load('classifier.pkl')
+scaler = joblib.load('scaler.pkl')
+
+# Extract test features
+with torch.no_grad():
+    test_features = []
+    for images in test_loader:
+        feats = backbone(images.to(device)).cpu().numpy()
+        test_features.append(feats)
+    X_test = np.vstack(test_features)
+    X_test = scaler.transform(X_test)
+
+# Predict
+predictions = clf.predict_proba(X_test)
+```
+
+**STRATEGY: fine_tuning**
+```python
+# Load model
+model.load_state_dict(torch.load('model.pth'))
+model.eval().to(device)
+
+# Predict
+with torch.no_grad():
+    predictions = []
+    for images in test_loader:
+        preds = model(images.to(device)).cpu()
+        predictions.append(preds)
+    predictions = torch.cat(predictions).numpy()
+```
+
+4. Save to {submission_dir}/submission.csv with EXACT same format/order as sample_submission.csv
+5. Run predict.py
+6. Verify row count matches sample_submission.csv
+7. Respond "DONE"
 
 DO NOT:
 - Predict on training images
