@@ -30,11 +30,12 @@ class Orchestrator:
         self.workspace_dir = workspace_dir
         self.instructions_path = instructions_path
         
-        self.best_score = 0.0
+        self.best_score = None
         self.best_experiment = None
         self.eda_summary = ""
         self.round_num = 0
         self.round_history = []
+        self.lower_is_better = False
         
         Path(workspace_dir).mkdir(parents=True, exist_ok=True)
         Path(submission_dir).mkdir(parents=True, exist_ok=True)
@@ -96,6 +97,19 @@ class Orchestrator:
         self.eda_summary = await agent.run(
             f"Analyze the competition data in {self.data_dir}"
         )
+        
+        if "LOWER is better" in self.eda_summary:
+            self.lower_is_better = True
+            self.best_score = float('inf')
+        elif "HIGHER is better" in self.eda_summary:
+            self.lower_is_better = False
+            self.best_score = 0.0
+        else:
+            print("\n⚠️  Metric direction not specified in EDA, assuming HIGHER is better")
+            self.lower_is_better = False
+            self.best_score = 0.0
+        
+        print(f"→ Metric direction: {'LOWER is better' if self.lower_is_better else 'HIGHER is better'}")
 
     async def _run_planning(self) -> List[Dict]:
         plan_workspace = Path(self.workspace_dir) / "planning"
@@ -178,7 +192,9 @@ class Orchestrator:
                 print(f"  {status_icon} {result['id']}: {result['status'].upper()} - Score: {score_str}")
                 
                 if result['status'] == 'success' and result['score'] is not None:
-                    if result['score'] > self.best_score:
+                    is_better = (result['score'] < self.best_score if self.lower_is_better 
+                                else result['score'] > self.best_score)
+                    if is_better:
                         self.best_score = result['score']
                         exp_workspace = Path(self.workspace_dir) / "experiments" / result['id']
                         self.best_experiment = {
@@ -340,7 +356,9 @@ class Orchestrator:
         for r in results:
             if r.get('status') == 'success' and r.get('score'):
                 score = r['score']
-                if score > self.best_score:
+                is_better = (score < self.best_score if self.lower_is_better 
+                            else score > self.best_score)
+                if is_better:
                     self.best_score = score
                     self.best_experiment = r
                     print(f"\n    🏆 New best score!")

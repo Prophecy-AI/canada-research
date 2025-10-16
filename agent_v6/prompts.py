@@ -13,7 +13,7 @@ Instructions: {instructions_path}
    - Dataset size and shape
    - Target distribution (balanced/imbalanced)
    - Key patterns or characteristics
-   - Evaluation metric
+   - **Evaluation metric with direction: "Metric: [name] (HIGHER is better)" OR "Metric: [name] (LOWER is better)"**
 
 NO model suggestions. NO iteration. ONE script, ONE run."""
 
@@ -47,7 +47,7 @@ Based on dataset characteristics, select models that are:
 - Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
 - Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
 - **For images: Use input size 128-224px (not 32x32), train split 90-95%**
-- Tabular: XGBoost, LightGBM, CatBoost, Neural Networks (TabNet)
+- Tabular: XGBoost (tree_method='hist'), LightGBM (CPU only), CatBoost, Neural Networks (TabNet)
 - Text: **ONLY use HuggingFace transformers** (distilbert-base-uncased, bert-base-uncased, roberta-base)
   * Use AutoTokenizer + AutoModelForSequenceClassification from transformers library
   * OR simple baselines: TF-IDF + LogisticRegression/XGBoost
@@ -94,6 +94,7 @@ Data: {data_dir}
 1. Check data structure (use Bash: ls, zipinfo, head CSV)
 2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
 3. Write train.py with:
+   - **For image datasets:** Read CSV with dtype='id': str to preserve filename format (avoid 1202.0.jpg)
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
@@ -119,6 +120,7 @@ Data: {data_dir}
      ```
    - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
+   - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
    - Early stopping with perfect score termination (copy this pattern):
      ```python
      if val_metric > best_metric:
@@ -133,7 +135,7 @@ Data: {data_dir}
          if patience >= max_patience:
              break
      ```
-   - Print validation score as "VALIDATION_SCORE: X.XXXX" (accuracy or metric value)
+   - Print validation score as "VALIDATION_SCORE: X.XXXX" (USE THE COMPETITION METRIC from EDA context, e.g., logloss/AUC/accuracy)
    - Save model with `torch.save(model.state_dict(), 'model.pth')`
 4. Respond "READY" immediately
 
@@ -166,10 +168,10 @@ Output: {submission_dir}/submission.csv
 **CRITICAL: Predict ONLY on test data, NOT training data!**
 
 DO:
-1. Read {data_dir}/sample_submission.csv to get test image IDs
+1. Read {data_dir}/sample_submission.csv to get test IDs (use dtype={{'id': str}} to preserve format)
 2. Write predict.py:
    - Load model from {best_workspace}/model.pth
-   - Load ONLY test images (match sample_submission.csv IDs exactly)
+   - Load ONLY test images/data (match sample_submission.csv IDs exactly)
    - Predict probabilities
    - Save to {submission_dir}/submission.csv with EXACT same format/order as sample_submission.csv
 3. Run predict.py
