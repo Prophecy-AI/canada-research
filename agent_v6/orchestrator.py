@@ -284,7 +284,7 @@ class Orchestrator:
                 }
             
             import re
-            match = re.search(r"(?:VALIDATION_SCORE|Validation AUC|Val AUC|Best Validation AUC|Final Validation AUC):\s*(\d+\.?\d*)", output)
+            match = re.search(r"(?:VALIDATION_SCORE|Validation Score|Val Score|Best Validation|Final Validation|Validation Accuracy|Val Acc|Val AUC|Val Kappa|Val LogLoss|Validation Loss)[:=\s]+(\d+\.?\d*)", output, re.IGNORECASE)
             score = float(match.group(1)) if match else None
             
             if score is None:

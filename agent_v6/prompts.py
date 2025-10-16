@@ -18,53 +18,32 @@ Instructions: {instructions_path}
 NO model suggestions. NO iteration. ONE script, ONE run."""
 
 
-PLANNING_PROMPT = """Design 1-3 ML experiments based on data analysis. Output ONLY JSON.
+PLANNING_PROMPT = """Design experiments. OPTIMIZE FOR SPEED. Output ONLY JSON.
 
 Competition: {competition_id}
 Round: {round_num}
-Best Score: {best_score}
+Best: {best_score}
 
-**Data Analysis:**
-{context}
+Data: {context}
 
-**Your task:**
-Based on the data characteristics above, select appropriate models and design experiments.
+**DO MINIMUM EXPERIMENTS. Start with 1. Use fewer epochs (10-15, not 25-30).**
 
-**Available Models:**
-- XGBoost (tree_method='gpu_hist', device='cuda') - Fast GPU gradient boosting
-- LightGBM (device='gpu') - Memory-efficient GPU gradient boosting  
-- CatBoost (task_type='GPU') - Handles categorical features well
-- RandomForest - Good for tabular data
-- LogisticRegression - Fast baseline for binary classification
-- Ridge - Fast baseline for regression
+Models: XGBoost (gpu_hist), LightGBM (gpu), CatBoost, RandomForest, LogisticRegression, Ridge
+For images: ResNet18/MobileNet (pretrained, fast)
 
-**For IMAGE data, you can also use PyTorch pretrained models:**
-- ResNet18/ResNet50 (torchvision.models.resnet18(pretrained=True))
-- EfficientNet-B0 (torchvision.models.efficientnet_b0(pretrained=True))
-- MobileNetV2 (torchvision.models.mobilenet_v2(pretrained=True))
-- Fine-tune on GPU with model.cuda(), use data augmentation
-- Example: "model": "ResNet18", "features": {{"type": "pretrained_cnn", "pretrained": true}}
-
-**DO NOT use tools. DO NOT explore. Output ONLY this JSON:**
+**Output ONLY JSON:**
 
 [
   {{
     "id": "exp_1",
-    "model": "XGBoost",
-    "features": {{"type": "raw_pixels", "details": "Flatten and normalize"}},
-    "hyperparameters": {{"tree_method": "gpu_hist", "device": "cuda", "n_estimators": 500}},
-    "hypothesis": "Why this model/features will work for this data"
-  }},
-  {{
-    "id": "exp_2",
     "model": "ResNet18",
-    "features": {{"type": "pretrained_cnn", "pretrained": true, "fine_tune_layers": 2}},
-    "hyperparameters": {{"device": "cuda", "epochs": 20, "lr": 0.001, "batch_size": 128}},
-    "hypothesis": "Pretrained ImageNet features transfer well to this visual task"
+    "features": {{"type": "pretrained_cnn", "pretrained": true}},
+    "hyperparameters": {{"device": "cuda", "epochs": 10, "lr": 0.001, "batch_size": 256}},
+    "hypothesis": "Fast baseline"
   }}
 ]
 
-Output 1 experiment if confident in approach, 2-3 if testing different hypotheses."""
+1 experiment default. Minimize epochs. Maximize batch size for speed."""
 
 
 WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
@@ -87,6 +66,7 @@ EDA: {eda_context}
    - Model/features/hyperparameters from spec
    - train_test_split (test_size=0.2, random_state=42)
    - GPU training
+   - Early stopping (stop when validation plateaus for 3-5 epochs)
    - Print validation score
    - Save model
 4. Respond "READY" immediately
