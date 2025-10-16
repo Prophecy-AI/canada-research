@@ -8,12 +8,15 @@ Instructions: {instructions_path}
 1. Read instructions
 2. Write comprehensive eda.py (data shape, types, target distribution, class balance, file formats)
 3. Run it ONCE
-4. Report findings (3-5 sentences):
+4. Report findings (MUST include ALL bullet points below):
    - Data type (tabular/image/text/time-series)
    - Dataset size and shape
    - Target distribution (balanced/imbalanced)
    - Key patterns or characteristics
-   - **Evaluation metric with direction: "Metric: [name] (HIGHER is better)" OR "Metric: [name] (LOWER is better)"**
+   - **CRITICAL - Evaluation metric with direction (REQUIRED):**
+     * Format: "**Evaluation Metric:** [metric_name] (HIGHER is better)" OR "**Evaluation Metric:** [metric_name] (LOWER is better)"
+     * Examples: "**Evaluation Metric:** AUC (HIGHER is better)" or "**Evaluation Metric:** Log Loss (LOWER is better)"
+     * This is REQUIRED for planning - do not skip!
 
 NO model suggestions. NO iteration. ONE script, ONE run."""
 
@@ -54,6 +57,9 @@ Best: {best_score}
     - ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim
     - EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim
     - Wide_ResNet50_2 (2048-dim) + RegNetY_8GF (2016-dim) = 4064-dim
+  * **Classifier choice:**
+    - LogisticRegression: FAST (trains in seconds), usually sufficient, RECOMMENDED
+    - XGBoost: Slightly better but SLOW (if using, set n_estimators=50 max, NOT 500+)
 - **Example single:** {{"strategy": "bottleneck_features", "model": "ResNet50", "classifier": "LogisticRegression"}}
 - **Example multi:** {{"strategy": "bottleneck_features", "models": ["ResNet50", "InceptionV3"], "classifier": "LogisticRegression"}}
 
@@ -89,6 +95,9 @@ Best: {best_score}
   * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2, EfficientNet-B2 + ResNet50
   * Good triplets: EfficientNet-B2 + DenseNet121 + ResNet50
   * Different architectures capture different features
+- **Classifier choice for bottleneck:**
+  * **Prefer LogisticRegression** (fast, trains in seconds, usually sufficient)
+  * If using XGBoost: Set n_estimators=50 MAX (not 500+, too slow)
 - **Different model combinations:** Each experiment should try different backbone combinations to find best ensemble
 - **For images >50K: Use fine_tuning (enough data to train full networks)**
 - **Batch size:** 32-64 for GPU training
