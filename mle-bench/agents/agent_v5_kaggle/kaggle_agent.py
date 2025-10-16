@@ -54,6 +54,7 @@ Current date: {current_date}
    • Run: Bash(command='nvidia-smi --query-gpu=name,memory.total --format=csv,noheader', background=false) to get GPU info
    • Run: Bash(command='free -h', background=false) to check RAM
    • Document: "We have X CPU cores, Y GB GPU RAM (GPU model), Z GB system RAM"
+   • **CRITICAL: You MUST use ALL available resources. Every script must max out CPU cores (n_jobs=-1) and GPU RAM (largest safe batch sizes).**
    • This informs all downstream decisions about batch sizes, parallelism, and whether GPU-first approach is viable
 
 1) **Initial Data Exploration** (FIRST TURN ONLY - Quick, <5 min)
@@ -127,7 +128,12 @@ Current date: {current_date}
 8) **Execute**
    • Oracle has already provided a gold-medal strategy - execute that plan, not generic baselines
    • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
-   • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: GPU usage, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
+   • **RESOURCE MANDATE: EVERY script must max out resources:**
+     - n_jobs=-1 for all sklearn/cuML (use ALL CPU cores)
+     - Largest batch size that fits GPU RAM (start with 2048+, reduce if OOM)
+     - PyTorch DataLoader: num_workers=-1, pin_memory=True
+     - Print at start: "Using X CPU cores, batch_size=Y, GPU RAM=Z GB"
+   • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: GPU usage, resource utilization, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
    • Keep training in `train.py`; keep inference in `predict.py`. **BOTH scripts MUST use GPU** - predict.py should load models to GPU and run inference on GPU for speed.
@@ -179,6 +185,15 @@ If you accidentally import scikit-learn and the task runs >30 s on CPU, **abort*
 • **predict.py MUST load models to GPU before inference** – e.g., model.to('cuda') immediately after loading
 • **If training OR inference seems slow, immediately check GPU usage with nvidia-smi or print(torch.cuda.is_available())**
 • CPU training/inference is 10-100x slower - treat it as a bug to fix immediately
+
+**Resource Maximization Rules (MANDATORY FOR ALL SCRIPTS):**
+• **MAX OUT CPU CORES:** Always set n_jobs=-1 (all cores) for sklearn/cuML models, joblib.Parallel, multiprocessing
+• **MAX OUT GPU RAM:** Use largest batch sizes that fit in GPU memory. Start with large batch (e.g., 2048), reduce if OOM
+• **PARALLEL DATA LOADING:** PyTorch DataLoader: num_workers=nproc (all CPU cores), pin_memory=True for GPU transfer
+• **MEMORY EFFICIENCY:** Use float16/mixed precision when possible (PyTorch: torch.cuda.amp, TensorFlow: policy='mixed_float16')
+• **MONITOR UTILIZATION:** Periodically check: nvidia-smi (GPU %), top/htop (CPU %). If GPU <80% utilized or CPU idle, optimize
+• **BATCH PROCESSING:** Never process data row-by-row. Use vectorized ops (numpy/cupy), GPU batch inference, parallel file I/O
+• Every script should print resource config at start: "Using X CPU cores, batch_size=Y, GPU RAM=Z GB"
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**
 • THINK: Before every tool call, emit a brief rationale (1-3 sentences) explaining what you are about to do and why—it will appear as `text_delta` messages for observability.

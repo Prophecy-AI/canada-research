@@ -178,8 +178,47 @@ class WriteTool(BaseTool):
             
             return f"⚠️  GPU CHECK: This script may not be using GPU!\n" + "\n".join(f"   • {hint}" for hint in hints) + "\n   • CPU training is 10-100x slower - verify GPU usage before running"
         
+        # Check for resource maximization issues
+        resource_issues = []
+        
+        # Check for n_jobs
+        if (has_cuml or 'sklearn' in content_lower) and 'n_jobs' not in content_lower:
+            resource_issues.append("Missing n_jobs=-1 (not using all CPU cores)")
+        elif 'n_jobs=1' in content_lower or 'n_jobs = 1' in content_lower:
+            resource_issues.append("n_jobs=1 found - change to n_jobs=-1 to use all cores")
+        
+        # Check for PyTorch DataLoader optimization
+        if has_pytorch and 'DataLoader' in content:
+            if 'num_workers' not in content:
+                resource_issues.append("PyTorch DataLoader missing num_workers (should use all CPU cores)")
+            if 'pin_memory' not in content:
+                resource_issues.append("PyTorch DataLoader missing pin_memory=True (faster GPU transfer)")
+        
+        # Check for batch size configuration
+        if (has_pytorch or has_tensorflow) and 'batch_size' not in content_lower:
+            resource_issues.append("No batch_size specified - set large batch (e.g., 2048+) to max GPU usage")
+        
+        # Check for mixed precision
+        if has_pytorch and 'train' in filename_lower:
+            if 'amp' not in content_lower and 'autocast' not in content_lower:
+                resource_issues.append("Consider torch.cuda.amp for 2x faster training with mixed precision")
+        
+        if has_tensorflow and 'train' in filename_lower:
+            if 'mixed_float16' not in content:
+                resource_issues.append("Consider mixed_float16 policy for faster TF training")
+        
+        # If resource issues found, return warning
+        if resource_issues:
+            warning = ["⚡ RESOURCE OPTIMIZATION CHECK:"]
+            for issue in resource_issues:
+                warning.append(f"   • {issue}")
+            warning.append("")
+            warning.append("💡 CRITICAL: You MUST max out all resources (CPU cores, GPU RAM, batch sizes)")
+            warning.append("   Scripts should print: 'Using X CPU cores, batch_size=Y, GPU RAM=Z GB'")
+            return "\n".join(warning)
+        
         # If GPU is configured and this is a training/prediction script, remind to consult Oracle
-        if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
+        if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost or has_cuml):
             return (
                 "💡 STRATEGIC HINT: Instead of running iterative baselines, pause and open an extended brainstorming session with Oracle.\n"
                 "   Discuss: (a) fastest GPU-first pipeline, (b) risk of data leakage, (c) minimal full-dataset runs.\n"
