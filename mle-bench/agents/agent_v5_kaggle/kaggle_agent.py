@@ -115,7 +115,7 @@ Current date: {current_date}
    • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
-   • Keep training in `train.py`; keep inference in `predict.py` so that predict.py can run fast during submission.
+   • Keep training in `train.py`; keep inference in `predict.py`. **BOTH scripts MUST use GPU** - predict.py should load models to GPU and run inference on GPU for speed.
 
 7) **Record & Evaluate**
    • Once training/inference completes, call `RunSummary` with fields:
@@ -139,8 +139,8 @@ Current date: {current_date}
    • This prevents premature termination due to fixable bugs or overlooked approaches.
 
 **Process-Level Rules:**
-• Keep training & inference separate (train.py vs predict.py).
-• Ensure predict.py writes {submission_dir}/submission.csv in exact format.
+• Keep training & inference separate (train.py vs predict.py). **BOTH MUST use GPU.**
+• Ensure predict.py writes {submission_dir}/submission.csv in exact format. **predict.py MUST load models to GPU and run inference on GPU.**
 • Strictly keep test data unseen during feature engineering, scaling, or model fitting—never compute statistics (mean/std/target encodings) on test.
 • NO internet access: assume offline environment. All Anaconda packages are pre-installed and available.
 • Keep artifacts, logs, and metrics inside the workspace (never /tmp outside).
@@ -150,15 +150,16 @@ Current date: {current_date}
 • **CRITICAL: If you detect label encoding bugs, column order mismatches, or CV/leaderboard divergence - immediately consult Oracle. These are common fatal errors that waste days of compute.**
 
 **GPU Usage Rules (MANDATORY):**
-• **EVERY training script MUST explicitly use GPU.** Verify when writing code.
+• **EVERY training AND inference script (train.py AND predict.py) MUST explicitly use GPU.** Verify when writing code.
 • PyTorch: model.to('cuda'), data.to('cuda'), or device = torch.device('cuda')
 • XGBoost: params = {{'tree_method': 'gpu_hist', 'gpu_id': 0, ...}}
 • LightGBM: params = {{'device': 'gpu', 'gpu_platform_id': 0, 'gpu_device_id': 0, ...}}
 • TensorFlow/Keras: GPU auto-detected (verify with tf.config.list_physical_devices('GPU'))
 • CatBoost: task_type='GPU'
 • Scikit-learn: CPU-only (acceptable for fast models like LogisticRegression, but prefer GPU alternatives)
-• **If training seems slow, immediately check GPU usage with nvidia-smi or print(torch.cuda.is_available())**
-• CPU training is 10-100x slower - treat it as a bug to fix immediately
+• **predict.py MUST load models to GPU before inference** - model.to('cuda') immediately after loading
+• **If training OR inference seems slow, immediately check GPU usage with nvidia-smi or print(torch.cuda.is_available())**
+• CPU training/inference is 10-100x slower - treat it as a bug to fix immediately
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**
 • THINK: Before every tool call, emit a brief rationale (1-3 sentences) explaining what you are about to do and why—it will appear as `text_delta` messages for observability.
@@ -168,7 +169,7 @@ Current date: {current_date}
 
 **Deliverables:**
 - **CRITICAL: Consult Oracle IMMEDIATELY after initial data exploration (step 1) - this saves hours of wasted baseline iterations**
-- Ensure predict.py creates {submission_dir}/submission.csv matching competition format.
+- Ensure predict.py creates {submission_dir}/submission.csv matching competition format. **predict.py MUST use GPU for inference.**
 - Keep logs, metrics, and OOF artifacts in the workspace. Use RunSummary after each phase.
 - Before final submission: if your best CV score seems far from competitive, consult Oracle to identify what you might be missing.
 
