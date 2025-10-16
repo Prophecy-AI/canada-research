@@ -290,8 +290,8 @@ class Orchestrator:
                 }
             
             import re
-            match = re.search(r"(?:VALIDATION_SCORE|Validation Score|Val Score|Best Validation|Final Validation|Validation Accuracy|Val Acc|Val AUC|Val Kappa|Val LogLoss|Validation Loss)[:=\s]+(\d+\.?\d*)", output, re.IGNORECASE)
-            score = float(match.group(1)) if match else None
+            matches = re.findall(r"(?:VALIDATION_SCORE|Validation Score|Val Score|Best Validation|Final Validation|Validation Accuracy|Val Acc|Val AUC|Val Kappa|Val LogLoss|Validation Loss)[:=\s]+(\d+\.?\d*)", output, re.IGNORECASE)
+            score = float(matches[-1]) if matches else None
             
             if score is None:
                 print(f"\n  ⚠️ {exp_id}: No VALIDATION_SCORE found")
