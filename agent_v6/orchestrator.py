@@ -90,14 +90,6 @@ class Orchestrator:
             instructions_path=self.instructions_path
         )
         
-        import sys
-        print(f"\n{'='*60}", flush=True)
-        print(f"DEBUG: EDA Prompt length: {len(prompt)} chars (~{len(prompt)//4} tokens)", flush=True)
-        print(f"DEBUG: Prompt preview (first 1000 chars):", flush=True)
-        print(prompt[:1000], flush=True)
-        print(f"{'='*60}\n", flush=True)
-        sys.stdout.flush()
-        
         agent = Agent(str(eda_workspace), prompt, tools)
         self.eda_summary = await agent.run(
             f"Analyze the competition data in {self.data_dir}"

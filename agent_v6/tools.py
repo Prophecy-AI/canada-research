@@ -79,7 +79,15 @@ class ReadTool(BaseTool):
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "Path to file relative to workspace"
+                        "description": "Absolute or relative path to file"
+                    },
+                    "offset": {
+                        "type": "number",
+                        "description": "Line number to start reading from"
+                    },
+                    "limit": {
+                        "type": "number",
+                        "description": "Number of lines to read"
                     }
                 },
                 "required": ["file_path"]
@@ -88,10 +96,30 @@ class ReadTool(BaseTool):
 
     async def execute(self, input: Dict) -> str:
         file_path = input["file_path"]
-        full_path = Path(self.workspace_dir) / file_path
+        offset = input.get("offset", 0)
+        limit = input.get("limit", 2000)
+        
+        if not file_path.startswith('/'):
+            file_path = str(Path(self.workspace_dir) / file_path)
         
         try:
-            return full_path.read_text()
+            with open(file_path, 'r') as f:
+                lines = f.readlines()
+            
+            selected_lines = lines[offset:offset + limit]
+            
+            numbered_lines = []
+            for i, line in enumerate(selected_lines, start=offset + 1):
+                if len(line) > 2000:
+                    line = line[:2000] + "... (line truncated)\n"
+                numbered_lines.append(f"{i:6d}→{line}")
+            
+            content = "".join(numbered_lines)
+            
+            if not content.strip():
+                content = "File exists but is empty."
+            
+            return content
         except Exception as e:
             return f"Error reading file: {str(e)}"
 

@@ -19,19 +19,6 @@ class Agent:
         })
 
         full_response = []
-        
-        print(f"\n[DEBUG] System prompt length: {len(self.system_prompt)} chars, ~{len(self.system_prompt)//4} tokens")
-        print(f"[DEBUG] System prompt first 500 chars:\n{self.system_prompt[:500]}")
-        print(f"[DEBUG] System prompt last 500 chars:\n...{self.system_prompt[-500:]}")
-        print(f"\n[DEBUG] Conversation history messages: {len(self.conversation_history)}")
-        for i, msg in enumerate(self.conversation_history):
-            content = msg.get('content', '')
-            if isinstance(content, str):
-                print(f"[DEBUG]   Message {i}: {msg['role']} - {len(content)} chars")
-                if len(content) > 1000:
-                    print(f"[DEBUG]     Preview: {content[:200]}...")
-            elif isinstance(content, list):
-                print(f"[DEBUG]   Message {i}: {msg['role']} - {len(content)} items")
 
         while True:
             response_content = []
