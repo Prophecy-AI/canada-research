@@ -212,6 +212,18 @@ class Orchestrator:
                             "workspace": str(exp_workspace)
                         }
                         print(f"    🏆 New best score!")
+            elif isinstance(training_results[i], Exception):
+                print(f"\n  ❌ {exp['id']}: Task raised exception: {training_results[i]}")
+                import traceback
+                traceback.print_exception(type(training_results[i]), training_results[i], training_results[i].__traceback__)
+                formatted_results.append({
+                    "id": exp['id'],
+                    "status": "error",
+                    "score": None,
+                    "output": f"Task exception: {str(training_results[i])}",
+                    "model": exp.get('model'),
+                    "hypothesis": exp.get('hypothesis')
+                })
             else:
                 formatted_results.append({
                     "id": exp['id'],
@@ -234,11 +246,12 @@ class Orchestrator:
             success = await worker.write_script()
             
             if not success:
+                print(f"  ❌ {exp_id}: Worker failed to create train.py (returned False)")
                 return {
                     "id": exp_id,
                     "status": "error",
                     "score": None,
-                    "output": "Failed to write train.py",
+                    "output": "Worker.write_script() returned False - check worker output above",
                     "model": exp.get('model'),
                     "hypothesis": exp.get('hypothesis')
                 }
@@ -246,11 +259,15 @@ class Orchestrator:
             return await self._run_training(exp, workspace)
         
         except Exception as e:
+            import traceback
+            error_msg = f"{str(e)}\n{traceback.format_exc()}"
+            print(f"\n  ❌ {exp_id}: Exception during worker setup - {str(e)}")
+            traceback.print_exc()
             return {
                 "id": exp_id,
                 "status": "error",
                 "score": None,
-                "output": str(e)[:500],
+                "output": error_msg[:1000],
                 "model": exp.get('model'),
                 "hypothesis": exp.get('hypothesis')
             }
