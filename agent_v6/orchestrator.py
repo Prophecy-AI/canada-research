@@ -36,6 +36,7 @@ class Orchestrator:
         self.round_num = 0
         self.round_history = []
         self.lower_is_better = False
+        self.round_elapsed_time = 0
         
         Path(workspace_dir).mkdir(parents=True, exist_ok=True)
         Path(submission_dir).mkdir(parents=True, exist_ok=True)
@@ -182,8 +183,8 @@ class Orchestrator:
         
         training_results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        elapsed = time.time() - start_time
-        print(f"\n✓ All {len(experiments)} experiments completed in {elapsed:.1f}s")
+        self.round_elapsed_time = time.time() - start_time
+        print(f"\n✓ All {len(experiments)} experiments completed in {self.round_elapsed_time:.1f}s")
         
         formatted_results = []
         for i, exp in enumerate(experiments):
@@ -377,13 +378,15 @@ class Orchestrator:
         ])
         
         metric_direction = "LOWER is better" if self.lower_is_better else "HIGHER is better"
+        round_time_minutes = self.round_elapsed_time / 60
         
         prompt = format_analysis_prompt(
             competition_id=self.competition_id,
             round_num=self.round_num,
             results=results_str,
             best_score=self.best_score,
-            metric_direction=metric_direction
+            metric_direction=metric_direction,
+            round_time_minutes=round_time_minutes
         )
         
         agent = Agent(str(plan_workspace), prompt, tools)

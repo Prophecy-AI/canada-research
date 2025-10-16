@@ -135,16 +135,23 @@ ANALYSIS_PROMPT = """Analyze results. Output decision.
 Results: {results}
 Current best: {best_score}
 Round: {round_num}
+Round time: {round_time_minutes:.1f} minutes
 
 **Instructions:**
 Decide whether to SUBMIT or CONTINUE based on:
 1. Is the score competitive/good enough?
 2. Is there a clear hypothesis for >0.5% improvement?
 3. Have we exhausted promising approaches?
+4. **Time efficiency: Is continuing worth the time investment?**
 
 Remember metric direction when evaluating score quality:
 - LOWER is better: smaller scores are better (e.g., logloss 0.1 > logloss 1.0)
 - HIGHER is better: larger scores are better (e.g., AUC 0.99 > AUC 0.9)
+
+**Time-based criteria (competition efficiency):**
+- If round took >30 minutes: SUBMIT unless there's CLEAR evidence of >1% improvement potential
+- If round took 15-30 minutes: Be conservative, need strong hypothesis for >0.5% improvement
+- If round took <15 minutes: Normal criteria apply
 
 Output format (no other text):
 
@@ -153,8 +160,8 @@ BEST_MODEL: exp_2
 REASONING: Best logloss 0.62 is competitive, no clear path to major improvement
 
 Criteria:
-- SUBMIT if: Score is good AND (no clear >0.5% improvement path OR round >= 3)
-- CONTINUE if: Clear hypothesis exists for meaningful improvement"""
+- SUBMIT if: Score is good AND (no clear improvement path OR round >= 3 OR time-constrained)
+- CONTINUE if: Clear hypothesis exists for meaningful improvement AND time-efficient"""
 
 
 SUBMISSION_PROMPT = """Create submission.csv. Fast.
@@ -214,12 +221,13 @@ def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_cont
     )
 
 
-def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric_direction: str) -> str:
+def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric_direction: str, round_time_minutes: float) -> str:
     return ANALYSIS_PROMPT.format(
         round_num=round_num,
         results=results,
         best_score=best_score,
-        metric_direction=metric_direction
+        metric_direction=metric_direction,
+        round_time_minutes=round_time_minutes
     )
 
 
