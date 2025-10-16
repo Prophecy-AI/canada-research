@@ -67,7 +67,8 @@ class Agent:
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tool_use["id"],
-                    "content": result
+                    "content": result["content"],
+                    "is_error": result.get("is_error", False)
                 })
                 print(f"✓ Tool completed")
 

@@ -20,7 +20,7 @@ class BaseTool(ABC):
         pass
 
     @abstractmethod
-    async def execute(self, input: Dict) -> str:
+    async def execute(self, input: Dict) -> Dict:
         pass
 
 
@@ -46,7 +46,7 @@ class BashTool(BaseTool):
             }
         }
 
-    async def execute(self, input: Dict) -> str:
+    async def execute(self, input: Dict) -> Dict:
         command = input["command"]
         
         try:
@@ -59,9 +59,15 @@ class BashTool(BaseTool):
             stdout, stderr = await process.communicate()
             output = stdout.decode() + stderr.decode()
             
-            return output
+            return {
+                "content": output,
+                "is_error": False
+            }
         except Exception as e:
-            return f"Error: {str(e)}"
+            return {
+                "content": f"Error: {str(e)}",
+                "is_error": True
+            }
 
 
 class ReadTool(BaseTool):
@@ -94,7 +100,7 @@ class ReadTool(BaseTool):
             }
         }
 
-    async def execute(self, input: Dict) -> str:
+    async def execute(self, input: Dict) -> Dict:
         file_path = input["file_path"]
         offset = input.get("offset", 0)
         limit = input.get("limit", 2000)
@@ -119,9 +125,15 @@ class ReadTool(BaseTool):
             if not content.strip():
                 content = "File exists but is empty."
             
-            return content
+            return {
+                "content": content,
+                "is_error": False
+            }
         except Exception as e:
-            return f"Error reading file: {str(e)}"
+            return {
+                "content": f"Error reading file: {str(e)}",
+                "is_error": True
+            }
 
 
 class WriteTool(BaseTool):
@@ -150,7 +162,7 @@ class WriteTool(BaseTool):
             }
         }
 
-    async def execute(self, input: Dict) -> str:
+    async def execute(self, input: Dict) -> Dict:
         file_path = input["file_path"]
         content = input["content"]
         full_path = Path(self.workspace_dir) / file_path
@@ -158,9 +170,15 @@ class WriteTool(BaseTool):
         try:
             full_path.parent.mkdir(parents=True, exist_ok=True)
             full_path.write_text(content)
-            return f"File written successfully: {file_path}"
+            return {
+                "content": f"File written successfully: {file_path}",
+                "is_error": False
+            }
         except Exception as e:
-            return f"Error writing file: {str(e)}"
+            return {
+                "content": f"Error writing file: {str(e)}",
+                "is_error": True
+            }
 
 
 class ToolRegistry:
@@ -174,9 +192,12 @@ class ToolRegistry:
     def get_schemas(self) -> List[Dict]:
         return [tool.schema for tool in self.tools.values()]
 
-    async def execute(self, tool_name: str, input: Dict) -> str:
+    async def execute(self, tool_name: str, input: Dict) -> Dict:
         if tool_name not in self.tools:
-            return f"Unknown tool: {tool_name}"
+            return {
+                "content": f"Unknown tool: {tool_name}",
+                "is_error": True
+            }
         
         return await self.tools[tool_name].execute(input)
 
