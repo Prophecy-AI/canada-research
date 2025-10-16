@@ -14,7 +14,6 @@ from .glob import GlobTool
 from .grep import GrepTool
 from .todo import TodoWriteTool
 from .oracle import OracleTool
-from .deepseek_planner import DeepSeekPlannerTool
 
 __all__ = [
     "BaseTool",
@@ -31,5 +30,4 @@ __all__ = [
     "GrepTool",
     "TodoWriteTool",
     "OracleTool",
-    "DeepSeekPlannerTool",
 ]
