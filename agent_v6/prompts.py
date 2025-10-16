@@ -110,7 +110,7 @@ Data: {data_dir}
    - train_test_split (test_size=0.05-0.10, random_state=42) for small datasets (<50K)
    - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
-   - Early stopping (stop when validation plateaus for 3-5 epochs)
+   - Early stopping (patience 3-5 epochs), BUT stop immediately if validation metric reaches max (1.0 for AUC/accuracy)
    - Print validation score as "VALIDATION_SCORE: X.XXXX" (accuracy or metric value)
    - Save model with `torch.save(model.state_dict(), 'model.pth')`
 4. Respond "READY" immediately
