@@ -86,6 +86,44 @@ class WriteTool(BaseTool):
         if not is_ml_script:
             return ""
         
+        # Check for BANNED internet access patterns (CRITICAL - check first)
+        internet_violations = []
+        
+        # Check for from_pretrained without offline mode
+        if '.from_pretrained(' in content:
+            # Check if TRANSFORMERS_OFFLINE is set or local path is used
+            has_offline = 'TRANSFORMERS_OFFLINE' in content or "os.environ['TRANSFORMERS_OFFLINE']" in content
+            has_local_path = '/opt/' in content or '/home/' in content or '/models/' in content
+            
+            if not (has_offline or has_local_path):
+                internet_violations.append("from_pretrained() without TRANSFORMERS_OFFLINE=1 or local path")
+        
+        # Check for other network calls
+        network_patterns = [
+            ('requests.get', 'HTTP GET request'),
+            ('requests.post', 'HTTP POST request'),
+            ('urllib.request', 'urllib network call'),
+            ('urllib.urlopen', 'urllib network call'),
+            ('wget ', 'wget download'),
+            ('curl ', 'curl download'),
+            ('.download(', 'download call'),
+        ]
+        
+        for pattern, description in network_patterns:
+            if pattern in content:
+                internet_violations.append(f"{description} ({pattern})")
+        
+        if internet_violations:
+            warnings = ["🔴🔴🔴 CRITICAL: INTERNET ACCESS VIOLATION 🔴🔴🔴"]
+            for violation in internet_violations:
+                warnings.append(f"   ❌ {violation}")
+            warnings.append("")
+            warnings.append("⛔ NO INTERNET ACCESS in competition environment!")
+            warnings.append("✅ Consult Oracle if you need external models/data")
+            warnings.append("")
+            warnings.append("File written but you MUST fix this before running!")
+            return "\n".join(warnings)
+        
         # Check for FORBIDDEN sklearn imports (CPU-only alternatives to cuML)
         forbidden_sklearn = [
             'sklearn.feature_extraction.text',
@@ -185,36 +223,81 @@ class WriteTool(BaseTool):
         if (has_cuml or 'sklearn' in content_lower) and 'n_jobs' not in content_lower:
             resource_issues.append("Missing n_jobs=-1 (not using all CPU cores)")
         elif 'n_jobs=1' in content_lower or 'n_jobs = 1' in content_lower:
-            resource_issues.append("n_jobs=1 found - change to n_jobs=-1 to use all cores")
+            resource_issues.append("🔴 n_jobs=1 found - change to n_jobs=-1 to use all cores")
+        
+        # Check for SMALL batch sizes (CRITICAL)
+        import re
+        if 'batch_size' in content_lower or 'BATCH_SIZE' in content:
+            batch_matches = re.findall(r'[Bb][Aa][Tt][Cc][Hh]_?[Ss][Ii][Zz][Ee]\s*=\s*(\d+)', content)
+            for batch_str in batch_matches:
+                batch_val = int(batch_str)
+                # Determine minimum based on model type
+                min_batch = 256  # Default for transformers
+                model_type = "transformers"
+                
+                if 'conv' in content_lower or 'cnn' in content_lower or 'resnet' in content_lower:
+                    min_batch = 512
+                    model_type = "CNNs"
+                elif 'tabular' in content_lower or 'xgboost' in content_lower or 'lightgbm' in content_lower:
+                    min_batch = 2048
+                    model_type = "tabular models"
+                
+                if batch_val < min_batch:
+                    resource_issues.append(f"🔴🔴 batch_size={batch_val} is TOO SMALL! MINIMUM {min_batch} for {model_type}")
+        
+        # Check for HARDCODED num_workers (CRITICAL)
+        if 'num_workers' in content_lower:
+            num_worker_matches = re.findall(r'num_workers\s*=\s*(\d+)', content)
+            for nw_str in num_worker_matches:
+                nw_val = int(nw_str)
+                if nw_val < 8:  # Assume most machines have 8+ cores
+                    resource_issues.append(f"🔴🔴 num_workers={nw_val} is HARDCODED! Use os.cpu_count() to max out cores")
         
         # Check for PyTorch DataLoader optimization
         if has_pytorch and 'DataLoader' in content:
             if 'num_workers' not in content:
-                resource_issues.append("PyTorch DataLoader missing num_workers (should use all CPU cores)")
+                resource_issues.append("🔴 PyTorch DataLoader missing num_workers (should use os.cpu_count())")
             if 'pin_memory' not in content:
                 resource_issues.append("PyTorch DataLoader missing pin_memory=True (faster GPU transfer)")
         
-        # Check for batch size configuration
-        if (has_pytorch or has_tensorflow) and 'batch_size' not in content_lower:
-            resource_issues.append("No batch_size specified - set large batch (e.g., 2048+) to max GPU usage")
+        # Check for missing RESOURCE CONFIG PRINTING (MANDATORY)
+        if 'train' in filename_lower or 'predict' in filename_lower:
+            has_resource_print = any(phrase in content for phrase in [
+                'RESOURCES:', 'CPU cores', 'Resource configuration', 'Resource config',
+                'NUM_WORKERS', 'num_workers=', 'batch_size='
+            ])
+            
+            # More strict check - must have explicit print
+            has_explicit_print = 'print(' in content and ('CPU' in content or 'cores' in content or 'batch' in content)
+            
+            if not has_explicit_print:
+                resource_issues.append("🔴🔴 MISSING RESOURCE CONFIG PRINT! Must print: 'RESOURCES: X cores, batch_size=Y, GPU=Z'")
         
         # Check for mixed precision
         if has_pytorch and 'train' in filename_lower:
             if 'amp' not in content_lower and 'autocast' not in content_lower:
-                resource_issues.append("Consider torch.cuda.amp for 2x faster training with mixed precision")
+                resource_issues.append("Missing torch.cuda.amp for 2x faster training with mixed precision")
         
         if has_tensorflow and 'train' in filename_lower:
             if 'mixed_float16' not in content:
-                resource_issues.append("Consider mixed_float16 policy for faster TF training")
+                resource_issues.append("Missing mixed_float16 policy for faster TF training")
         
         # If resource issues found, return warning
         if resource_issues:
-            warning = ["⚡ RESOURCE OPTIMIZATION CHECK:"]
+            warning = ["🔴🔴🔴 CRITICAL RESOURCE VIOLATIONS 🔴🔴🔴"]
             for issue in resource_issues:
-                warning.append(f"   • {issue}")
+                # Issues already have emoji prefixes where critical
+                warning.append(f"   {issue}")
             warning.append("")
-            warning.append("💡 CRITICAL: You MUST max out all resources (CPU cores, GPU RAM, batch sizes)")
-            warning.append("   Scripts should print: 'Using X CPU cores, batch_size=Y, GPU RAM=Z GB'")
+            warning.append("❌ This code will WASTE 80%+ of compute capacity!")
+            warning.append("❌ Training will be 5-10x SLOWER than necessary")
+            warning.append("✅ You MUST rewrite before running - consult Oracle if needed")
+            warning.append("")
+            warning.append("Required template:")
+            warning.append("  import os")
+            warning.append("  NUM_WORKERS = os.cpu_count()")
+            warning.append("  BATCH_SIZE = 1024  # or larger")
+            warning.append("  print(f'RESOURCES: {NUM_WORKERS} cores, batch_size={BATCH_SIZE}, GPU={torch.cuda.get_device_name(0)}')")
             return "\n".join(warning)
         
         # If GPU is configured and this is a training/prediction script, remind to consult Oracle

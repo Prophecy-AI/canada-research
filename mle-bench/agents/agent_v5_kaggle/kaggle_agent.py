@@ -171,6 +171,12 @@ Current date: {current_date}
 • **CRITICAL: Before running ANY training script, consult Oracle for code review. This prevents wasting hours on bugs.**
 • **CRITICAL: If you detect label encoding bugs, column order mismatches, or CV/leaderboard divergence - immediately consult Oracle. These are common fatal errors that waste days of compute.**
 
+**NO INTERNET ACCESS - CRITICAL VIOLATIONS:**
+• ❌ **BANNED: .from_pretrained()**
+• ❌ **BANNED: Any network calls** (requests.get, urllib, wget, curl, downloads) except to grading server
+• 🔴 **Internet access violation = immediate task failure**
+• If you absolutely need an external model, consult Oracle for alternatives or workarounds
+
 **GPU Usage Rules (MANDATORY):**
 • **EVERY training AND inference script (train.py AND predict.py) MUST explicitly use GPU.** Verify when writing code.
 • PyTorch: model.to('cuda'), data.to('cuda'), or device = torch.device('cuda')
@@ -189,11 +195,18 @@ If you accidentally import scikit-learn and the task runs >30 s on CPU, **abort*
 **Resource Maximization Rules (MANDATORY FOR ALL SCRIPTS):**
 • **MAX OUT CPU CORES:** Always set n_jobs=-1 (all cores) for sklearn/cuML models, joblib.Parallel, multiprocessing
 • **MAX OUT GPU RAM:** Use largest batch sizes that fit in GPU memory. Start with large batch (e.g., 2048), reduce if OOM
-• **PARALLEL DATA LOADING:** PyTorch DataLoader: num_workers=nproc (all CPU cores), pin_memory=True for GPU transfer
+• **MINIMUM BATCH SIZES:** NEVER use batch_size < 256 for transformers, < 512 for CNNs, < 2048 for tabular models
+• **NO HARDCODED WORKERS:** NEVER hardcode num_workers - always use `NUM_WORKERS = os.cpu_count()` or `multiprocessing.cpu_count()`
+• **PARALLEL DATA LOADING:** PyTorch DataLoader: num_workers=os.cpu_count(), pin_memory=True for GPU transfer
 • **MEMORY EFFICIENCY:** Use float16/mixed precision when possible (PyTorch: torch.cuda.amp, TensorFlow: policy='mixed_float16')
 • **MONITOR UTILIZATION:** Periodically check: nvidia-smi (GPU %), top/htop (CPU %). If GPU <80% utilized or CPU idle, optimize
 • **BATCH PROCESSING:** Never process data row-by-row. Use vectorized ops (numpy/cupy), GPU batch inference, parallel file I/O
-• Every script should print resource config at start: "Using X CPU cores, batch_size=Y, GPU RAM=Z GB"
+• **MANDATORY RESOURCE PRINT:** Every train.py/predict.py MUST print at start:
+  ```
+  import os
+  NUM_WORKERS = os.cpu_count()
+  print(f"RESOURCES: {{NUM_WORKERS}} CPU cores, batch_size={{BATCH_SIZE}}, GPU={{torch.cuda.get_device_name(0)}}")
+  ```
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**
 • THINK: Before every tool call, emit a brief rationale (1-3 sentences) explaining what you are about to do and why—it will appear as `text_delta` messages for observability.
