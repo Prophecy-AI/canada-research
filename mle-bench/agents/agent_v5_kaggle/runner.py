@@ -78,8 +78,12 @@ async def main():
             elif message.get("type") == "tool_execution":
                 log_tool_call(message)
     except Exception as e:
+        import traceback
         log(f"❌ Agent error: {e}", 2)
         print(f"\n\nERROR: {e}\n", flush=True)
+        print("\n=== FULL TRACEBACK ===", flush=True)
+        traceback.print_exc()
+        print("======================\n", flush=True)
         await agent.cleanup()  # Cleanup on error
         sys.exit(1)
     finally:
