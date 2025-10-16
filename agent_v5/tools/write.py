@@ -86,6 +86,50 @@ class WriteTool(BaseTool):
         if not is_ml_script:
             return ""
         
+        # Check for FORBIDDEN sklearn imports (CPU-only alternatives to cuML)
+        forbidden_sklearn = [
+            'sklearn.feature_extraction.text',
+            'sklearn.linear_model',
+            'sklearn.ensemble.RandomForest',
+            'sklearn.ensemble.GradientBoosting',
+            'sklearn.neighbors',
+            'sklearn.cluster',
+            'sklearn.decomposition.PCA',
+            'sklearn.svm'
+        ]
+        
+        found_forbidden = []
+        for forbidden in forbidden_sklearn:
+            if forbidden in content or forbidden.replace('sklearn', 'from sklearn') in content:
+                found_forbidden.append(forbidden)
+        
+        if found_forbidden:
+            replacement_map = {
+                'sklearn.feature_extraction.text': 'cuml.feature_extraction.text (GPU-accelerated)',
+                'sklearn.linear_model': 'cuml.linear_model (GPU-accelerated)',
+                'sklearn.ensemble.RandomForest': 'cuml.ensemble.RandomForestClassifier (GPU-accelerated)',
+                'sklearn.ensemble.GradientBoosting': 'xgboost with tree_method="gpu_hist" or lightgbm with device="gpu"',
+                'sklearn.neighbors': 'cuml.neighbors (GPU-accelerated)',
+                'sklearn.cluster': 'cuml.cluster (GPU-accelerated)',
+                'sklearn.decomposition.PCA': 'cuml.decomposition.PCA (GPU-accelerated)',
+                'sklearn.svm': 'cuml.svm (GPU-accelerated)'
+            }
+            
+            warnings = ["🔴 FORBIDDEN CPU-ONLY IMPORTS DETECTED:"]
+            for forbidden in found_forbidden:
+                replacement = replacement_map.get(forbidden, 'cuML equivalent')
+                warnings.append(f"   • {forbidden} → USE {replacement} INSTEAD")
+            
+            warnings.append("")
+            warnings.append("⚠️  This code will run 10-100x SLOWER on CPU than GPU alternatives.")
+            warnings.append("File written to disk, but you MUST rewrite with cuML before running.")
+            warnings.append("")
+            warnings.append("Quick fix:")
+            warnings.append("  from cuml.feature_extraction.text import TfidfVectorizer  # GPU")
+            warnings.append("  from cuml.linear_model import LogisticRegression          # GPU")
+            
+            return "\n".join(warnings)
+        
         # Check if content contains ML frameworks
         content_lower = content.lower()
         has_pytorch = 'import torch' in content_lower or 'from torch' in content_lower
@@ -93,8 +137,9 @@ class WriteTool(BaseTool):
         has_lightgbm = 'import lightgbm' in content_lower or 'from lightgbm' in content_lower
         has_tensorflow = 'import tensorflow' in content_lower or 'from tensorflow' in content_lower
         has_catboost = 'import catboost' in content_lower or 'from catboost' in content_lower
+        has_cuml = 'import cuml' in content_lower or 'from cuml' in content_lower
         
-        if not (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
+        if not (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost or has_cuml):
             return ""
         
         # Check if GPU is already configured
