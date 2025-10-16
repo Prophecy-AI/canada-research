@@ -136,6 +136,10 @@ Results: {results}
 Current best: {best_score}
 Round: {round_num}
 Round time: {round_time_minutes:.1f} minutes
+**Total time elapsed: {cumulative_time_minutes:.1f} minutes**
+
+**CRITICAL TIME CONSTRAINT:**
+**If total time >= 30 minutes: MUST SUBMIT immediately (hard limit)**
 
 **Instructions:**
 Decide whether to SUBMIT or CONTINUE based on:
@@ -149,9 +153,10 @@ Remember metric direction when evaluating score quality:
 - HIGHER is better: larger scores are better (e.g., AUC 0.99 > AUC 0.9)
 
 **Time-based criteria (competition efficiency):**
-- If round took >30 minutes: SUBMIT unless there's CLEAR evidence of >1% improvement potential
-- If round took 15-30 minutes: Be conservative, need strong hypothesis for >0.5% improvement
-- If round took <15 minutes: Normal criteria apply
+- **If cumulative time >= 30 min: SUBMIT immediately (hard stop)**
+- If cumulative time 20-30 min: SUBMIT unless CLEAR evidence of >1% improvement
+- If cumulative time 10-20 min: Be conservative, need strong hypothesis for >0.5% improvement
+- If cumulative time <10 min: Normal criteria apply
 
 Output format (no other text):
 
@@ -161,7 +166,7 @@ REASONING: Best logloss 0.62 is competitive, no clear path to major improvement
 
 Criteria:
 - SUBMIT if: Score is good AND (no clear improvement path OR round >= 3 OR time-constrained)
-- CONTINUE if: Clear hypothesis exists for meaningful improvement AND time-efficient"""
+- CONTINUE if: Clear hypothesis exists for meaningful improvement AND time-efficient AND cumulative time <30 min"""
 
 
 SUBMISSION_PROMPT = """Create submission.csv. Fast.
@@ -221,13 +226,14 @@ def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_cont
     )
 
 
-def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric_direction: str, round_time_minutes: float) -> str:
+def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric_direction: str, round_time_minutes: float, cumulative_time_minutes: float) -> str:
     return ANALYSIS_PROMPT.format(
         round_num=round_num,
         results=results,
         best_score=best_score,
         metric_direction=metric_direction,
-        round_time_minutes=round_time_minutes
+        round_time_minutes=round_time_minutes,
+        cumulative_time_minutes=cumulative_time_minutes
     )
 
 

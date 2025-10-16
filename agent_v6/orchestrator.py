@@ -37,11 +37,15 @@ class Orchestrator:
         self.round_history = []
         self.lower_is_better = False
         self.round_elapsed_time = 0
+        self.total_start_time = None
         
         Path(workspace_dir).mkdir(parents=True, exist_ok=True)
         Path(submission_dir).mkdir(parents=True, exist_ok=True)
 
     async def run(self, max_rounds: int = 5):
+        import time
+        self.total_start_time = time.time()
+        
         print("\n" + "="*60)
         print("PHASE 1: EDA")
         print("="*60)
@@ -380,13 +384,17 @@ class Orchestrator:
         metric_direction = "LOWER is better" if self.lower_is_better else "HIGHER is better"
         round_time_minutes = self.round_elapsed_time / 60
         
+        import time
+        cumulative_time_minutes = (time.time() - self.total_start_time) / 60
+        
         prompt = format_analysis_prompt(
             competition_id=self.competition_id,
             round_num=self.round_num,
             results=results_str,
             best_score=self.best_score,
             metric_direction=metric_direction,
-            round_time_minutes=round_time_minutes
+            round_time_minutes=round_time_minutes,
+            cumulative_time_minutes=cumulative_time_minutes
         )
         
         agent = Agent(str(plan_workspace), prompt, tools)
