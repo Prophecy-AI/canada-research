@@ -133,6 +133,13 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
 **Phase 2: Hypothesis-Driven Iteration Loop (Until performance improvement becomes marginal (0.5% or less))**
 
+**Loop Iteration Rules**
+- If an algorithm you chose worked exceptionally well, do not try more, and continue with the same algorithm.
+- You should only choose at max 2 experiments to train.
+- You should only choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections.
+- You should use Opus 4 to plan your experiments, have it do the thinking process and planning out algorithms and steps to do. Use Sonnet for 4.5 for code generation of the model.
+- You need to make sure that the agent is using GPU, not CPU throughout the entire process.
+
 This is where you spend most of your time. However, ensure that you don't waste time on mindless tasks. Each iteration:
 
 **A. PLAN (while previous experiment runs)**
@@ -203,13 +210,14 @@ This is where you spend most of your time. However, ensure that you don't waste 
    - Consider ensemble of top-3 models
    ```
 
-**G. Loop Iteration Rules**
+**Example Iteration Sequence:**
+
+**Loop Iteration Rules**
 - If an algorithm you chose worked exceptionally well, do not try more, and continue with the same algorithm.
 - You should only choose at max 2 experiments to train.
 - You should only choose one or two ML algorithms that you think will work and to choose these 1 or 2 algorithms, critically think and study the data. Be confident to the point where you can justify your selections.
 - You should use Opus 4 to plan your experiments, have it do the thinking process and planning out algorithms and steps to do. Use Sonnet for 4.5 for code generation of the model.
-
-**Example Iteration Sequence:**
+- You need to make sure that the agent is using GPU, not CPU throughout the entire process.
 
 Iteration 1:
 - Hypothesis: "Random forest will capture non-linear patterns"
@@ -256,6 +264,7 @@ Iteration 3:
 - If you get errors, debug them - don't give up!
 - Optimize for speed and accuracy, don't waste time on complex models or features.
 - Simple is sometimes bettter than complex.
+- You need to make sure that the agent is using GPU, not CPU throughout the entire process.
 
 
 **Python Environment:**
