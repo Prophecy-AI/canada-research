@@ -15,7 +15,7 @@ from agent_v5.tools.write import WriteTool
 from agent_v5.tools.edit import EditTool
 from agent_v5.tools.glob import GlobTool
 from agent_v5.tools.grep import GrepTool
-from agent_v5.tools.todo import TodoWriteTool, ReadTodoListTool
+# from agent_v5.tools.todo import TodoWriteTool, ReadTodoListTool  # Commented out - not used
 from agent_v5.tools.list_bash import ListBashProcessesTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
@@ -46,10 +46,10 @@ class ResearchAgent:
         self.tools.register(EditTool(self.workspace_dir))
         self.tools.register(GlobTool(self.workspace_dir))
         self.tools.register(GrepTool(self.workspace_dir))
-        self.tools.register(TodoWriteTool(self.workspace_dir))
+        # self.tools.register(TodoWriteTool(self.workspace_dir))  # Commented out - not used
         #self.tools.register(CohortDefinitionTool(self.workspace_dir))
         self.tools.register(RunSummaryTool(self.workspace_dir))
-        self.tools.register(ReadTodoListTool(self.workspace_dir))
+        # self.tools.register(ReadTodoListTool(self.workspace_dir))  # Commented out - not used
         self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
         self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
 

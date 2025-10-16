@@ -111,7 +111,7 @@ class BashTool(BaseTool):
             original_length = len(output)
             if len(output) > MAX_FOREGROUND_OUTPUT:
                 output = (
-                    f"⚠️  Output truncated: showing last {MAX_FOREGROUND_OUTPUT:,} chars of {original_length:,} total chars\n"
+                    f"Output truncated: showing last {MAX_FOREGROUND_OUTPUT:,} chars of {original_length:,} total chars\n"
                     f"(Full output not stored, only recent output shown to save context)\n\n"
                     + output[-MAX_FOREGROUND_OUTPUT:]
                 )

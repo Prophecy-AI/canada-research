@@ -114,12 +114,12 @@ class WriteTool(BaseTool):
                 internet_violations.append(f"{description} ({pattern})")
         
         if internet_violations:
-            warnings = ["🔴🔴🔴 CRITICAL: INTERNET ACCESS VIOLATION 🔴🔴🔴"]
+            warnings = ["CRITICAL: INTERNET ACCESS VIOLATION DETECTED"]
             for violation in internet_violations:
-                warnings.append(f"   ❌ {violation}")
+                warnings.append(f"  - {violation}")
             warnings.append("")
-            warnings.append("⛔ NO INTERNET ACCESS in competition environment!")
-            warnings.append("✅ Consult Oracle if you need external models/data")
+            warnings.append("NO INTERNET ACCESS in competition environment!")
+            warnings.append("Consult Oracle if you need external models/data")
             warnings.append("")
             warnings.append("File written but you MUST fix this before running!")
             return "\n".join(warnings)
@@ -152,20 +152,20 @@ class WriteTool(BaseTool):
                 'sklearn.decomposition.PCA': 'cuml.decomposition.PCA (GPU-accelerated)',
                 'sklearn.svm': 'cuml.svm (GPU-accelerated)'
             }
-            
-            warnings = ["🔴 FORBIDDEN CPU-ONLY IMPORTS DETECTED:"]
+
+            warnings = ["WARNING: CPU-ONLY SKLEARN IMPORTS DETECTED"]
             for forbidden in found_forbidden:
                 replacement = replacement_map.get(forbidden, 'cuML equivalent')
-                warnings.append(f"   • {forbidden} → USE {replacement} INSTEAD")
-            
+                warnings.append(f"  - {forbidden} -> USE {replacement} INSTEAD")
+
             warnings.append("")
-            warnings.append("⚠️  This code will run 10-100x SLOWER on CPU than GPU alternatives.")
+            warnings.append("This code will run 10-100x SLOWER on CPU than GPU alternatives.")
             warnings.append("File written to disk, but you MUST rewrite with cuML before running.")
             warnings.append("")
             warnings.append("Quick fix:")
             warnings.append("  from cuml.feature_extraction.text import TfidfVectorizer  # GPU")
             warnings.append("  from cuml.linear_model import LogisticRegression          # GPU")
-            
+
             return "\n".join(warnings)
         
         # Check if content contains ML frameworks
@@ -213,8 +213,8 @@ class WriteTool(BaseTool):
                 hints.append("LightGBM: Add 'device': 'gpu' to params")
             if has_catboost:
                 hints.append("CatBoost: Add task_type='GPU' to constructor")
-            
-            return f"⚠️  GPU CHECK: This script may not be using GPU!\n" + "\n".join(f"   • {hint}" for hint in hints) + "\n   • CPU training is 10-100x slower - verify GPU usage before running"
+
+            return "WARNING: GPU not detected in script\n" + "\n".join(f"  - {hint}" for hint in hints) + "\n  - CPU training is 10-100x slower - verify GPU usage before running"
         
         # Check for resource maximization issues
         resource_issues = []
@@ -223,7 +223,7 @@ class WriteTool(BaseTool):
         if (has_cuml or 'sklearn' in content_lower) and 'n_jobs' not in content_lower:
             resource_issues.append("Missing n_jobs=-1 (not using all CPU cores)")
         elif 'n_jobs=1' in content_lower or 'n_jobs = 1' in content_lower:
-            resource_issues.append("🔴 n_jobs=1 found - change to n_jobs=-1 to use all cores")
+            resource_issues.append("CRITICAL: n_jobs=1 found - change to n_jobs=-1 to use all cores")
         
         # Check for SMALL batch sizes (CRITICAL)
         import re
@@ -243,7 +243,7 @@ class WriteTool(BaseTool):
                     model_type = "tabular models"
                 
                 if batch_val < min_batch:
-                    resource_issues.append(f"🔴🔴 batch_size={batch_val} is TOO SMALL! MINIMUM {min_batch} for {model_type}")
+                    resource_issues.append(f"CRITICAL: batch_size={batch_val} is TOO SMALL - minimum {min_batch} for {model_type}")
         
         # Check for HARDCODED num_workers (CRITICAL)
         if 'num_workers' in content_lower:
@@ -251,12 +251,12 @@ class WriteTool(BaseTool):
             for nw_str in num_worker_matches:
                 nw_val = int(nw_str)
                 if nw_val < 8:  # Assume most machines have 8+ cores
-                    resource_issues.append(f"🔴🔴 num_workers={nw_val} is HARDCODED! Use os.cpu_count() to max out cores")
+                    resource_issues.append(f"CRITICAL: num_workers={nw_val} is HARDCODED - use os.cpu_count() to max out cores")
         
         # Check for PyTorch DataLoader optimization
         if has_pytorch and 'DataLoader' in content:
             if 'num_workers' not in content:
-                resource_issues.append("🔴 PyTorch DataLoader missing num_workers (should use os.cpu_count())")
+                resource_issues.append("CRITICAL: PyTorch DataLoader missing num_workers (should use os.cpu_count())")
             if 'pin_memory' not in content:
                 resource_issues.append("PyTorch DataLoader missing pin_memory=True (faster GPU transfer)")
         
@@ -271,7 +271,7 @@ class WriteTool(BaseTool):
             has_explicit_print = 'print(' in content and ('CPU' in content or 'cores' in content or 'batch' in content)
             
             if not has_explicit_print:
-                resource_issues.append("🔴🔴 MISSING RESOURCE CONFIG PRINT! Must print: 'RESOURCES: X cores, batch_size=Y, GPU=Z'")
+                resource_issues.append("CRITICAL: Missing resource config print - must print: 'RESOURCES: X cores, batch_size=Y, GPU=Z'")
         
         # Check for mixed precision
         if has_pytorch and 'train' in filename_lower:
@@ -284,14 +284,13 @@ class WriteTool(BaseTool):
         
         # If resource issues found, return warning
         if resource_issues:
-            warning = ["🔴🔴🔴 CRITICAL RESOURCE VIOLATIONS 🔴🔴🔴"]
+            warning = ["RESOURCE UTILIZATION VIOLATIONS DETECTED"]
             for issue in resource_issues:
-                # Issues already have emoji prefixes where critical
-                warning.append(f"   {issue}")
+                warning.append(f"  - {issue}")
             warning.append("")
-            warning.append("❌ This code will WASTE 80%+ of compute capacity!")
-            warning.append("❌ Training will be 5-10x SLOWER than necessary")
-            warning.append("✅ You MUST rewrite before running - consult Oracle if needed")
+            warning.append("This code will waste 80%+ of compute capacity")
+            warning.append("Training will be 5-10x slower than necessary")
+            warning.append("You MUST rewrite before running - consult Oracle if needed")
             warning.append("")
             warning.append("Required template:")
             warning.append("  import os")
@@ -303,9 +302,9 @@ class WriteTool(BaseTool):
         # If GPU is configured and this is a training/prediction script, remind to consult Oracle
         if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost or has_cuml):
             return (
-                "💡 STRATEGIC HINT: Instead of running iterative baselines, pause and open an extended brainstorming session with Oracle.\n"
-                "   Discuss: (a) fastest GPU-first pipeline, (b) risk of data leakage, (c) minimal full-dataset runs.\n"
-                "   Aim to produce ONE high-quality training script that can reach medal range in the first attempt."
+                "REMINDER: Before running training, consult Oracle for strategy validation.\n"
+                "Discuss: GPU pipeline optimization, data leakage risks, and approach validation.\n"
+                "Goal: Produce high-quality training script on first attempt."
             )
         
         return ""
