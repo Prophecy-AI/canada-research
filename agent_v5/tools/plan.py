@@ -98,12 +98,14 @@ class PlanTaskTool(BaseTool):
                 conversation_context = f"\n\nCurrent conversation context:\n{history[-1].get('content', '')}"
 
         # Create planning prompt for reasoning model
+        additional_context_section = f"**Additional Context:**\n{additional_context}" if additional_context else ""
+
         planning_prompt = f"""You are a planning expert for an autonomous AI agent. Create a detailed, actionable execution plan for the following task.
 
 **Task:**
 {task_description}
 
-{f"**Additional Context:**\n{additional_context}" if additional_context else ""}
+{additional_context_section}
 {conversation_context}
 
 **Available Tools:**
