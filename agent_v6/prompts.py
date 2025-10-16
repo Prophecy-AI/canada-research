@@ -113,7 +113,20 @@ Data: {data_dir}
      * For very small datasets (<1000 samples): use test_size=0.15-0.20 to ensure enough validation
    - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
-   - Early stopping (patience 3-5 epochs), BUT stop immediately if validation metric reaches max (1.0 for AUC/accuracy)
+   - Early stopping with immediate perfect score termination:
+     ```python
+     if val_metric > best_metric:
+         best_metric = val_metric
+         save_model()
+         patience = 0
+         if val_metric >= 0.9999:  # Perfect or near-perfect
+             print(f"Perfect score reached: {val_metric:.4f}, stopping")
+             break
+     else:
+         patience += 1
+         if patience >= max_patience:
+             break
+     ```
    - Print validation score as "VALIDATION_SCORE: X.XXXX" (accuracy or metric value)
    - Save model with `torch.save(model.state_dict(), 'model.pth')`
 4. Respond "READY" immediately
