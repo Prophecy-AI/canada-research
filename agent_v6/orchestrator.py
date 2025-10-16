@@ -404,11 +404,14 @@ class Orchestrator:
         import time
         cumulative_time_minutes = (time.time() - self.total_start_time) / 60
         
+        best_exp_id = self.best_experiment.get('id', 'N/A') if self.best_experiment else 'N/A'
+        
         prompt = format_analysis_prompt(
             competition_id=self.competition_id,
             round_num=self.round_num,
             results=results_str,
             best_score=self.best_score,
+            best_experiment_id=best_exp_id,
             metric_direction=metric_direction,
             round_time_minutes=round_time_minutes,
             cumulative_time_minutes=cumulative_time_minutes

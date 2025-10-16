@@ -304,8 +304,8 @@ Tools: Bash, Read, Write"""
 ANALYSIS_PROMPT = """Analyze results. Output decision.
 
 **Metric: {metric_direction}**
-Results: {results}
-Current best: {best_score}
+This round's results: {results}
+**🏆 CUMULATIVE BEST (across all rounds): {best_experiment_id} with score {best_score}**
 Round: {round_num}
 Round time: {round_time_minutes:.1f} minutes
 **Total time elapsed: {cumulative_time_minutes:.1f} minutes**
@@ -342,8 +342,8 @@ Remember metric direction when evaluating score quality:
 Output format (no other text):
 
 DECISION: SUBMIT
-BEST_MODEL: exp_2
-REASONING: Best logloss 0.62 is competitive, no clear path to major improvement
+BEST_MODEL: r1_exp_3
+REASONING: Cumulative best score 0.2509 from r1_exp_3 is competitive, this round's experiments didn't improve, no fundamentally different architecture justifies more time
 
 Criteria:
 - SUBMIT if: Score is decent AND (no fundamentally different architecture OR round >= 3 OR time-constrained)
@@ -470,11 +470,12 @@ def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_cont
     )
 
 
-def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric_direction: str, round_time_minutes: float, cumulative_time_minutes: float) -> str:
+def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, best_experiment_id: str, metric_direction: str, round_time_minutes: float, cumulative_time_minutes: float) -> str:
     return ANALYSIS_PROMPT.format(
         round_num=round_num,
         results=results,
         best_score=best_score,
+        best_experiment_id=best_experiment_id,
         metric_direction=metric_direction,
         round_time_minutes=round_time_minutes,
         cumulative_time_minutes=cumulative_time_minutes
