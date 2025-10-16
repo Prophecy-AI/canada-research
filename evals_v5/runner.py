@@ -30,6 +30,46 @@ class EvalRunner:
 
         asyncio.create_task(self._run_eval(eval_type, data))
 
+    def submit_batch(self, eval_requests: list[tuple[EvalType, Dict]]):
+        """
+        Submit multiple evals to run in parallel with asyncio.gather.
+
+        Args:
+            eval_requests: List of (eval_type, data) tuples
+
+        Example:
+            runner.submit_batch([
+                ("hallucination", {"answer": "...", "data": "..."}),
+                ("sql", {"sql": "...", "context": "..."}),
+                ("answer", {"question": "...", "answer": "..."})
+            ])
+        """
+        if not self.enabled or not eval_requests:
+            return
+
+        asyncio.create_task(self._run_batch_evals(eval_requests))
+
+    async def _run_batch_evals(self, eval_requests: list[tuple[EvalType, Dict]]):
+        """Run multiple evaluations in parallel using asyncio.gather"""
+        try:
+            log(f"→ Running {len(eval_requests)} evals in parallel")
+
+            # Execute all evals concurrently
+            results = await asyncio.gather(
+                *[self._run_eval(eval_type, data)
+                  for eval_type, data in eval_requests],
+                return_exceptions=True
+            )
+
+            # Log any failures
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    eval_type = eval_requests[i][0]
+                    log(f"✗ Batch eval {eval_type} failed: {result}", 2)
+
+        except Exception as e:
+            log(f"✗ Batch eval execution failed: {e}", 2)
+
     async def _run_eval(self, eval_type: EvalType, data: Dict):
         """Run specific eval type"""
         try:

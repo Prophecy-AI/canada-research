@@ -59,6 +59,35 @@ class ResearchAgent:
         if killed > 0:
             log(f"✓ Cleaned up {killed} background processes", 1)
 
+    def _can_parallelize_tools(self, tool_uses: List[Dict]) -> bool:
+        """
+        Determine if tools can be executed in parallel.
+
+        Returns False if:
+        - Any Write/Edit operations (may affect Read operations)
+        - Multiple Bash commands (may have dependencies)
+        - ReadBashOutput (needs sequential monitoring)
+        - KillShell (affects other processes)
+
+        Returns True for:
+        - Multiple Read operations
+        - Multiple Glob/Grep operations
+        - Mix of read-only MCP tools
+        """
+        tool_names = [tool["name"] for tool in tool_uses]
+
+        # Sequential execution required for these tools
+        sequential_tools = {
+            "Write", "Edit", "Bash", "ReadBashOutput", "KillShell", "TodoWrite"
+        }
+
+        # Check if any tools require sequential execution
+        if any(name in sequential_tools for name in tool_names):
+            return False
+
+        # All remaining tools are read-only and can be parallelized
+        return True
+
     def _should_wait_for_process(self, tool_uses: List[Dict], tool_results: List[Dict]) -> bool:
         if len(tool_uses) != 1 or tool_uses[0]["name"] != "ReadBashOutput":
             return False
@@ -157,22 +186,58 @@ class ResearchAgent:
 
             log(f"→ Executing {len(tool_uses)} tools")
 
-            tool_results = []
-            for tool_use in tool_uses:
-                result = await self.tools.execute(tool_use["name"], tool_use["input"])
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tool_use["id"],
-                    "content": result["content"],
-                    "is_error": result.get("is_error", False)
-                })
+            # Determine if tools can be parallelized
+            can_parallelize = self._can_parallelize_tools(tool_uses)
 
-                yield {
-                    "type": "tool_execution",
-                    "tool_name": tool_use["name"],
-                    "tool_input": tool_use["input"],
-                    "tool_output": result["content"]
-                }
+            if can_parallelize and len(tool_uses) > 1:
+                log(f"→ Parallelizing {len(tool_uses)} independent tools")
+                # Execute all tools in parallel with asyncio.gather
+                results = await asyncio.gather(
+                    *[self.tools.execute(tool_use["name"], tool_use["input"])
+                      for tool_use in tool_uses],
+                    return_exceptions=True
+                )
+
+                tool_results = []
+                for tool_use, result in zip(tool_uses, results):
+                    # Handle exceptions from gather
+                    if isinstance(result, Exception):
+                        result = {
+                            "content": f"Tool execution error: {str(result)}",
+                            "is_error": True
+                        }
+
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use["id"],
+                        "content": result["content"],
+                        "is_error": result.get("is_error", False)
+                    })
+
+                    yield {
+                        "type": "tool_execution",
+                        "tool_name": tool_use["name"],
+                        "tool_input": tool_use["input"],
+                        "tool_output": result["content"]
+                    }
+            else:
+                # Sequential execution (when tools have dependencies)
+                tool_results = []
+                for tool_use in tool_uses:
+                    result = await self.tools.execute(tool_use["name"], tool_use["input"])
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use["id"],
+                        "content": result["content"],
+                        "is_error": result.get("is_error", False)
+                    })
+
+                    yield {
+                        "type": "tool_execution",
+                        "tool_name": tool_use["name"],
+                        "tool_input": tool_use["input"],
+                        "tool_output": result["content"]
+                    }
 
             if self._should_wait_for_process(tool_uses, tool_results):
                 shell_id = tool_uses[0]["input"]["shell_id"]
