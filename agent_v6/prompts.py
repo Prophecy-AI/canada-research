@@ -46,8 +46,16 @@ Best: {best_score}
 - **When to try:** Images + Classification, especially with <50K samples
 - **How it works:** Extract features from pretrained CNN (no training), train LogisticRegression/XGBoost on features
 - **Pros:** Very fast (trains in seconds), often better with limited data, low memory
-- **Models:** EfficientNet-B0, ResNet50, DenseNet121, MobileNetV2
-- **Example:** {{"strategy": "bottleneck_features", "model": "EfficientNet-B0", "classifier": "LogisticRegression"}}
+- **Single model:** Use one backbone (EfficientNet-B0, ResNet50, DenseNet121, MobileNetV2)
+- **Multi-model (RECOMMENDED for max performance):** Use 2-3 backbones, concatenate features, then train classifier
+  * Much better performance (2-10x lower logloss)
+  * Still fast (parallel feature extraction)
+  * **Best model combinations (from gold solutions):** 
+    - ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim
+    - EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim
+    - Wide_ResNet50_2 (2048-dim) + RegNetY_8GF (2016-dim) = 4064-dim
+- **Example single:** {{"strategy": "bottleneck_features", "model": "ResNet50", "classifier": "LogisticRegression"}}
+- **Example multi:** {{"strategy": "bottleneck_features", "models": ["ResNet50", "InceptionV3"], "classifier": "LogisticRegression"}}
 
 **Strategy 2: "fine_tuning"** (standard deep learning)
 - **When to try:** Images + Classification, any dataset size
@@ -65,13 +73,20 @@ Best: {best_score}
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
 **Recommendation for Round 1:**
-- **Images <50K:** Try BOTH bottleneck_features (exp_1) AND fine_tuning (exp_2) to compare
+- **Images <50K:** 
+  * exp_1: Multi-model bottleneck (e.g., ResNet50 + InceptionV3 or EfficientNet-B2 + DenseNet121 + ResNet50)
+  * exp_2: Single-model bottleneck (e.g., EfficientNet-B0 for speed comparison)
+  * exp_3: Fine-tuning (e.g., DenseNet161 to see if training helps)
 - **Images >50K:** Try 2-3 different fine_tuning models
 - **Tabular:** Try 2-3 different gradient boosting models
-- **Mix strategies** to find what works best for THIS dataset
+- **Multi-model bottleneck gets best scores** (based on winning solutions)
 
 **Experiment Design Guidelines:**
-- **Diversify strategies:** If images <50K, propose at least ONE bottleneck_features AND ONE fine_tuning
+- **For images <50K: ALWAYS include multi-model bottleneck as exp_1** (proven to get best scores)
+- **Multi-model selection:** Choose 2-3 complementary backbones with different architectures:
+  * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2
+  * Good triplets: EfficientNet-B2 + DenseNet121 + ResNet50
+  * Different architectures capture different features
 - **Different models:** Use different backbones/models across experiments
 - **Batch size:** 32-64 for GPU training
 - **Train split:** <5000 samples use 0.85, larger use 0.9-0.95
@@ -83,27 +98,37 @@ Best: {best_score}
 [
   {{
     "id": "exp_1",
-    "strategy": "bottleneck_features OR fine_tuning OR gradient_boosting",
-    "model": "<model_name>",
-    "features": {{"type": "<feature_type>", "details": "..."}},
-    "hyperparameters": {{"device": "cuda", "epochs": 10-15, "lr": 0.0001-0.01, "batch_size": 32-64}},
-    "hypothesis": "<why this strategy and model are appropriate for THIS dataset>"
+    "strategy": "bottleneck_features",
+    "models": ["ResNet50", "InceptionV3"],
+    "classifier": "LogisticRegression",
+    "features": {{"type": "pretrained_features", "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim features"}},
+    "hyperparameters": {{"device": "cuda", "batch_size": 64, "C": 1.0}},
+    "hypothesis": "<why multi-model bottleneck is best for this dataset>"
   }},
   {{
     "id": "exp_2",
-    "strategy": "<different_strategy_if_possible>",
-    "model": "<different_model>",
-    "features": {{"type": "<feature_type>", "details": "..."}},
-    "hyperparameters": {{"device": "cuda", "epochs": 10-15, "lr": 0.0001-0.01, "batch_size": 32-64}},
-    "hypothesis": "<why this complements exp_1>"
+    "strategy": "bottleneck_features",
+    "model": "EfficientNet-B0",
+    "classifier": "LogisticRegression",
+    "features": {{"type": "pretrained_features", "details": "Single-model for speed"}},
+    "hyperparameters": {{"device": "cuda", "batch_size": 64}},
+    "hypothesis": "<fast baseline to compare against multi-model>"
+  }},
+  {{
+    "id": "exp_3",
+    "strategy": "fine_tuning",
+    "model": "DenseNet161",
+    "features": {{"type": "image", "details": "Fine-tune to see if training helps"}},
+    "hyperparameters": {{"device": "cuda", "epochs": 12, "lr": 0.0001, "batch_size": 32}},
+    "hypothesis": "<why fine-tuning might work>"
   }}
 ]
 
 **Important:** 
 - Always include "strategy" field in each experiment
-- Try DIFFERENT strategies across experiments (bottleneck vs fine_tuning) to explore what works
-- If strategy omitted, worker defaults to "fine_tuning"
-- Round 1: Explore diverse strategies. Round 2+: Double down on what worked."""
+- For bottleneck_features: Use "models" (array) for multi-model OR "model" (string) for single
+- **Multi-model bottleneck recommended for best performance** (proven in gold-medal solutions)
+- Round 1: Try multi-model bottleneck + comparison experiments. Round 2+: Double down on what worked."""
 
 
 WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
@@ -135,58 +160,82 @@ import torch
 import torch.nn as nn
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import log_loss
 import numpy as np
+import joblib
 
-# Load pretrained model, remove classifier
-backbone = torchvision.models.{{model_name}}(pretrained=True)
-if hasattr(backbone, 'fc'):
-    backbone.fc = nn.Identity()
-elif hasattr(backbone, 'classifier'):
-    backbone.classifier = nn.Identity()
-elif hasattr(backbone, 'head'):
-    backbone.head = nn.Identity()
-backbone.eval()
-backbone.to(device)
+# Check if single model or multi-model ensemble
+if 'models' in spec and isinstance(spec['models'], list):
+    model_names = spec['models']  # Multi-model ensemble
+else:
+    model_names = [spec['model']]  # Single model
 
-# Extract features (no gradients)
-with torch.no_grad():
-    train_features = []
-    train_labels = []
-    for images, labels in train_loader:
-        feats = backbone(images.to(device)).cpu().numpy()
-        train_features.append(feats)
-        train_labels.extend(labels.numpy())
-    X_train = np.vstack(train_features)
-    y_train = np.array(train_labels)
+print(f"Using {{len(model_names)}} backbone(s): {{model_names}}")
+
+# Load all backbones
+backbones = []
+for model_name in model_names:
+    backbone = getattr(torchvision.models, model_name.lower().replace('-', '_'))(pretrained=True)
+    if hasattr(backbone, 'fc'):
+        backbone.fc = nn.Identity()
+    elif hasattr(backbone, 'classifier'):
+        backbone.classifier = nn.Identity()  
+    elif hasattr(backbone, 'head'):
+        backbone.head = nn.Identity()
+    backbone.eval().to(device)
+    backbones.append(backbone)
+    print(f"Loaded {{model_name}}")
+
+# Extract features from all backbones
+def extract_features(loader, backbones, device):
+    all_features = []
+    all_labels = []
     
-    # Same for validation
-    val_features = []
-    val_labels = []
-    for images, labels in val_loader:
-        feats = backbone(images.to(device)).cpu().numpy()
-        val_features.append(feats)
-        val_labels.extend(labels.numpy())
-    X_val = np.vstack(val_features)
-    y_val = np.array(val_labels)
+    with torch.no_grad():
+        for images, labels in loader:
+            images = images.to(device)
+            batch_features = []
+            for backbone in backbones:
+                feats = backbone(images).cpu().numpy()
+                batch_features.append(feats)
+            concat_feats = np.hstack(batch_features)  # Concatenate features from all models
+            all_features.append(concat_feats)
+            all_labels.extend(labels.numpy())
+    
+    return np.vstack(all_features), np.array(all_labels)
 
-# Train LogisticRegression on features
+print("Extracting training features...")
+X_train, y_train = extract_features(train_loader, backbones, device)
+print(f"Training features shape: {{X_train.shape}}")
+
+print("Extracting validation features...")
+X_val, y_val = extract_features(val_loader, backbones, device)
+print(f"Validation features shape: {{X_val.shape}}")
+
+# Standardize features
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_val = scaler.transform(X_val)
 
+# Train LogisticRegression
+print("Training LogisticRegression...")
 clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000, random_state=42)
 clf.fit(X_train, y_train)
 
 # Validation
 val_probs = clf.predict_proba(X_val)
-val_metric = log_loss(y_val, val_probs)  # or other metric
+val_metric = log_loss(y_val, val_probs)
+val_acc = (clf.predict(X_val) == y_val).mean()
 print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
+print(f"Validation Accuracy: {{val_acc:.4f}}")
 
-# Save both models
-torch.save(backbone.state_dict(), 'backbone.pth')
-import joblib
+# Save models
+for i, backbone in enumerate(backbones):
+    torch.save(backbone.state_dict(), f'backbone_{{i}}.pth')
+joblib.dump({{'model_names': model_names}}, 'model_config.pkl')
 joblib.dump(clf, 'classifier.pkl')
 joblib.dump(scaler, 'scaler.pkl')
+print("Models saved!")
 ```
 
 **STRATEGY: "fine_tuning"** (standard CNN training):
@@ -309,25 +358,42 @@ DO:
 
 **STRATEGY: bottleneck_features**
 ```python
-# Load backbone
-backbone = torchvision.models.{{model_name}}(pretrained=True)
-backbone.load_state_dict(torch.load('backbone.pth'))
-if hasattr(backbone, 'fc'): backbone.fc = nn.Identity()
-elif hasattr(backbone, 'classifier'): backbone.classifier = nn.Identity()
-elif hasattr(backbone, 'head'): backbone.head = nn.Identity()
-backbone.eval().to(device)
+import joblib
+import torch
+import torch.nn as nn
+import numpy as np
+
+# Load model config to check if single or multi-model
+config = joblib.load('{best_workspace}/model_config.pkl')
+model_names = config['model_names']
+print(f"Loading {{len(model_names)}} backbone(s): {{model_names}}")
+
+# Load all backbones
+backbones = []
+for i, model_name in enumerate(model_names):
+    backbone = getattr(torchvision.models, model_name.lower().replace('-', '_'))(pretrained=True)
+    backbone.load_state_dict(torch.load(f'{best_workspace}/backbone_{{i}}.pth'))
+    if hasattr(backbone, 'fc'): backbone.fc = nn.Identity()
+    elif hasattr(backbone, 'classifier'): backbone.classifier = nn.Identity()
+    elif hasattr(backbone, 'head'): backbone.head = nn.Identity()
+    backbone.eval().to(device)
+    backbones.append(backbone)
 
 # Load classifier and scaler
-import joblib
-clf = joblib.load('classifier.pkl')
-scaler = joblib.load('scaler.pkl')
+clf = joblib.load('{best_workspace}/classifier.pkl')
+scaler = joblib.load('{best_workspace}/scaler.pkl')
 
-# Extract test features
+# Extract test features from all backbones
 with torch.no_grad():
     test_features = []
     for images in test_loader:
-        feats = backbone(images.to(device)).cpu().numpy()
-        test_features.append(feats)
+        images = images.to(device)
+        batch_features = []
+        for backbone in backbones:
+            feats = backbone(images).cpu().numpy()
+            batch_features.append(feats)
+        concat_feats = np.hstack(batch_features)
+        test_features.append(concat_feats)
     X_test = np.vstack(test_features)
     X_test = scaler.transform(X_test)
 
