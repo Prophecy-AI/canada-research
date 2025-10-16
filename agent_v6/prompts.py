@@ -163,17 +163,25 @@ Best model: {best_model} at {best_workspace}
 Data: {data_dir}
 Output: {submission_dir}/submission.csv
 
+**CRITICAL: Predict ONLY on test data, NOT training data!**
+
 DO:
-1. Write predict.py: Load model, predict on test, save to {submission_dir}/submission.csv
-2. Run predict.py
-3. Respond "DONE"
+1. Read {data_dir}/sample_submission.csv to get test image IDs
+2. Write predict.py:
+   - Load model from {best_workspace}/model.pth
+   - Load ONLY test images (match sample_submission.csv IDs exactly)
+   - Predict probabilities
+   - Save to {submission_dir}/submission.csv with EXACT same format/order as sample_submission.csv
+3. Run predict.py
+4. Verify row count matches sample_submission.csv
+5. Respond "DONE"
 
 DO NOT:
-- Write summaries/READMEs/documentation
-- Create verification scripts
-- Run extra validation checks
+- Predict on training images
+- Write summaries/documentation
+- Run extra validation
 
-Match sample_submission.csv format. Use GPU.
+Use GPU. Match sample_submission.csv format EXACTLY.
 
 Tools: Bash, Read, Write"""
 
