@@ -67,21 +67,29 @@ Based on the data characteristics above, select appropriate models and design ex
 Output 1 experiment if confident in approach, 2-3 if testing different hypotheses."""
 
 
-WORKER_PROMPT = """Write train.py implementing this experiment.
+WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
 
-Experiment spec: {spec}
-Data directory: {data_dir}
-EDA summary: {eda_context}
+Experiment: {spec}
+Data: {data_dir}
+EDA: {eda_context}
 
-Write train.py that:
-- Checks data structure in {data_dir} first (use Bash to check zip contents, extract files to workspace if needed)
-- Loads data correctly based on format
-- Implements the model/features/hyperparameters from spec exactly
-- Uses train_test_split (test_size=0.2, random_state=42)
-- NO cross-validation
-- Trains on GPU (device='cuda' for PyTorch, tree_method='gpu_hist' for XGBoost, device='gpu' for LightGBM)
-- Prints validation score
-- Saves model
+**CRITICAL: Your ONLY job is to write train.py. DO NOT:**
+- Run train.py (orchestrator will run it)
+- Write summaries/documentation
+- Test imports
+- Create verification scripts
+
+**DO:**
+1. Check data structure (use Bash: ls, zipinfo, head CSV)
+2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
+3. Write train.py with:
+   - Correct data loading based on structure you found
+   - Model/features/hyperparameters from spec
+   - train_test_split (test_size=0.2, random_state=42)
+   - GPU training
+   - Print validation score
+   - Save model
+4. Respond "READY" immediately
 
 Tools: Bash, Read, Write"""
 
