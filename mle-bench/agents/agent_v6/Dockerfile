@@ -44,8 +44,9 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
     && conda clean -afy
 
 COPY agent_v6/ ${AGENT_DIR}/agent_v6/
+COPY mle-bench/agents/agent_v6/start.sh ${AGENT_DIR}/start.sh
 
-RUN chmod +x ${AGENT_DIR}/agent_v6 || true
+RUN chmod +x ${AGENT_DIR}/start.sh
 
 WORKDIR ${CODE_DIR}
 
