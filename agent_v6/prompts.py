@@ -67,29 +67,29 @@ Based on the data characteristics above, select appropriate models and design ex
 Output 1 experiment if confident in approach, 2-3 if testing different hypotheses."""
 
 
-WORKER_PROMPT = """Write train.py. DO NOT run it.
+WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
 
 Experiment: {spec}
 Data: {data_dir}
 EDA: {eda_context}
 
-**Your ONLY job: Write train.py and respond "READY".**
+**CRITICAL: Your ONLY job is to write train.py. DO NOT:**
+- Run train.py (orchestrator will run it)
+- Write summaries/documentation
+- Test imports
+- Create verification scripts
 
-DO NOT:
-- Run train.py
-- Explore data (EDA already done, data paths provided above)
-- Write documentation/summaries
-- Test imports or verify
-
-Write train.py with:
-- Load data from paths in EDA context
-- Model/features/hyperparameters from spec
-- train_test_split (test_size=0.2, random_state=42)
-- GPU training
-- Print validation score
-- Save model
-
-Respond "READY".
+**DO:**
+1. Check data structure (use Bash: ls, zipinfo, head CSV)
+2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
+3. Write train.py with:
+   - Correct data loading based on structure you found
+   - Model/features/hyperparameters from spec
+   - train_test_split (test_size=0.2, random_state=42)
+   - GPU training
+   - Print validation score
+   - Save model
+4. Respond "READY" immediately
 
 Tools: Bash, Read, Write"""
 
