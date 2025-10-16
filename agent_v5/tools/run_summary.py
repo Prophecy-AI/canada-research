@@ -81,16 +81,14 @@ class RunSummaryTool(BaseTool):
             # Truncate summary for logs
             summary = json.dumps({k: entry.get(k) for k in ["run_id", "phase", "model"]}, ensure_ascii=False)
             
-            # Remind agent to consult Oracle
-            oracle_reminder = (
-                "\n\n⚠️  NEXT STEP REQUIRED: Consult Oracle now.\n"
-                "Call: Oracle(query=\"I just completed [describe what you did]. "
-                "Results: [key metrics]. Should I continue this direction or pivot? Any bugs or issues?\")\n"
-                "Oracle will review your full conversation history and catch problems you might have missed."
+            # Remind agent about commitment - no post-training validation
+            commitment_note = (
+                "\n\n✅ Run logged. Results are final - analyze and iterate based on what you learned.\n"
+                "💡 Remember: Oracle reviewed your code before training. Trust your analysis for next steps."
             )
             
             return {
-                "content": f"RunSummary appended to {log_path}. Latest saved to {latest_path}.\n{summary}{oracle_reminder}",
+                "content": f"RunSummary appended to {log_path}. Latest saved to {latest_path}.\n{summary}{commitment_note}",
                 "is_error": False,
                 "debug_summary": summary,
             }
