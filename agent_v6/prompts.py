@@ -53,47 +53,45 @@ Models available: XGBoost, LightGBM, CatBoost, RandomForest, LogisticRegression,
 Python packages: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost"""
 
 
-WORKER_PROMPT = """You are executing a single ML experiment. Execute exactly as specified - no iteration, no exploration.
+WORKER_PROMPT = """You are writing a training script for an ML experiment. Write ONLY the train.py file - do NOT run it.
 
 Experiment specification:
 {spec}
 
+Data info from EDA:
+{eda_context}
+
 Data directory: {data_dir}
 Your workspace: {workspace_dir}
 
-Your task:
-1. Write train.py implementing the experiment EXACTLY as specified
-2. Run train.py  
-3. Extract and report validation score
+Your ONLY task:
+Write train.py that implements the experiment EXACTLY as specified.
 
 train.py requirements:
-- Load data from {data_dir}
+- Load data from {data_dir} (images in train.zip, test.zip; labels in train.csv)
 - Implement exact model, features, hyperparameters from specification
-- Use train/validation split (80/20) with train_test_split
-- DO NOT use cross-validation (wastes time for single experiment)
+- Use train/validation split (80/20) with train_test_split, random_state=42
+- DO NOT use cross-validation (single experiment)
 - Apply SAME preprocessing to train and validation
-- Print final score: "VALIDATION_SCORE: 0.847"
-- Handle errors gracefully
+- Print final score: "VALIDATION_SCORE: 0.847" (must be exact format)
+- Handle errors gracefully (try/except)
 - Save model as: model.pkl
-- **CRITICAL: USE GPU, NOT CPU** - Set device='cuda' or tree_method='gpu_hist' for XGBoost/LightGBM
+- **CRITICAL: USE GPU** - device='cuda', tree_method='gpu_hist'
 
 Code structure:
 ```python
 from sklearn.model_selection import train_test_split
 X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
 
-# CRITICAL: Use GPU
-# For XGBoost: tree_method='gpu_hist', device='cuda'
-# For PyTorch: model.cuda(), device='cuda'
-# For TensorFlow: with tf.device('/GPU:0'):
-
-# preprocess, train, evaluate
+# GPU: model.cuda() or device='cuda' or tree_method='gpu_hist'
+# train, evaluate
 print(f"VALIDATION_SCORE: {{val_score}}")
+pickle.dump(model, open('model.pkl', 'wb'))
 ```
 
-Execute and report - nothing more.
+Write train.py then respond with "READY" - nothing else.
 
-Tools: Write, Bash, Read"""
+Tools: Write"""
 
 
 ANALYSIS_PROMPT = """You are an expert ML engineer analyzing experiment results and deciding next steps.
@@ -181,11 +179,14 @@ def format_planning_prompt(competition_id: str, context: str, round_num: int, be
     )
 
 
-def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str) -> str:
+def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_context: str) -> str:
+    import json
+    spec_str = json.dumps(spec, indent=2)
     return WORKER_PROMPT.format(
-        spec=spec,
+        spec=spec_str,
         data_dir=data_dir,
-        workspace_dir=workspace_dir
+        workspace_dir=workspace_dir,
+        eda_context=eda_context
     )
 
 

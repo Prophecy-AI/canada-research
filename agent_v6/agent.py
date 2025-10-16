@@ -23,34 +23,6 @@ class Agent:
         while True:
             response_content = []
             tool_uses = []
-            
-            print(f"\n{'='*80}")
-            print(f"LLM CALL #{len(self.conversation_history)//2 + 1}")
-            print(f"{'='*80}")
-            print(f"System prompt: {len(self.system_prompt)} chars (~{len(self.system_prompt)//4} tokens)")
-            print(f"Conversation messages: {len(self.conversation_history)}")
-            
-            total_chars = len(self.system_prompt)
-            for i, msg in enumerate(self.conversation_history):
-                content = msg.get('content', '')
-                if isinstance(content, str):
-                    msg_chars = len(content)
-                    total_chars += msg_chars
-                    print(f"  Message {i} ({msg['role']}): {msg_chars} chars (~{msg_chars//4} tokens)")
-                    if msg_chars > 5000:
-                        print(f"    LARGE MESSAGE - First 200 chars: {content[:200]}")
-                elif isinstance(content, list):
-                    list_chars = sum(len(str(item)) for item in content)
-                    total_chars += list_chars
-                    print(f"  Message {i} ({msg['role']}): {len(content)} items, {list_chars} chars (~{list_chars//4} tokens)")
-                    for j, item in enumerate(content):
-                        item_str = str(item)
-                        print(f"    Item {j}: {len(item_str)} chars")
-                        if len(item_str) > 5000:
-                            print(f"      LARGE ITEM - Preview: {item_str[:200]}")
-            
-            print(f"TOTAL: ~{total_chars//4} tokens")
-            print(f"{'='*80}\n")
 
             with self.client.messages.stream(
                 model="claude-sonnet-4-5-20250929",

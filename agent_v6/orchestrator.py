@@ -140,33 +140,38 @@ class Orchestrator:
             return []
 
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:
+        print(f"\n→ Step 1: Writing {len(experiments)} train.py scripts in parallel...")
+        
         workers = []
         for exp in experiments:
             exp_workspace = Path(self.workspace_dir) / "experiments" / exp['id']
-            worker = Worker(exp, str(exp_workspace), self.data_dir)
-            workers.append(worker)
+            worker = Worker(exp, str(exp_workspace), self.data_dir, self.eda_summary)
+            workers.append((exp, worker, exp_workspace))
         
-        print(f"\n→ Starting {len(workers)} workers in parallel...")
-        results = await asyncio.gather(
-            *[w.run() for w in workers],
+        script_results = await asyncio.gather(
+            *[w.write_script() for _, w, _ in workers],
             return_exceptions=True
         )
         
-        print(f"\n✓ All workers completed")
+        print(f"✓ Scripts written")
+        
+        print(f"\n→ Step 2: Running {len(experiments)} train.py files in PARALLEL...")
+        
+        training_tasks = []
+        for i, (exp, worker, exp_workspace) in enumerate(workers):
+            if script_results[i] is True:
+                training_tasks.append(self._run_training(exp, exp_workspace))
+            else:
+                training_tasks.append(asyncio.sleep(0))
+        
+        training_results = await asyncio.gather(*training_tasks, return_exceptions=True)
+        
+        print(f"\n✓ All training completed")
         
         formatted_results = []
-        for i, result in enumerate(results):
-            if isinstance(result, Exception):
-                formatted_results.append({
-                    "id": experiments[i]['id'],
-                    "status": "error",
-                    "score": None,
-                    "output": str(result)[:500],
-                    "model": experiments[i].get('model'),
-                    "hypothesis": experiments[i].get('hypothesis')
-                })
-                print(f"  ❌ {experiments[i]['id']}: ERROR - {str(result)[:100]}")
-            else:
+        for i, (exp, _, exp_workspace) in enumerate(workers):
+            if isinstance(training_results[i], dict):
+                result = training_results[i]
                 formatted_results.append(result)
                 
                 status_icon = "✓" if result['status'] == 'success' else "⚠️"
@@ -179,11 +184,85 @@ class Orchestrator:
                         self.best_experiment = {
                             "id": result['id'],
                             "model": result['model'],
-                            "workspace": str(Path(self.workspace_dir) / "experiments" / result['id'])
+                            "workspace": str(exp_workspace)
                         }
                         print(f"    🏆 New best score!")
+            else:
+                formatted_results.append({
+                    "id": exp['id'],
+                    "status": "error",
+                    "score": None,
+                    "output": str(training_results[i])[:500],
+                    "model": exp.get('model'),
+                    "hypothesis": exp.get('hypothesis')
+                })
+                print(f"  ❌ {exp['id']}: ERROR")
         
         return formatted_results
+    
+    async def _run_training(self, exp: Dict, workspace: Path) -> Dict:
+        exp_id = exp['id']
+        train_py = workspace / "train.py"
+        
+        if not train_py.exists():
+            return {
+                "id": exp_id,
+                "status": "error",
+                "score": None,
+                "output": "train.py not found",
+                "model": exp.get('model'),
+                "hypothesis": exp.get('hypothesis')
+            }
+        
+        try:
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'
+            
+            process = await asyncio.create_subprocess_shell(
+                f"cd {workspace} && python train.py",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            
+            stdout, stderr = await process.communicate()
+            output = stdout.decode() + stderr.decode()
+            
+            if len(output) > 10000:
+                output = output[-10000:]
+            
+            import re
+            match = re.search(r"VALIDATION_SCORE:\s*(\d+\.?\d*)", output)
+            score = float(match.group(1)) if match else None
+            
+            if score is None:
+                return {
+                    "id": exp_id,
+                    "status": "no_score",
+                    "score": None,
+                    "output": output[:500],
+                    "model": exp.get('model'),
+                    "hypothesis": exp.get('hypothesis')
+                }
+            
+            return {
+                "id": exp_id,
+                "status": "success",
+                "score": score,
+                "output": output[:500],
+                "model": exp.get('model'),
+                "hypothesis": exp.get('hypothesis')
+            }
+        
+        except Exception as e:
+            return {
+                "id": exp_id,
+                "status": "error",
+                "score": None,
+                "output": str(e)[:500],
+                "model": exp.get('model'),
+                "hypothesis": exp.get('hypothesis')
+            }
 
     async def _run_analysis(self, results: List[Dict]) -> str:
         plan_workspace = Path(self.workspace_dir) / "planning"
