@@ -46,5 +46,7 @@ class Worker:
                 return False
         
         except Exception as e:
-            print(f"  ❌ {exp_id}: Error writing script - {str(e)[:100]}")
+            print(f"  ❌ {exp_id}: Error writing script - {str(e)}")
+            import traceback
+            traceback.print_exc()
             return False

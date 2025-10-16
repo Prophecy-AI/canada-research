@@ -107,10 +107,20 @@ Data: {data_dir}
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
      * Multi-label classification (multiple labels per sample): `nn.BCEWithLogitsLoss()`
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
-   - **Train/validation split:**
-     * Small datasets (<50K): test_size=0.10 (or 0.15-0.20 if many classes relative to samples)
-     * If stratified split fails (not enough samples per class), use random split without stratify
-     * For very small datasets (<1000 samples): use test_size=0.15-0.20 to ensure enough validation
+   - **Train/validation split - CRITICAL:**
+     ```python
+     # For multiclass: ensure val_size >= num_classes
+     total = len(df)
+     test_size = 0.15 if total < 10 * num_classes else 0.10
+     try:
+         X_train, X_val, y_train, y_val = train_test_split(
+             X, y, test_size=test_size, stratify=y, random_state=42
+         )
+     except ValueError:  # Not enough samples per class
+         X_train, X_val, y_train, y_val = train_test_split(
+             X, y, test_size=test_size, random_state=42
+         )
+     ```
    - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
    - Early stopping with immediate perfect score termination:
