@@ -138,7 +138,7 @@ from sklearn.preprocessing import StandardScaler
 import numpy as np
 
 # Load pretrained model, remove classifier
-backbone = torchvision.models.{model_name}(pretrained=True)
+backbone = torchvision.models.{{model_name}}(pretrained=True)
 if hasattr(backbone, 'fc'):
     backbone.fc = nn.Identity()
 elif hasattr(backbone, 'classifier'):
@@ -310,7 +310,7 @@ DO:
 **STRATEGY: bottleneck_features**
 ```python
 # Load backbone
-backbone = torchvision.models.{model_name}(pretrained=True)
+backbone = torchvision.models.{{model_name}}(pretrained=True)
 backbone.load_state_dict(torch.load('backbone.pth'))
 if hasattr(backbone, 'fc'): backbone.fc = nn.Identity()
 elif hasattr(backbone, 'classifier'): backbone.classifier = nn.Identity()
