@@ -133,4 +133,12 @@ class WriteTool(BaseTool):
             
             return f"⚠️  GPU CHECK: This script may not be using GPU!\n" + "\n".join(f"   • {hint}" for hint in hints) + "\n   • CPU training is 10-100x slower - verify GPU usage before running"
         
+        # If GPU is configured and this is a training/prediction script, remind to consult Oracle
+        if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
+            return (
+                "💡 RECOMMENDED: If this is a long-running task, before running this script, consult Oracle for code review.\n"
+                "   Ask: 'I'm about to run this long-running task. Review for: GPU usage, data leakage,\n"
+                "   label encoding bugs, parameter issues, or any logic errors.'\n"
+                "   This catches bugs BEFORE wasting compute time."
+            )        
         return ""

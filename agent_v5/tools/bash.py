@@ -52,7 +52,7 @@ class BashTool(BaseTool):
                     "timeout": {
                         "type": "number",
                         "description": "Timeout in milliseconds (max 600000, only applies to foreground execution)",
-                        "default": 120000
+                        "default": 600000
                     },
                     "background": {
                         "type": "boolean",
@@ -72,7 +72,7 @@ class BashTool(BaseTool):
             return await self._execute_background(command)
         else:
             timeout_ms = input.get("timeout", 120000)
-            timeout_s = min(timeout_ms / 1000, 600)
+            timeout_s = min(timeout_ms / 1000, 1000)
             return await self._execute_foreground(command, timeout_s)
 
     async def _execute_foreground(self, command: str, timeout_s: float) -> Dict:
