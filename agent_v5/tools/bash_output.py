@@ -108,7 +108,9 @@ class ReadBashOutputTool(BaseTool):
         runtime_s = time.time() - bg_process.start_time
 
         # Check if process is stalled (no output for 60+ seconds)
-        time_since_last_output = time.time() - bg_process.last_output_time
+        # Use getattr for backward compatibility with old BackgroundProcess instances
+        last_output_time = getattr(bg_process, 'last_output_time', bg_process.start_time)
+        time_since_last_output = time.time() - last_output_time
         stalled_hint = ""
         if time_since_last_output > 60 and bg_process.process.returncode is None:
             stalled_hint = (
