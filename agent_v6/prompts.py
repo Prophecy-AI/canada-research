@@ -86,27 +86,23 @@ WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
 Experiment: {spec}
 Data: {data_dir}
 
-**EDA Context:**
+**EDA Context (use this to understand the problem):**
 {eda_context}
 
-**TRAIN/VAL SPLIT (use train_split from spec):**
-```python
-test_size = 1 - train_split
-try:
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=test_size, stratify=y, random_state=42)
-except ValueError:
-    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=test_size, random_state=42)
-```
+**CRITICAL: Your ONLY job is to write train.py. DO NOT:**
+- Run train.py (orchestrator will run it)
+- Write summaries/documentation
+- Test imports
+- Create verification scripts
 
 **DO:**
-1. Check data structure (ls, head CSV)
-2. Extract zip files if needed
+1. Check data structure (use Bash: ls, zipinfo, head CSV)
+2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
 3. Write train.py with:
-   - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format
+   - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format (avoid 1202.0.jpg)
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
+   - Correct data loading based on structure you found
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
-   - **Use standard library implementations (torchvision.models, sklearn, xgboost, lightgbm)**
-   - **DO NOT implement custom model architectures from scratch - use pretrained/library models only**
    - **For text data:**
      * Use: `from transformers import AutoTokenizer, AutoModelForSequenceClassification`
      * Model examples: 'distilbert-base-uncased', 'bert-base-uncased', 'roberta-base'
@@ -117,10 +113,7 @@ except ValueError:
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
      * Multi-label classification (multiple labels per sample): `nn.BCEWithLogitsLoss()`
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
-   - For images: 
-     * Input size 128-224 (not 32x32)
-     * Use standard torchvision.transforms (RandomHorizontalFlip, RandomRotation, ColorJitter, Normalize)
-     * DO NOT implement custom transforms/mixup/cutmix - use torchvision only to avoid bugs
+   - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
    - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
    - Early stopping with patience 3-5 epochs
