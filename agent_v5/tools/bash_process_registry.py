@@ -96,6 +96,35 @@ class BashProcessRegistry:
         """Get all processes (returns copy for safe iteration)"""
         return self._processes.copy()
 
+    def cleanup_completed(self) -> int:
+        """
+        Remove completed processes from registry to prevent memory leaks
+
+        Returns:
+            Number of completed processes removed
+        """
+        completed_ids = [
+            shell_id for shell_id, bg_process in self._processes.items()
+            if bg_process.process.returncode is not None
+        ]
+
+        for shell_id in completed_ids:
+            bg_process = self._processes[shell_id]
+
+            # Cancel collector task if still running (shouldn't be, but safety)
+            if bg_process.collector_task and not bg_process.collector_task.done():
+                bg_process.collector_task.cancel()
+
+            # Clear references to help GC
+            bg_process.stdout_data.clear()
+            bg_process.stderr_data.clear()
+            bg_process.collector_task = None
+
+            # Remove from registry
+            del self._processes[shell_id]
+
+        return len(completed_ids)
+
     async def cleanup(self) -> int:
         """
         Kill all running processes, cancel collector tasks, and clear registry

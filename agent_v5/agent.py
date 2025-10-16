@@ -64,7 +64,7 @@ class ResearchAgent:
             self._notified_completions = set()
 
         alerts = []
-        for shell_id, bg_process in self.process_registry.processes.items():
+        for shell_id, bg_process in self.process_registry.list_all().items():
             # Check if process completed and we haven't notified yet
             if bg_process.process.returncode is not None and shell_id not in self._notified_completions:
                 self._notified_completions.add(shell_id)
