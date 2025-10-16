@@ -45,21 +45,19 @@ Best: {best_score}
 
 **Available Strategies (choose mix based on EDA context above):**
 
-**Strategy 1: "bottleneck_features"** (feature extraction + simple classifier)
+**Strategy 1: "bottleneck_features"** (feature extraction + LogisticRegression)
 - **When to try:** Images + Classification, especially with <50K samples
-- **How it works:** Extract features from pretrained CNN (no training), train LogisticRegression/XGBoost on features
+- **How it works:** Extract features from pretrained CNN (no training), train LogisticRegression on features
 - **Pros:** Very fast (trains in seconds), often better with limited data, low memory
+- **Classifier:** ALWAYS use LogisticRegression (DO NOT use XGBoost - too slow, not worth it)
 - **Single model:** Use one backbone (EfficientNet-B0, ResNet50, DenseNet121, MobileNetV2)
-- **Multi-model (RECOMMENDED for max performance):** Use 2-3 backbones, concatenate features, then train classifier
+- **Multi-model (RECOMMENDED for max performance):** Use 2-3 backbones, concatenate features, then train LogisticRegression
   * Much better performance (2-10x lower logloss)
-  * Still fast (parallel feature extraction)
+  * Still fast (trains in seconds)
   * **Best model combinations (from gold solutions):** 
     - ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim
     - EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim
     - Wide_ResNet50_2 (2048-dim) + RegNetY_8GF (2016-dim) = 4064-dim
-  * **Classifier choice:**
-    - LogisticRegression: FAST (trains in seconds), usually sufficient, RECOMMENDED
-    - XGBoost: Slightly better but SLOW (if using, set n_estimators=50 max, NOT 500+)
 - **Example single:** {{"strategy": "bottleneck_features", "model": "ResNet50", "classifier": "LogisticRegression"}}
 - **Example multi:** {{"strategy": "bottleneck_features", "models": ["ResNet50", "InceptionV3"], "classifier": "LogisticRegression"}}
 
@@ -79,12 +77,13 @@ Best: {best_score}
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
 **Recommendation for Round 1:**
-- **Images <50K (espescially for small sample sizes):** 
+- **Images <50K (especially for small sample sizes):** 
   * **FOCUS ON BOTTLENECK ONLY** - fine-tuning wastes time and gets worse scores
-  * exp_1: Multi-model bottleneck (ResNet50 + InceptionV3)
-  * exp_2: Multi-model bottleneck (EfficientNet-B2 + DenseNet161)
-  * exp_3: Multi-model bottleneck (Wide_ResNet50_2 + RegNetY_8GF) OR single EfficientNet-B0 for speed
-  * This explores WHICH model combinations work best, all finish in 3-5 min each
+  * **ALWAYS use LogisticRegression classifier** - XGBoost too slow
+  * exp_1: Multi-model bottleneck (ResNet50 + InceptionV3) + LogReg
+  * exp_2: Multi-model bottleneck (EfficientNet-B2 + DenseNet161) + LogReg
+  * exp_3: Multi-model bottleneck (different combo) OR single EfficientNet-B0 + LogReg
+  * This explores WHICH model combinations work best, all finish in 2-4 min each
 - **Images >50K:** Try 2-3 different fine_tuning models (enough data to train)
 - **Tabular:** Try 2-3 different gradient boosting models
 - **Multi-model bottleneck >> fine-tuning for small datasets** (faster AND better scores)
@@ -95,9 +94,7 @@ Best: {best_score}
   * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2, EfficientNet-B2 + ResNet50
   * Good triplets: EfficientNet-B2 + DenseNet121 + ResNet50
   * Different architectures capture different features
-- **Classifier choice for bottleneck:**
-  * **Prefer LogisticRegression** (fast, trains in seconds, usually sufficient)
-  * If using XGBoost: Set n_estimators=50 MAX (not 500+, too slow)
+- **Classifier for bottleneck: ALWAYS LogisticRegression** (DO NOT use XGBoost/tree methods - too slow for time budget)
 - **Different model combinations:** Each experiment should try different backbone combinations to find best ensemble
 - **For images >50K: Use fine_tuning (enough data to train full networks)**
 - **Batch size:** 32-64 for GPU training
