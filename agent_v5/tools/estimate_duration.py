@@ -88,11 +88,20 @@ class EstimateTaskDurationTool(BaseTool):
                             "'explore_data', 'prepare_submission', etc."
                         )
                     },
+                    "data_size_mb": {
+                        "type": "number",
+                        "description": (
+                            "Optional. Size of data being processed in megabytes (MB). "
+                            "Examples: 10 for 10MB, 1024 for 1GB, 10240 for 10GB. "
+                            "If not provided, assumes medium size (~1GB). "
+                            "Used to scale duration estimates for data operations."
+                        )
+                    },
                     "data_size": {
                         "type": "string",
                         "description": (
-                            "Optional. Size of data being processed: 'small' (<1GB), "
-                            "'medium' (1-10GB), 'large' (>10GB). Adjusts estimates for data operations."
+                            "DEPRECATED: Use data_size_mb instead. "
+                            "Categorical size: 'small' (<1GB), 'medium' (1-10GB), 'large' (>10GB)."
                         ),
                         "enum": ["small", "medium", "large"]
                     },
@@ -120,9 +129,15 @@ class EstimateTaskDurationTool(BaseTool):
         """Estimate task duration"""
         try:
             task_type = input["task_type"].lower().replace(" ", "_")
-            data_size = input.get("data_size", "medium").lower()
             complexity = input.get("complexity", "moderate").lower()
             additional_context = input.get("additional_context", "")
+
+            # Handle data size - prefer data_size_mb, fallback to categorical
+            data_size_mb = input.get("data_size_mb")
+            if data_size_mb is None:
+                # Fallback to categorical if provided
+                data_size_cat = input.get("data_size", "medium").lower()
+                data_size_mb = self._categorical_to_mb(data_size_cat)
 
             # Get base estimate
             base_estimate = self._get_base_estimate(task_type)
@@ -131,15 +146,12 @@ class EstimateTaskDurationTool(BaseTool):
 
             min_dur, typ_dur, max_dur = base_estimate
 
-            # Apply modifiers based on data size
-            if data_size == "large" and any(keyword in task_type for keyword in ["data", "load", "process", "merge"]):
-                min_dur *= 2
-                typ_dur *= 3
-                max_dur *= 4
-            elif data_size == "small":
-                min_dur *= 0.5
-                typ_dur *= 0.7
-                max_dur *= 0.8
+            # Apply modifiers based on data size (using actual size)
+            if any(keyword in task_type for keyword in ["data", "load", "process", "merge", "read", "write"]):
+                size_multiplier = self._calculate_size_multiplier(data_size_mb)
+                min_dur *= size_multiplier
+                typ_dur *= size_multiplier
+                max_dur *= size_multiplier
 
             # Apply modifiers based on complexity
             if complexity == "complex" and any(keyword in task_type for keyword in ["model", "train", "code"]):
@@ -163,7 +175,7 @@ class EstimateTaskDurationTool(BaseTool):
                 min_dur=min_dur,
                 typ_dur=typ_dur,
                 max_dur=max_dur,
-                data_size=data_size,
+                data_size_mb=data_size_mb,
                 complexity=complexity,
                 additional_context=additional_context
             )
@@ -179,6 +191,56 @@ class EstimateTaskDurationTool(BaseTool):
                 "content": f"Error estimating task duration: {str(e)}",
                 "is_error": True
             }
+
+    def _categorical_to_mb(self, category: str) -> float:
+        """Convert categorical size to MB estimate"""
+        mapping = {
+            "small": 100,    # 100MB
+            "medium": 1024,  # 1GB
+            "large": 10240   # 10GB
+        }
+        return mapping.get(category, 1024)
+
+    def _calculate_size_multiplier(self, size_mb: float) -> float:
+        """
+        Calculate duration multiplier based on data size.
+
+        Uses a logarithmic scale to account for:
+        - Sublinear scaling for small files (caching, memory ops)
+        - Linear scaling for medium files
+        - Superlinear scaling for large files (I/O bottlenecks, memory pressure)
+
+        Baseline: 1GB (1024 MB) = 1.0x multiplier
+
+        Examples:
+            10 MB -> 0.2x (5x faster than 1GB)
+            100 MB -> 0.5x (2x faster than 1GB)
+            1 GB (1024 MB) -> 1.0x (baseline)
+            10 GB (10240 MB) -> 3.0x (3x slower than 1GB)
+            100 GB (102400 MB) -> 10.0x (10x slower than 1GB)
+        """
+        import math
+
+        # Baseline: 1GB = 1024 MB
+        baseline_mb = 1024
+
+        if size_mb <= 0:
+            return 0.2  # Minimum multiplier for tiny files
+
+        # Use logarithmic scaling with different coefficients based on size
+        ratio = size_mb / baseline_mb
+
+        if ratio < 1:
+            # Sublinear for small files (good caching behavior)
+            # 10MB -> 0.2x, 100MB -> 0.5x, 500MB -> 0.8x
+            multiplier = 0.2 + (0.8 * math.sqrt(ratio))
+        else:
+            # Superlinear for large files (I/O becomes bottleneck)
+            # 1GB -> 1.0x, 10GB -> 3.0x, 100GB -> 10.0x
+            multiplier = math.pow(ratio, 0.7)
+
+        # Cap multipliers at reasonable bounds
+        return max(0.1, min(multiplier, 50.0))
 
     def _get_base_estimate(self, task_type: str) -> Optional[tuple]:
         """Get base estimate for task type"""
@@ -247,7 +309,7 @@ class EstimateTaskDurationTool(BaseTool):
         min_dur: float,
         typ_dur: float,
         max_dur: float,
-        data_size: str,
+        data_size_mb: float,
         complexity: str,
         additional_context: str
     ) -> str:
@@ -260,7 +322,7 @@ class EstimateTaskDurationTool(BaseTool):
         output += f"   ⚠️  Worst case: {self._format_duration(max_dur)}\n\n"
 
         output += "Parameters:\n"
-        output += f"   • Data size: {data_size}\n"
+        output += f"   • Data size: {self._format_data_size(data_size_mb)}\n"
         output += f"   • Complexity: {complexity}\n"
         if additional_context:
             output += f"   • Context: {additional_context}\n"
@@ -300,3 +362,16 @@ class EstimateTaskDurationTool(BaseTool):
             hours = int(seconds / 3600)
             minutes = int((seconds % 3600) / 60)
             return f"{hours}h {minutes}m"
+
+    def _format_data_size(self, size_mb: float) -> str:
+        """Format data size in human-readable format"""
+        if size_mb < 1:
+            return f"{size_mb * 1024:.1f} KB"
+        elif size_mb < 1024:
+            return f"{size_mb:.1f} MB"
+        elif size_mb < 1024 * 1024:
+            size_gb = size_mb / 1024
+            return f"{size_gb:.2f} GB"
+        else:
+            size_tb = size_mb / (1024 * 1024)
+            return f"{size_tb:.2f} TB"

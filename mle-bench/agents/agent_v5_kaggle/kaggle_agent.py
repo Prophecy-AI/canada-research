@@ -1,6 +1,7 @@
 """
 KaggleAgent - Extends ResearchAgent with Kaggle competition system prompt
 """
+import os
 from pathlib import Path
 from agent_v5.agent import ResearchAgent
 from agent_v5.tools.timer import TimerTool
@@ -17,6 +18,10 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
     except Exception as e:
         instructions = f"(Could not read instructions: {e})"
 
+    # Check if EstimateTaskDuration tool is enabled
+    enable_estimate_duration = os.getenv("ENABLE_ESTIMATE_DURATION", "0") == "1"
+    estimate_duration_line = "\n- EstimateTaskDuration: Get estimates for how long tasks should take (useful for planning and detecting stalls)" if enable_estimate_duration else ""
+
     system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. Your explicit objective is to deliver **gold-medal (top-1%) leaderboard performance** within the resource and time limits.
 
 **Your Environment:**
@@ -31,8 +36,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - Edit: Modify existing files
 - Glob: Find files by pattern (e.g., "*.csv")
 - Grep: Search file contents
-- Timer: Check elapsed time since competition started (helps manage time budget)
-- EstimateTaskDuration: Get estimates for how long tasks should take (useful for planning and detecting stalls)
+- Timer: Check elapsed time since competition started (helps manage time budget){estimate_duration_line}
 
 - **Bash: Execute shell commands (background parameter REQUIRED)**
 
@@ -99,40 +103,14 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
 **Phase 1: Setup & Baseline (Use Opus 4.1, use for thinking process)**
 
-1. **Understand Problem**
+1. **Understand Problem** ← **COMPLETE THIS STEP, THEN YOUR TASK IS DONE**
    - Read instructions.txt - what are we predicting? evaluation metric?
    - Check sample_submission.csv format
+   - **AFTER COMPLETING THIS STEP: Report your understanding and TERMINATE. Your job is complete.**
 
-2. **Initial EDA** (write `eda.py`, run foreground)
-   - Data shape, types, missing values, target distribution
-   - Identify data type: tabular/image/text/time-series
-   - Form initial hypotheses about what matters
+**YOUR ENTIRE TASK IS ONLY STEP 1. DO NOT PROCEED TO ANY OTHER STEPS.**
 
-3. **Baseline Submission** (CRITICAL: get this working first)
-   - Write separate scripts: `train.py` (training only) + `predict.py` (predictions only)
-   - Simple model: LogisticRegression for classification, Ridge for regression
-   
-   **CRITICAL: NO CROSS-VALIDATION FOR BASELINE - DO NOT USE FOLDS**
-   ```python
-   # CORRECT BASELINE APPROACH:
-   from sklearn.model_selection import train_test_split
-   X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2)
-   model.fit(X_train, y_train)
-   val_score = evaluate(model, X_val, y_val)
-   print(f"Validation score: {{val_score}}")
-   
-   # WRONG - DO NOT DO THIS FOR BASELINE:
-   # from sklearn.model_selection import StratifiedKFold
-   # kf = StratifiedKFold(n_splits=5)  # ← NO! Takes 5x longer
-   ```
-   
-   - Start training in BACKGROUND:
-     ```
-     {{"command": "python train.py", "background": true}}
-     ```
-   - Monitor with ReadBashOutput until COMPLETED
-   - Generate first submission.csv with predict.py (foreground, fast)
-   - **You now have a working baseline to improve upon**
+---
 
 **Phase 2: Hypothesis-Driven Iteration Loop (Until performance improvement becomes marginal (0.5% or less))**
 
@@ -327,7 +305,8 @@ class KaggleAgent(ResearchAgent):
             get_start_time=lambda: self.start_time
         ))
 
-        # Register task duration estimation tool
-        self.tools.register(EstimateTaskDurationTool(
-            workspace_dir=workspace_dir
-        ))
+        # Register task duration estimation tool (toggleable via ENABLE_ESTIMATE_DURATION env var)
+        if os.getenv("ENABLE_ESTIMATE_DURATION", "0") == "1":
+            self.tools.register(EstimateTaskDurationTool(
+                workspace_dir=workspace_dir
+            ))

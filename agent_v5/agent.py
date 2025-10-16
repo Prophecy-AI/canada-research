@@ -22,6 +22,7 @@ from agent_v5.tools.list_bash import ListBashProcessesTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
 from agent_v5.tools.oracle import OracleTool
+from agent_v5.tools.plan import PlanTaskTool
 
 
 class ResearchAgent:
@@ -40,6 +41,10 @@ class ResearchAgent:
 
     def _register_core_tools(self):
         """Register all core tools"""
+        # Planning tool (uses conversation history for context)
+        self.tools.register(PlanTaskTool(self.workspace_dir, lambda: self.conversation_history))
+
+        # Core execution tools
         self.tools.register(BashTool(self.workspace_dir, self.process_registry))
         self.tools.register(ReadBashOutputTool(self.workspace_dir, self.process_registry))
         self.tools.register(KillShellTool(self.workspace_dir, self.process_registry))
