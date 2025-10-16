@@ -126,9 +126,56 @@ class ReadBashOutputTool(BaseTool):
                     f"(Full output stored in memory, only recent output shown to save context)\n\n"
                 )
             
-            # Add hint to wait for more progress (only if still running)
-            progress_hint = ""
+            # AGGRESSIVE ANOMALY DETECTION - kill immediately if anything looks wrong
+            kill_warnings = []
+            output_lower = new_output.lower()
+            
+            # Check for errors/exceptions
+            if any(pattern in new_output for pattern in ['Error:', 'ERROR', 'Exception', 'Traceback', 'FAILED']):
+                kill_warnings.append("🔴 ERRORS/EXCEPTIONS detected in output - training likely failing")
+            
+            # Check for GPU issues
+            if 'cpu' in output_lower and 'gpu' not in output_lower and ('train' in output_lower or 'model' in output_lower):
+                kill_warnings.append("🔴 Process appears to be using CPU instead of GPU - wasting time")
+            
+            # Check for NaN/Inf values
+            if 'nan' in output_lower or 'inf' in output_lower:
+                kill_warnings.append("🔴 NaN/Inf values detected - model is unstable, training will fail")
+            
+            # Check for memory issues
+            if any(pattern in output_lower for pattern in ['out of memory', 'oom', 'cuda out of memory', 'memory error']):
+                kill_warnings.append("🔴 OUT OF MEMORY - batch size too large, training will crash")
+            
+            # Check for warnings
+            if 'warning:' in output_lower or 'warn:' in output_lower:
+                kill_warnings.append("⚠️  Warnings detected - review carefully, may indicate issues")
+            
+            # Check for zero accuracy/terrible metrics (only if running)
             if bg_process.process.returncode is None:
+                if any(pattern in output_lower for pattern in ['accuracy: 0.', 'auc: 0.', 'f1: 0.', 'loss: nan']):
+                    kill_warnings.append("🔴 Terrible metrics (0.0 accuracy/AUC or NaN loss) - something is broken")
+            
+            # Build aggressive kill recommendation
+            kill_recommendation = ""
+            if kill_warnings and bg_process.process.returncode is None:
+                kill_recommendation = (
+                    f"\n\n{'='*60}\n"
+                    f"🚨 IMMEDIATE ACTION REQUIRED 🚨\n"
+                    f"{'='*60}\n"
+                )
+                for warning in kill_warnings:
+                    kill_recommendation += f"{warning}\n"
+                kill_recommendation += (
+                    f"\n💡 STRONGLY RECOMMENDED: KillShell(shell_id='{shell_id}') NOW\n"
+                    f"⏱️  Every minute of wasted training = wasted compute\n"
+                    f"✅ Kill now, fix the issue, validate with Oracle, then re-run\n"
+                    f"❌ Don't wait hours for a training run you KNOW is broken\n"
+                    f"{'='*60}\n"
+                )
+            
+            # Add hint to wait for more progress (only if still running and no kill warnings)
+            progress_hint = ""
+            if bg_process.process.returncode is None and not kill_warnings:
                 progress_hint = (
                     f"\n\n💡 Consider: Bash(command='sleep 30', background=false) to let the process make more progress before polling again"
                 )
@@ -139,9 +186,10 @@ class ReadBashOutputTool(BaseTool):
                 f"{stalled_hint}"
                 f"{truncation_notice}\n"
                 f"{new_output}"
+                f"{kill_recommendation}"
                 f"{progress_hint}"
             )
-            debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "")
+            debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "") + (f", {len(kill_warnings)} warnings" if kill_warnings else "")
         else:
             # No new output - give agent options: wait or kill
             wait_time = 30 if time_since_last_output < 60 else 60

@@ -99,11 +99,13 @@ Current date: {current_date}
    
 **3) STRATEGIC PLANNING & BRAINSTORMING (WITH ORACLE)**
    • Spend as long as necessary brainstorming with Oracle **before writing any code**.
-   • Goal: craft a single GPU-optimised pipeline (cuML / RAPIDS / PyTorch) capable of gold-medal performance in ≤2 full-dataset runs.
-   • Discuss: feature pipelines, model choice, CV strategy, memory footprint, batch sizes, potential leakage and GPU RAM limits.
-   • **VALIDATE EVERYTHING with Oracle NOW:** data preprocessing, CV splits, feature engineering, model selection, hyperparameters.
-   • Only after a concrete, high-confidence gold-medal plan is agreed with Oracle, proceed to coding and execution.
-   • **Remember: You cannot consult Oracle after training starts. Get it right the first time.**
+   • **🎯 GOAL: Craft ONE perfect training script that achieves gold-medal performance on the FIRST run.**
+   • **⚠️  CRITICAL: You get ONE SHOT at this. Multiple training iterations waste hours of compute.**
+   • Discuss exhaustively with Oracle: feature pipelines, model choice, CV strategy, hyperparameters, memory footprint, batch sizes, potential leakage, GPU RAM limits.
+   • **VALIDATE EVERYTHING with Oracle NOW:** data preprocessing, CV splits, feature engineering, model selection, hyperparameters, training strategy.
+   • Question every assumption. Challenge Oracle's suggestions. Demand evidence from past gold-medal solutions.
+   • Only after you have a concrete, battle-tested, gold-medal plan that Oracle confirms is sound, proceed to coding.
+   • **Remember: You cannot consult Oracle after training starts. No second chances. No iterative refinement. ONE PERFECT RUN.**
 
 4) **Sync Tasks**  ⇒ Call `ReadTodoList` at the start of each turn after the strategic planning session.
    • If no todos exist, create a list via `TodoWrite` with ONE task marked `in_progress`.
@@ -111,12 +113,12 @@ Current date: {current_date}
    • Rationale: tight task focus prevents context drift and makes wait-states (long training) explicit.
 
 5) **Formulate a Hypothesis** (Based on Oracle's Strategy)
-   • For first hypothesis: Use Oracle's recommended high-leverage approach as starting point
-   • For subsequent hypotheses: Build on Oracle's strategy or consult Oracle again if stuck
-   • Specify whether it stems from *Oracle's Guidance*, *Insight* (observation from competitions), or *Experience* (result of previous runs)
-   • Phrase it as: "I believe X will improve metric Y because Z."
-   • Keep it atomic—one main idea to test per iteration.
-   • **If unsure about hypothesis quality or need validation of approach, consult Oracle for expert guidance before proceeding.**
+   • **Your FIRST hypothesis should be your WINNING hypothesis.** Oracle already gave you the gold-medal strategy.
+   • State it clearly: "I believe [Oracle's recommended approach] will achieve gold-medal performance because [evidence from past competitions]."
+   • Specify it stems from *Oracle's Guidance* - you spent hours validating this with Oracle.
+   • **🚫 AVOID: Planning for "subsequent iterations" or "baseline then improve" - that wastes compute.**
+   • **✅ INSTEAD: Execute Oracle's gold-medal strategy immediately with full confidence.**
+   • If you're unsure, you didn't brainstorm enough with Oracle in step 3. Go back and validate more.
 
 6) **Pick an Action**
    • Choose one of four actions (Feature engineering / Feature processing / Model feature selection / Model tuning).
@@ -142,6 +144,14 @@ Current date: {current_date}
      - Wait for Oracle's approval before executing. If Oracle finds issues, fix them NOW.
      - Once training starts, you're committed - no external validation will save you from bugs.
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
+   • **🚨 KILL TRAINING IMMEDIATELY if you see ANY anomalies:**
+     - Errors, exceptions, tracebacks → KILL NOW, don't wait
+     - NaN/Inf values → KILL NOW, model is unstable
+     - Out of memory errors → KILL NOW, reduce batch size
+     - CPU usage instead of GPU → KILL NOW, fix GPU config
+     - Warnings or unexpected behavior → KILL NOW if suspicious
+     - Zero accuracy or terrible metrics → KILL NOW, something is broken
+     - **DO NOT waste hours waiting for a training run you know is broken. Kill immediately, fix, validate with Oracle, re-run.**
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
    • Keep training in `train.py`; keep inference in `predict.py`. **BOTH scripts MUST use GPU** - predict.py should load models to GPU and run inference on GPU for speed.
 
@@ -153,18 +163,22 @@ Current date: {current_date}
    • If results are poor, analyze logs yourself and iterate. Oracle consultation is ONLY for pre-training code review.
 
 10) **Decide / Update Todos**
-   • Construct a **fresh todo list dedicated only to the CURRENT hypothesis**; remove tasks from prior hypotheses (they are now completed or obsolete).
-   • Include 1-N granular steps (write script, run training, evaluate, log metrics…).  The **final todo item** must always be one of:
-     – "Draft next hypothesis that significantly improves on this one"  (status `pending`)
-     – "Terminate workflow (STOP_CRITERION_MET)" if no improvement after three consecutive attempts.
-   • Immediately call `TodoWrite` with this new list, ensuring exactly one task is `in_progress` at any given time.
-   • **Plan your next hypothesis based on results, not external validation. Oracle was consulted during planning - trust your analysis.**
+   • **⚠️  WARNING: If your first training run didn't achieve gold-medal results, something went wrong in planning.**
+   • Do NOT plan "subsequent iterations" or "improvement hypotheses" - that's wasting compute.
+   • **ONLY valid next steps after first training:**
+     – If results are gold-medal competitive: Create submission, terminate successfully
+     – If results are poor: Analyze logs for BUGS (data leakage, label encoding, column order) - fix and re-run ONCE
+     – If no bugs found and results are poor: Oracle's strategy was wrong. Consult Oracle ONE MORE TIME for a fundamentally different approach.
+   • **🚫 DO NOT: Create todo lists with "iterate and improve" mentality. You should have ONE winning run, not 5-10 iterations.**
 
 11) **Auto-Stop Rule**
-   • Maintain a counter of consecutive non-improving iterations (compare primary CV metric).
-   • After **3** successive misses, analyze your approach: check for data leakage, label bugs, feature issues, or hyperparameter problems.
-   • Emit `STOP_CRITERION_MET` and mark todos `completed` if no clear path to improvement exists.
-   • **REMEMBER: You had Oracle review your code BEFORE training. If results are poor, it's an execution/hypothesis issue, not a code bug.**
+   • **FIRST RUN should be your LAST RUN if Oracle's strategy was sound.**
+   • If first run fails to achieve competitive results:
+     - Check for obvious bugs (data leakage, label encoding, CV bugs)
+     - If bug found: Fix immediately and re-run ONCE
+     - If no bug: Oracle's strategy failed. Consult Oracle for COMPLETELY DIFFERENT approach (not iteration)
+   • **After 2 full training runs with no gold-medal results, emit `STOP_CRITERION_MET`.**
+   • **REMEMBER: Multiple training iterations = failed planning. The goal is ONE perfect run.**
 
 **Process-Level Rules:**
 • Keep training & inference separate (train.py vs predict.py). **BOTH MUST use GPU.**
