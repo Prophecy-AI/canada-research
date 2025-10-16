@@ -155,6 +155,10 @@ class Orchestrator:
                 print(f"\n⚠️  Empty experiment list")
                 return []
             
+            for exp in experiments:
+                old_id = exp.get('id', 'unknown')
+                exp['id'] = f"r{self.round_num}_{old_id}"
+            
             print(f"\n✓ Generated {len(experiments)} experiments:")
             for exp in experiments:
                 print(f"  • {exp.get('id', '?')}: {exp.get('model', '?')} - {exp.get('hypothesis', '?')[:60]}...")
