@@ -23,6 +23,7 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - Submission directory: {submission_dir}/ (write submission.csv here from predict.py)
 - Working directory: the agent's workspace (create scripts, logs, and artifacts here)
 - **All packages available on Anaconda are automatically available for you** (no installation needed)
+- **CRITICAL GPU ASSUMPTION: Although you may see A100 in nvidia-smi, ALWAYS assume you have NVIDIA A10 GPU (24GB VRAM, not 40GB). Plan batch sizes and memory usage for A10 specs. This prevents OOM errors in production environments where A10 is standard.**
 Current date: {current_date}
 
 **Competition Instructions (verbatim):**
@@ -108,7 +109,14 @@ Current date: {current_date}
      - PyTorch DataLoader: num_workers=-1, pin_memory=True
      - Print at start: "Using X CPU cores, batch_size=Y, GPU RAM=Z GB"
    • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: GPU usage, resource utilization, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
-   • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
+   • **CRITICAL WORKFLOW - PARALLEL EXECUTION:**
+     1. Write train.py and validate with Oracle
+     2. Launch training: `Bash(command="python -u train.py", background=true)`
+     3. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
+     4. Validate predict.py with Oracle if needed
+     5. Monitor training progress occasionally (every 60-120s, not more frequent)
+     6. When training completes, run predict.py to generate submission
+   • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤60 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
    • Keep training in `train.py`; keep inference in `predict.py`. **BOTH scripts MUST use GPU** - predict.py should load models to GPU and run inference on GPU for speed.
 
@@ -179,19 +187,33 @@ Current date: {current_date}
 • **predict.py MUST load models to GPU** (model.to('cuda') immediately after loading)
 • **If slow (<2GB/min), check GPU:** `nvidia-smi` or `torch.cuda.is_available()`
 
-**Resource Maximization Rules (MANDATORY):**
+**Resource Maximization Rules (MANDATORY - Assume A10 24GB VRAM):**
 • **CPU:** Always n_jobs=-1 (all cores)
-• **GPU (A10 24GB VRAM):** Max batch sizes. Start large, reduce by 2x if OOM.
+• **GPU (Assume A10 24GB VRAM):** Max batch sizes for A10. Start large, reduce by 2x if OOM.
   - **Transformers:** batch_size=256-512 (small models), 64-128 (base), 8-32 (large). Use multiples of 8.
-  - **CNNs:** batch_size=512-1024 (ResNet-50), 256-512 (EfficientNet), 128-256 (ViT)
+  - **CNNs:** batch_size=64-128 (EfficientNet-B4/B5), 32-64 (EfficientNet-B6/B7), 128-256 (ResNet-50)
+  - **Image Classification (224x224):** batch_size=64-128 for EfficientNet/ResNet
+  - **Image Classification (higher res):** batch_size=32-64 for 384x384+
   - **Tabular NNs:** batch_size=4096-8192
   - **Tree models:** No batching. Set max_bin=63 for A10.
-• **DataLoader:** num_workers=os.cpu_count(), pin_memory=True
-• **Mixed Precision:** Enables 3x speedup + 2x larger batches
-• **Monitor:** Run `watch -n 1 nvidia-smi` during training. Target >80% GPU util. Low util = batch too small or CPU bottleneck.
+• **DataLoader:** num_workers=min(8, os.cpu_count()//2), pin_memory=True, prefetch_factor=2
+• **Mixed Precision (CRITICAL for speed):** Enables 2-3x speedup + 2x larger batches
+  ```python
+  from torch.cuda.amp import autocast, GradScaler
+  scaler = GradScaler()
+  # In training loop:
+  with autocast():
+      output = model(data)
+      loss = criterion(output, target)
+  scaler.scale(loss).backward()
+  scaler.step(optimizer)
+  scaler.update()
+  ```
+• **Monitor GPU utilization:** Low util (<50%) = batch too small or CPU bottleneck (increase batch or num_workers)
 • **MANDATORY print at start:**
   ```python
   print(f"RESOURCES: {{os.cpu_count()}} CPU cores, batch={{BATCH_SIZE}}, GPU={{torch.cuda.get_device_name(0)}}, Mixed Precision={{'ON' if USE_AMP else 'OFF'}}")
+  print(f"GPU Memory: {{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}} GB")
   ```
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**
