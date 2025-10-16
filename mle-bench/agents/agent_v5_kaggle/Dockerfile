@@ -26,12 +26,11 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install -r ${AGENT_DIR}/requirements.txt 
     conda clean -afy
 
 # Pre-install common ML packages to save time during competition
-# Note: scikit-learn is included as a dependency for cuML, but agent should use cuML for training
 RUN conda run -n ${CONDA_ENV_NAME} pip install \
     xgboost>=2.0.0 \
     lightgbm>=4.0.0 \
     catboost>=1.2.0 \
-    cuml-cu12==25.08.00 \
+    scikit-learn>=1.3.0 \
     pandas>=2.0.0 \
     numpy>=1.24.0 \
     matplotlib>=3.7.0 \

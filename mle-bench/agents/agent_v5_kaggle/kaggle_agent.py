@@ -23,8 +23,6 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - Submission directory: {submission_dir}/ (write submission.csv here from predict.py)
 - Working directory: the agent's workspace (create scripts, logs, and artifacts here)
 - **All packages available on Anaconda are automatically available for you** (no installation needed)
-- **CRITICAL: DO NOT use scikit-learn for training. Use cuML (RAPIDS) instead - GPU-accelerated with same API**
-  (sklearn is installed as a dependency for cuML, but you MUST use cuML for all ML tasks)
 Current date: {current_date}
 
 **Competition Instructions (verbatim):**
@@ -114,8 +112,7 @@ Current date: {current_date}
 
 6) **Execute**
    • Oracle has already provided a gold-medal strategy - execute that plan, not generic baselines
-   • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected, cuML: GPU automatic). CPU training is 10-100x slower and wastes time.**
-   • **USE cuML for traditional ML:** Replace sklearn with cuML (from cuml.linear_model import LogisticRegression). Same API, but GPU-accelerated.
+   • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
    • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: GPU usage, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤30 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
@@ -156,19 +153,12 @@ Current date: {current_date}
 
 **GPU Usage Rules (MANDATORY):**
 • **EVERY training AND inference script (train.py AND predict.py) MUST explicitly use GPU.** Verify when writing code.
-• **CPU-INTENSIVE TRAINING IS BANNED.** All training must use GPU or be <5 seconds total.
 • PyTorch: model.to('cuda'), data.to('cuda'), or device = torch.device('cuda')
 • XGBoost: params = {{'tree_method': 'gpu_hist', 'gpu_id': 0, ...}}
 • LightGBM: params = {{'device': 'gpu', 'gpu_platform_id': 0, 'gpu_device_id': 0, ...}}
 • TensorFlow/Keras: GPU auto-detected (verify with tf.config.list_physical_devices('GPU'))
 • CatBoost: task_type='GPU'
-• **cuML (RAPIDS): MANDATORY for traditional ML (LogisticRegression, RandomForest, KMeans, etc.)**
-  - from cuml.linear_model import LogisticRegression
-  - from cuml.ensemble import RandomForestClassifier
-  - from cuml.svm import SVC
-  - from cuml.neighbors import KNeighborsClassifier
-  - All cuML models run on GPU automatically (50-100x faster than sklearn)
-• **BANNED: scikit-learn for training** (sklearn is installed as cuML dependency, but DO NOT use for training - it runs on CPU)
+• Scikit-learn: CPU-only (acceptable for fast models like LogisticRegression, but prefer GPU alternatives)
 • **predict.py MUST load models to GPU before inference** - model.to('cuda') immediately after loading
 • **If training OR inference seems slow, immediately check GPU usage with nvidia-smi or print(torch.cuda.is_available())**
 • CPU training/inference is 10-100x slower - treat it as a bug to fix immediately
