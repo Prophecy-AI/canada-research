@@ -130,6 +130,7 @@ except ValueError:
    - Print as "VALIDATION_SCORE: X.XXXX" where X.XXXX is the competition metric value
    - All experiments MUST report the same metric for fair comparison
    - Save model with `torch.save(model.state_dict(), 'model.pth')`
+   - **DO NOT generate test predictions in train.py - that's done separately in submission phase**
 4. Respond "READY" immediately
 
 Tools: Bash, Read, Write"""
