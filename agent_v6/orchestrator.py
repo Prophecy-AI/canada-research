@@ -112,8 +112,7 @@ class Orchestrator:
             competition_id=self.competition_id,
             context=context,
             round_num=self.round_num,
-            best_score=self.best_score,
-            num_experiments=3
+            best_score=self.best_score
         )
         
         agent = Agent(str(plan_workspace), prompt, tools)
@@ -140,36 +139,19 @@ class Orchestrator:
             return []
 
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:
-        print(f"\n→ Step 1: Writing {len(experiments)} train.py scripts in parallel...")
+        print(f"\n→ Writing & running {len(experiments)} experiments in parallel...")
         
-        workers = []
+        tasks = []
         for exp in experiments:
             exp_workspace = Path(self.workspace_dir) / "experiments" / exp['id']
-            worker = Worker(exp, str(exp_workspace), self.data_dir, self.eda_summary)
-            workers.append((exp, worker, exp_workspace))
+            tasks.append(self._run_single_experiment(exp, exp_workspace))
         
-        script_results = await asyncio.gather(
-            *[w.write_script() for _, w, _ in workers],
-            return_exceptions=True
-        )
+        training_results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        print(f"✓ Scripts written")
-        
-        print(f"\n→ Step 2: Running {len(experiments)} train.py files in PARALLEL...")
-        
-        training_tasks = []
-        for i, (exp, worker, exp_workspace) in enumerate(workers):
-            if script_results[i] is True:
-                training_tasks.append(self._run_training(exp, exp_workspace))
-            else:
-                training_tasks.append(asyncio.sleep(0))
-        
-        training_results = await asyncio.gather(*training_tasks, return_exceptions=True)
-        
-        print(f"\n✓ All training completed")
+        print(f"\n✓ All experiments completed")
         
         formatted_results = []
-        for i, (exp, _, exp_workspace) in enumerate(workers):
+        for i, exp in enumerate(experiments):
             if isinstance(training_results[i], dict):
                 result = training_results[i]
                 formatted_results.append(result)
@@ -181,6 +163,7 @@ class Orchestrator:
                 if result['status'] == 'success' and result['score'] is not None:
                     if result['score'] > self.best_score:
                         self.best_score = result['score']
+                        exp_workspace = Path(self.workspace_dir) / "experiments" / result['id']
                         self.best_experiment = {
                             "id": result['id'],
                             "model": result['model'],
@@ -200,6 +183,36 @@ class Orchestrator:
         
         return formatted_results
     
+    async def _run_single_experiment(self, exp: Dict, workspace: Path) -> Dict:
+        exp_id = exp['id']
+        workspace.mkdir(parents=True, exist_ok=True)
+        
+        try:
+            worker = Worker(exp, str(workspace), self.data_dir, self.eda_summary)
+            success = await worker.write_script()
+            
+            if not success:
+                return {
+                    "id": exp_id,
+                    "status": "error",
+                    "score": None,
+                    "output": "Failed to write train.py",
+                    "model": exp.get('model'),
+                    "hypothesis": exp.get('hypothesis')
+                }
+            
+            return await self._run_training(exp, workspace)
+        
+        except Exception as e:
+            return {
+                "id": exp_id,
+                "status": "error",
+                "score": None,
+                "output": str(e)[:500],
+                "model": exp.get('model'),
+                "hypothesis": exp.get('hypothesis')
+            }
+    
     async def _run_training(self, exp: Dict, workspace: Path) -> Dict:
         exp_id = exp['id']
         train_py = workspace / "train.py"
@@ -215,46 +228,62 @@ class Orchestrator:
             }
         
         try:
+            print(f"  → {exp_id}: Running train.py...")
+            
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
             
             process = await asyncio.create_subprocess_shell(
-                f"cd {workspace} && python train.py",
+                f"cd {workspace} && python train.py 2>&1",
                 stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
                 env=env
             )
             
-            stdout, stderr = await process.communicate()
-            output = stdout.decode() + stderr.decode()
+            stdout, _ = await process.communicate()
+            output = stdout.decode()
             
-            if len(output) > 10000:
-                output = output[-10000:]
+            error_log = workspace / "train_error.log"
+            error_log.write_text(output)
+            
+            if process.returncode != 0:
+                print(f"  ❌ {exp_id}: train.py failed (exit code {process.returncode})")
+                return {
+                    "id": exp_id,
+                    "status": "error",
+                    "score": None,
+                    "output": output[-1000:] if len(output) > 1000 else output,
+                    "model": exp.get('model'),
+                    "hypothesis": exp.get('hypothesis')
+                }
             
             import re
             match = re.search(r"VALIDATION_SCORE:\s*(\d+\.?\d*)", output)
             score = float(match.group(1)) if match else None
             
             if score is None:
+                print(f"  ⚠️ {exp_id}: No score found in output")
                 return {
                     "id": exp_id,
                     "status": "no_score",
                     "score": None,
-                    "output": output[:500],
+                    "output": output[-1000:] if len(output) > 1000 else output,
                     "model": exp.get('model'),
                     "hypothesis": exp.get('hypothesis')
                 }
             
+            print(f"  ✓ {exp_id}: Score {score:.4f}")
             return {
                 "id": exp_id,
                 "status": "success",
                 "score": score,
-                "output": output[:500],
+                "output": output[-500:] if len(output) > 500 else output,
                 "model": exp.get('model'),
                 "hypothesis": exp.get('hypothesis')
             }
         
         except Exception as e:
+            print(f"  ❌ {exp_id}: Exception - {str(e)[:100]}")
             return {
                 "id": exp_id,
                 "status": "error",

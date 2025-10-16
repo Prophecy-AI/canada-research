@@ -1,95 +1,95 @@
-EDA_PROMPT = """You are an expert machine learning engineer analyzing Kaggle competition data. Optimize for speed while maintaining insight quality.
+EDA_PROMPT = """ML engineer: Analyze data FAST. Minimize output.
 
 Competition: {competition_id}
-Data directory: {data_dir}
-Instructions file: {instructions_path}
+Data: {data_dir}
+Instructions: {instructions_path}
 
-Your task:
-1. Read the competition instructions at {instructions_path}
-2. Find all data files (train.csv, test.csv, sample_submission.csv)
-3. Write eda.py to analyze key characteristics
-4. Run eda.py
-5. Form initial hypotheses about what approaches will work
+**Task:** Read instructions, write+run eda.py. Output findings in <3 sentences total.
 
-Focus on:
-- Data shape, types, missing values, target distribution
-- Data type: tabular/image/text/time-series
-- Key patterns that suggest specific model types
-- What 1-2 ML algorithms are most likely to succeed
+**Output format:**
+Data: [type, shape]
+Models: [1-2 GPU models]
+Why: [1 sentence]
 
-**CRITICAL**: All training must use GPU, not CPU. Recommend models that can leverage GPU (XGBoost with gpu_hist, PyTorch models).
-
-Be decisive. Output your findings and recommend 1-2 specific model types with justification."""
+GPU models: XGBoost (tree_method='gpu_hist'), PyTorch"""
 
 
-PLANNING_PROMPT = """You are an expert ML strategist planning experiments. Be selective - quality over quantity.
+PLANNING_PROMPT = """ML strategist: Design 1-3 experiments. Prefer FEWER (use 1 if confident).
 
 Competition: {competition_id}
-Context: {context}
+EDA: {context}
 Round: {round_num}
-Previous best: {best_score}
+Best: {best_score}
 
-Your task: Plan {num_experiments} focused experiments to test in parallel.
+**Task:** Output JSON (1-3 experiments). Use 1 if confident, 2-3 if testing hypotheses.
 
-Critical principles:
-- Each experiment tests ONE hypothesis
-- If previous algorithm worked exceptionally well, iterate on it (don't switch models)
-- Choose 1-2 ML algorithms based on data characteristics, be confident in your selection
-- Simple often beats complex - don't over-engineer
-- **Ensure all experiments use GPU, not CPU** (device='cuda', tree_method='gpu_hist')
-
-Output ONLY valid JSON (no other text):
+```json
 [
   {{
     "id": "exp_1",
     "model": "XGBoost",
-    "features": {{"type": "tfidf", "max_features": 10000, "ngram_range": [1, 2]}},
-    "hyperparameters": {{"max_depth": 6, "learning_rate": 0.1, "n_estimators": 100}},
-    "hypothesis": "XGBoost with bigrams will capture text patterns better than unigrams",
+    "features": {{"type": "...", "details": "..."}},
+    "hyperparameters": {{"tree_method": "gpu_hist", "device": "cuda", ...}},
+    "hypothesis": "1 sentence"
   }}
 ]
-
-Models available: XGBoost, LightGBM, CatBoost, RandomForest, LogisticRegression, Ridge
-Python packages: pandas, numpy, scikit-learn, xgboost, lightgbm, catboost"""
-
-
-WORKER_PROMPT = """You are writing a training script for an ML experiment. Write ONLY the train.py file - do NOT run it.
-
-Experiment specification:
-{spec}
-
-Data info from EDA:
-{eda_context}
-
-Data directory: {data_dir}
-Your workspace: {workspace_dir}
-
-Your ONLY task:
-Write train.py that implements the experiment EXACTLY as specified.
-
-train.py requirements:
-- Load data from {data_dir} (images in train.zip, test.zip; labels in train.csv)
-- Implement exact model, features, hyperparameters from specification
-- Use train/validation split (80/20) with train_test_split, random_state=42
-- DO NOT use cross-validation (single experiment)
-- Apply SAME preprocessing to train and validation
-- Print final score: "VALIDATION_SCORE: 0.847" (must be exact format)
-- Handle errors gracefully (try/except)
-- Save model as: model.pkl
-- **CRITICAL: USE GPU** - device='cuda', tree_method='gpu_hist'
-
-Code structure:
-```python
-from sklearn.model_selection import train_test_split
-X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-
-# GPU: model.cuda() or device='cuda' or tree_method='gpu_hist'
-# train, evaluate
-print(f"VALIDATION_SCORE: {{val_score}}")
-pickle.dump(model, open('model.pkl', 'wb'))
 ```
 
-Write train.py then respond with "READY" - nothing else.
+Models: XGBoost (tree_method='gpu_hist'), LightGBM (device='gpu'), CatBoost, RandomForest, LogisticRegression, Ridge"""
+
+
+WORKER_PROMPT = """Write train.py for ML experiment. NO running, NO exploration - just write the file.
+
+Experiment: {spec}
+EDA context: {eda_context}
+Data: {data_dir}
+Workspace: {workspace_dir}
+
+**Requirements:**
+- Load data from {data_dir} (train.zip, test.zip, train.csv, sample_submission.csv)
+- Implement model/features/hyperparameters from spec
+- 80/20 train/val split (random_state=42)
+- Print "VALIDATION_SCORE: 0.847" (exact format)
+- Save model.pkl
+- GPU: device='cuda', tree_method='gpu_hist'
+- Handle errors with try/except
+
+**For IMAGE data (zip files):**
+```python
+from zipfile import ZipFile
+from PIL import Image
+import numpy as np
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+df = pd.read_csv('{data_dir}/train.csv')
+
+def load_images_from_zip(zip_path, image_ids):
+    images = []
+    with ZipFile(zip_path, 'r') as z:
+        for img_id in image_ids:
+            img_data = z.read(f'train/{{img_id}}')
+            img = Image.open(io.BytesIO(img_data))
+            images.append(np.array(img))
+    return np.array(images)
+
+X = load_images_from_zip('{data_dir}/train.zip', df['id'])
+y = df['has_cactus'].values
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+```
+
+**For TABULAR data (csv):**
+```python
+import pandas as pd
+from sklearn.model_selection import train_test_split
+
+df = pd.read_csv('{data_dir}/train.csv')
+X = df.drop('target', axis=1)
+y = df['target']
+X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+```
+
+Write train.py then respond "READY".
 
 Tools: Write"""
 
@@ -169,13 +169,12 @@ def format_eda_prompt(competition_id: str, data_dir: str, instructions_path: str
     )
 
 
-def format_planning_prompt(competition_id: str, context: str, round_num: int, best_score: float = 0.0, num_experiments: int = 3) -> str:
+def format_planning_prompt(competition_id: str, context: str, round_num: int, best_score: float = 0.0) -> str:
     return PLANNING_PROMPT.format(
         competition_id=competition_id,
         context=context,
         round_num=round_num,
-        best_score=best_score,
-        num_experiments=num_experiments
+        best_score=best_score
     )
 
 
