@@ -59,18 +59,32 @@ class Agent:
                 break
 
             print()
-            
+
             tool_results = []
             for tool_use in tool_uses:
-                print(f"\n🔧 Tool: {tool_use['name']}")
-                result = await self.tools.execute(tool_use["name"], tool_use["input"])
+                tool_name = tool_use['name']
+                tool_input = tool_use['input']
+                
+                print(f"\n🔧 Tool: {tool_name}")
+                if tool_name == "Bash":
+                    cmd = tool_input.get('command', '')
+                    print(f"   Command: {cmd[:100]}")
+                elif tool_name == "Write":
+                    path = tool_input.get('file_path', '')
+                    content_len = len(tool_input.get('content', ''))
+                    print(f"   Path: {path} ({content_len} bytes)")
+                elif tool_name == "Read":
+                    path = tool_input.get('file_path', '')
+                    print(f"   Path: {path}")
+                
+                result = await self.tools.execute(tool_name, tool_input)
                 tool_results.append({
                     "type": "tool_result",
                     "tool_use_id": tool_use["id"],
                     "content": result["content"],
                     "is_error": result.get("is_error", False)
                 })
-                print(f"✓ Tool completed")
+                print(f"✓ Completed")
 
             self.conversation_history.append({
                 "role": "user",

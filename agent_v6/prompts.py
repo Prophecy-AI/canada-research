@@ -14,16 +14,15 @@ Why: [1 sentence]
 GPU models: XGBoost (tree_method='gpu_hist'), PyTorch"""
 
 
-PLANNING_PROMPT = """ML strategist: Design 1-3 experiments. Prefer FEWER (use 1 if confident).
+PLANNING_PROMPT = """Design 1-3 experiments. Output ONLY JSON, NO other text.
 
 Competition: {competition_id}
 EDA: {context}
 Round: {round_num}
 Best: {best_score}
 
-**Task:** Output JSON (1-3 experiments). Use 1 if confident, 2-3 if testing hypotheses.
+**CRITICAL: Output ONLY the JSON array below. No markdown, no explanation, no text before or after.**
 
-```json
 [
   {{
     "id": "exp_1",
@@ -33,9 +32,9 @@ Best: {best_score}
     "hypothesis": "1 sentence"
   }}
 ]
-```
 
-Models: XGBoost (tree_method='gpu_hist'), LightGBM (device='gpu'), CatBoost, RandomForest, LogisticRegression, Ridge"""
+Models: XGBoost, LightGBM, CatBoost, RandomForest, LogisticRegression, Ridge
+Use 1 if confident, 2-3 if testing hypotheses."""
 
 
 WORKER_PROMPT = """Write train.py for ML experiment. NO running, NO exploration - just write the file.

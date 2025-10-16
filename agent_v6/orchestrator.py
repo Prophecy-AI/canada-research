@@ -123,11 +123,18 @@ class Orchestrator:
     def _parse_experiments(self, output: str) -> List[Dict]:
         json_match = re.search(r'\[[\s\S]*\]', output)
         if not json_match:
+            print(f"\n⚠️  No JSON array found in planning output")
+            print(f"Output preview: {output[:500]}")
             return []
         
         try:
             experiments = json.loads(json_match.group(0))
             if not isinstance(experiments, list):
+                print(f"\n⚠️  JSON is not a list")
+                return []
+            
+            if not experiments:
+                print(f"\n⚠️  Empty experiment list")
                 return []
             
             print(f"\n✓ Generated {len(experiments)} experiments:")
@@ -135,7 +142,10 @@ class Orchestrator:
                 print(f"  • {exp.get('id', '?')}: {exp.get('model', '?')} - {exp.get('hypothesis', '?')[:60]}...")
             
             return experiments
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
+            print(f"\n⚠️  JSON parse error: {e}")
+            json_str = json_match.group(0)
+            print(f"JSON preview: {json_str[:500]}")
             return []
 
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:
