@@ -53,6 +53,31 @@ class ResearchAgent:
         self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
         self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
 
+    def _check_completed_processes(self) -> str:
+        """
+        Check for newly completed background processes and return alert message
+
+        Returns:
+            Alert message if any processes completed since last check, empty string otherwise
+        """
+        if not hasattr(self, '_notified_completions'):
+            self._notified_completions = set()
+
+        alerts = []
+        for shell_id, bg_process in self.process_registry.processes.items():
+            # Check if process completed and we haven't notified yet
+            if bg_process.process.returncode is not None and shell_id not in self._notified_completions:
+                self._notified_completions.add(shell_id)
+                exit_code = bg_process.process.returncode
+                status = "successfully" if exit_code == 0 else f"with exit code {exit_code}"
+                alerts.append(
+                    f"ALERT: Background process {shell_id} completed {status}\n"
+                    f"Command: {bg_process.command}\n"
+                    f"Use ReadBashOutput(shell_id='{shell_id}') to see full results"
+                )
+
+        return "\n\n".join(alerts) if alerts else ""
+
     async def cleanup(self) -> None:
         """
         Cleanup agent resources (kills all background processes)
@@ -74,6 +99,14 @@ class ResearchAgent:
         })
 
         while True:
+            # Check for completed background processes and inject alerts
+            completed_alerts = self._check_completed_processes()
+            if completed_alerts:
+                self.conversation_history.append({
+                    "role": "user",
+                    "content": completed_alerts
+                })
+
             response_content = []
             tool_uses = []
 
