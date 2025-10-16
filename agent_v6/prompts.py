@@ -121,21 +121,12 @@ Data: {data_dir}
    - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
    - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
-   - Early stopping with perfect score termination (copy this pattern):
-     ```python
-     if val_metric > best_metric:
-         best_metric = val_metric
-         torch.save(model.state_dict(), 'model.pth')
-         patience = 0
-         if val_metric >= 0.9999:
-             print(f"Perfect score reached: {{val_metric:.4f}}, stopping")
-             break
-     else:
-         patience += 1
-         if patience >= max_patience:
-             break
-     ```
-   - Print validation score as "VALIDATION_SCORE: X.XXXX" (USE THE COMPETITION METRIC from EDA context, e.g., logloss/AUC/accuracy)
+   - Early stopping with patience 3-5 epochs
+   - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
+   - **CRITICAL: Print validation score using the EXACT competition metric from EDA context**
+   - Calculate the competition metric on validation set (e.g., if metric is logloss, print logloss; if AUC, print AUC)
+   - Print as "VALIDATION_SCORE: X.XXXX" where X.XXXX is the competition metric value
+   - All experiments MUST report the same metric for fair comparison
    - Save model with `torch.save(model.state_dict(), 'model.pth')`
 4. Respond "READY" immediately
 
