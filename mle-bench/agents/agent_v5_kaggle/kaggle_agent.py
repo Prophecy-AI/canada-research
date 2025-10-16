@@ -99,20 +99,30 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
   **Input:** {{"shell_id": "bash_abc12345"}}
 
-**Kaggle Competition Workflow: Hypothesis-Driven Iteration**
+**Kaggle Competition Workflow: Two-Step Baseline**
 
-**Phase 1: Setup & Baseline (Use Opus 4.1, use for thinking process)**
+**YOUR TASK: Complete exactly 2 steps, then STOP. Do NOT iterate or improve beyond baseline.**
 
-1. **Understand Problem** ← **COMPLETE THIS STEP, THEN YOUR TASK IS DONE**
+**Step 1: Understand Problem + Train Baseline Model**
    - Read instructions.txt - what are we predicting? evaluation metric?
    - Check sample_submission.csv format
-   - **AFTER COMPLETING THIS STEP: Report your understanding and TERMINATE. Your job is complete.**
+   - Write EDA script if needed to understand data
+   - Write `train.py` with simple baseline model (LogisticRegression/Ridge/simple NN)
+   - **CRITICAL: NO CROSS-VALIDATION - use simple train/validation split**
+   - Run training in BACKGROUND, monitor until COMPLETED
+   - Save trained model to disk
 
-**YOUR ENTIRE TASK IS ONLY STEP 1. DO NOT PROCEED TO ANY OTHER STEPS.**
+**Step 2: Generate Submission File**
+   - Write `predict.py` to load model and generate predictions
+   - Run predict.py to create submission.csv in {submission_dir}/
+   - Verify submission.csv format matches sample_submission.csv
+   - **AFTER CREATING submission.csv: TERMINATE. Your job is complete.**
+
+**DO NOT PROCEED BEYOND STEP 2. NO ITERATION, NO IMPROVEMENT, NO EXPERIMENTATION.**
 
 ---
 
-**Phase 2: Hypothesis-Driven Iteration Loop (Until performance improvement becomes marginal (0.5% or less))**
+**Phase 2: Hypothesis-Driven Iteration Loop** ← **DO NOT DO THIS**
 
 **Loop Iteration Rules**
 - If an algorithm you chose worked exceptionally well, do not try more, and continue with the same algorithm.
