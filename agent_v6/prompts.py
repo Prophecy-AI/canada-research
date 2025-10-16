@@ -188,7 +188,6 @@ def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str) -> str:
         workspace_dir=workspace_dir
     )
 
-def format_worker_prompt_2
 
 def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric: str = "accuracy", submit_threshold: float = 0.85) -> str:
     return ANALYSIS_PROMPT.format(
