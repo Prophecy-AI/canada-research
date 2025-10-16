@@ -18,7 +18,7 @@ Instructions: {instructions_path}
 NO model suggestions. NO iteration. ONE script, ONE run."""
 
 
-PLANNING_PROMPT = """Design 2-3 NEW experiments. DIFFERENT from previous. OPTIMIZE FOR SPEED. Output ONLY JSON.
+PLANNING_PROMPT = """You are an expert ML engineer. Design 2-3 NEW experiments based on dataset analysis.
 
 Competition: {competition_id}
 Round: {round_num}
@@ -26,30 +26,45 @@ Best: {best_score}
 
 {context}
 
-**CRITICAL: DO NOT REPEAT any previous experiments above. Must try DIFFERENT models/approaches.**
-**STRATEGY: 2-3 experiments with DIFFERENT architectures. Run in parallel on SAME GPU.**
-**SPEED: 10-15 epochs, early stopping.**
-**BATCH SIZE: Use 32-64 (smaller batches to fit 2-3 models in GPU memory simultaneously).**
+**TASK: Analyze the data characteristics above, then propose 2-3 DIFFERENT modeling approaches.**
 
-Models: XGBoost (gpu_hist), LightGBM (gpu), CatBoost, RandomForest, LogisticRegression, Ridge
-Images: ResNet18/ResNet50/MobileNet/EfficientNet (pretrained)
+**Step 1: Reason about the dataset**
+- Data type: tabular/image/text/time-series?
+- Size: small (<10K), medium (10K-100K), large (>100K)?
+- Complexity: number of features, classes, dimensionality?
+- Target: classification/regression? Binary/multiclass? Imbalanced?
+- Metric: what does it optimize for?
 
-**Output ONLY JSON (NO markdown, NO text before/after):**
+**Step 2: Choose appropriate models**
+Based on dataset characteristics, select models that are:
+- DIFFERENT from previous experiments (do not repeat)
+- Appropriate for the data type and size
+- Fast to train (10-15 epochs, early stopping)
+- Batch size 32-64 for parallel GPU training
+
+**Model Selection Guidance:**
+- Images (small dataset <50K): ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
+- Images (large dataset >50K): ResNet50, EfficientNet-B1/B2, Vision Transformer
+- Tabular: XGBoost, LightGBM, CatBoost, Neural Networks (TabNet)
+- Text: BERT-based, RoBERTa, DistilBERT (pretrained)
+- Time-series: LSTM, GRU, Temporal CNNs, XGBoost
+
+**Step 3: Output ONLY JSON (NO text before/after):**
 
 [
   {{
     "id": "exp_1",
-    "model": "ResNet50",
-    "features": {{"type": "pretrained_cnn", "pretrained": true, "augmentation": true}},
-    "hyperparameters": {{"device": "cuda", "epochs": 12, "lr": 0.001, "batch_size": 32}},
-    "hypothesis": "Deeper architecture with data augmentation"
+    "model": "<model_name>",
+    "features": {{"type": "<feature_type>", "details": "..."}},
+    "hyperparameters": {{"device": "cuda", "epochs": 10-15, "lr": 0.0001-0.01, "batch_size": 32-64}},
+    "hypothesis": "<why this model is appropriate for THIS dataset>"
   }},
   {{
     "id": "exp_2",
-    "model": "EfficientNet",
-    "features": {{"type": "pretrained_cnn", "pretrained": true}},
-    "hyperparameters": {{"device": "cuda", "epochs": 10, "lr": 0.0005, "batch_size": 48}},
-    "hypothesis": "More efficient architecture"
+    "model": "<different_model>",
+    "features": {{"type": "<feature_type>", "details": "..."}},
+    "hyperparameters": {{"device": "cuda", "epochs": 10-15, "lr": 0.0001-0.01, "batch_size": 32-64}},
+    "hypothesis": "<why this model complements exp_1>"
   }}
 ]"""
 
