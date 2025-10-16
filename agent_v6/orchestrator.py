@@ -315,7 +315,7 @@ class Orchestrator:
                 }
             
             import re
-            matches = re.findall(r"(?:VALIDATION_SCORE|Validation Score|Val Score|Best Validation|Final Validation|Validation Accuracy|Val Acc|Val AUC|Val Kappa|Val LogLoss|Validation Loss)[:=\s]+(\d+\.?\d*)", output, re.IGNORECASE)
+            matches = re.findall(r"VALIDATION_SCORE:\s*(\d+\.?\d*)", output)
             score = float(matches[-1]) if matches else None
             
             if score is None:

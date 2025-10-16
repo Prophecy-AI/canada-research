@@ -98,7 +98,10 @@ Data: {data_dir}
 **DO:**
 1. Check data structure (use Bash: ls, zipinfo, head CSV)
 2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
-3. Write train.py with:
+3. **Verify imports before using them:**
+   - Only use functions/classes that exist in standard libraries (torch, torchvision, sklearn, xgboost, etc.)
+   - Prefer simple, proven implementations over complex custom code
+4. Write train.py with:
    - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format (avoid 1202.0.jpg)
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
@@ -113,15 +116,33 @@ Data: {data_dir}
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
      * Multi-label classification (multiple labels per sample): `nn.BCEWithLogitsLoss()`
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
-   - For images: use larger input size (128-224, not 32x32) to preserve details
+   - **For images - CRITICAL transform order and library usage:**
+     * Transform order: Augmentation → Resize → ToTensor → Normalize
+     * ToTensor() converts PIL Image → Tensor (must come before Normalize)
+     * **ONLY use transforms that exist in torchvision.transforms** - DO NOT implement custom transforms
+     * **Before using any transform, verify it exists:** Check PyTorch docs or use `hasattr(transforms, 'FunctionName')`
+     * Common augmentations: RandomHorizontalFlip, RandomRotation, ColorJitter, RandomCrop, RandomResizedCrop
+     * **DO NOT implement:** RandAugment, AutoAugment, Cutout, Mixup, CutMix, or any custom augmentation classes
+     * If you want advanced augmentation, use simple combinations of proven transforms
+     * Keep it simple - basic augmentation works well for most tasks
+   - **For log loss calculation (avoid division by zero):**
+     ```python
+     probs = torch.clamp(probs, 1e-7, 1 - 1e-7)  # Clip before log
+     log_loss = -np.mean(labels * np.log(probs) + (1 - labels) * np.log(1 - probs))
+     ```
    - GPU training (model.to(device), data.to(device))
    - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
    - Early stopping with patience 3-5 epochs
    - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
-   - **CRITICAL: Print validation score using the EXACT competition metric from EDA context**
-   - Calculate the competition metric on validation set (e.g., if metric is logloss, print logloss; if AUC, print AUC)
-   - Print as "VALIDATION_SCORE: X.XXXX" where X.XXXX is the competition metric value
-   - All experiments MUST report the same metric for fair comparison
+   - **CRITICAL: Print validation score in EXACT format (orchestrator parses this):**
+     ```python
+     print(f"VALIDATION_SCORE: {val_metric:.6f}")
+     ```
+     * Use the EXACT competition metric from EDA context (e.g., logloss, AUC, accuracy, etc.)
+     * Format must be exactly "VALIDATION_SCORE: " followed by the number
+     * Example: "VALIDATION_SCORE: 0.623456" or "VALIDATION_SCORE: 0.954321"
+     * All experiments MUST report the same metric for fair comparison
+     * Do NOT print other metrics on lines containing "VALIDATION_SCORE"
    - Save model with `torch.save(model.state_dict(), 'model.pth')`
    - **DO NOT generate test predictions in train.py - that's done separately in submission phase**
 4. Respond "READY" immediately
