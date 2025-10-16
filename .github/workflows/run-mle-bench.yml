@@ -36,11 +36,14 @@ on:
           - gpu-2
           - gpu-3
           - gpu-4
+          - gpu-5
+          - gpu-6
+          - gpu-7
         default: 'any'
 
 jobs:
   run-agent:
-    # Support concurrency: 4 (no group = all can run simultaneously)
+    # Support concurrency: 7 (no group = all can run simultaneously)
     runs-on:
       - self-hosted
       - gpu
