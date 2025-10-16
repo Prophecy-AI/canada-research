@@ -43,9 +43,10 @@ Based on dataset characteristics, select models that are:
 - Batch size 32-64 for parallel GPU training
 
 **Model Selection Guidance (you can use ANY model, these are suggestions):**
-- Images (small dataset <50K): DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
+- Images (small dataset <50K): DenseNet161, DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
 - Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
 - Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
+- **For images: Use input size 128-224px (not 32x32), more data for training (90-95% train split)**
 - Tabular: XGBoost, LightGBM, CatBoost, Neural Networks (TabNet)
 - Text: BERT-based, RoBERTa, DistilBERT (pretrained)
 - Time-series: LSTM, GRU, Temporal CNNs, XGBoost
@@ -97,7 +98,8 @@ Data: {data_dir}
      * Binary classification (2 classes): `nn.BCEWithLogitsLoss()`
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
-   - train_test_split (test_size=0.2, random_state=42)
+   - train_test_split (test_size=0.05-0.10, random_state=42) for small datasets (<50K)
+   - For images: use larger input size (128-224, not 32x32) to preserve details
    - GPU training (model.to(device), data.to(device))
    - Early stopping (stop when validation plateaus for 3-5 epochs)
    - Print validation score as "VALIDATION_SCORE: X.XXXX" (accuracy or metric value)
