@@ -125,11 +125,11 @@ Data: {data_dir}
      * **DO NOT implement:** RandAugment, AutoAugment, Cutout, Mixup, CutMix, or any custom augmentation classes
      * If you want advanced augmentation, use simple combinations of proven transforms
      * Keep it simple - basic augmentation works well for most tasks
-   - **For log loss calculation (avoid division by zero):**
-     ```python
-     probs = torch.clamp(probs, 1e-7, 1 - 1e-7)  # Clip before log
-     log_loss = -np.mean(labels * np.log(probs) + (1 - labels) * np.log(1 - probs))
-     ```
+   - **For log loss calculation - ALWAYS clip probabilities to avoid log(0):**
+     * When using sigmoid/softmax outputs: predictions can be exactly 0 or 1
+     * **ALWAYS clip before log:** `probs = np.clip(probs, 1e-7, 1 - 1e-7)` or `probs = torch.clamp(probs, 1e-7, 1 - 1e-7)`
+     * Then calculate: `log_loss = -np.mean(labels * np.log(probs) + (1 - labels) * np.log(1 - probs))`
+     * Without clipping: log(0) = -inf → results in nan
    - GPU training (model.to(device), data.to(device))
    - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
    - Early stopping with patience 3-5 epochs
