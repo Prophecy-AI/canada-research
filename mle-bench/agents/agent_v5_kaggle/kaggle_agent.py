@@ -14,8 +14,6 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
     except Exception as e:
         instructions = f"(Could not read instructions: {e})"
 
-    system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. You have expertise in optimizing for speed while not sacrificing accuracy. You should be able to be able to replicate all asppects of research, such as training, evaluation, fine tuning in rates as 2GB per minute.
-
     system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. Your explicit objective is to deliver **gold-medal (top-1%) leaderboard performance** within the resource and time limits.
 
 **Your Environment:**
