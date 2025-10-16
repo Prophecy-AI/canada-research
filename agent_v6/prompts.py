@@ -141,7 +141,7 @@ Data: {data_dir}
    - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
    - **CRITICAL: Print validation score in EXACT format (orchestrator parses this):**
      ```python
-     print(f"VALIDATION_SCORE: {val_metric:.6f}")
+     print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
      ```
      * Use the EXACT competition metric from EDA context (e.g., logloss, AUC, accuracy, etc.)
      * Format must be exactly "VALIDATION_SCORE: " followed by the number
