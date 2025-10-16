@@ -46,10 +46,13 @@ Based on dataset characteristics, select models that are:
 - Images (small dataset <50K): DenseNet161, DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
 - Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
 - Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
-- **For images: Use input size 128-224px (not 32x32), more data for training (90-95% train split)**
+- **For images: Use input size 128-224px (not 32x32), train split 90-95%**
 - Tabular: XGBoost, LightGBM, CatBoost, Neural Networks (TabNet)
-- Text: BERT-based, RoBERTa, DistilBERT (pretrained)
-- Time-series: LSTM, GRU, Temporal CNNs, XGBoost
+- Text: **ONLY use HuggingFace transformers** (distilbert-base-uncased, bert-base-uncased, roberta-base)
+  * Use AutoTokenizer + AutoModelForSequenceClassification from transformers library
+  * OR simple baselines: TF-IDF + LogisticRegression/XGBoost
+- **DO NOT propose: Custom LSTM, BiLSTM, TextCNN, GloVe/FastText embeddings - libraries not installed**
+- Time-series: XGBoost, LightGBM (gradient boosting works well), simple LSTM if needed
 
 **Feel free to propose other models (VGG, Inception, SENet, etc.) if they fit the task better.**
 
@@ -94,9 +97,15 @@ Data: {data_dir}
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
+   - **For text data:**
+     * Use: `from transformers import AutoTokenizer, AutoModelForSequenceClassification`
+     * Model examples: 'distilbert-base-uncased', 'bert-base-uncased', 'roberta-base'
+     * Tokenizer: `tokenizer(texts, padding=True, truncation=True, max_length=128, return_tensors='pt')`
+     * DO NOT build custom vocabulary or use GloVe/FastText - use transformers only
    - **Correct loss function:**
      * Binary classification (2 classes): `nn.BCEWithLogitsLoss()`
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
+     * Multi-label classification (multiple labels per sample): `nn.BCEWithLogitsLoss()`
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
    - train_test_split (test_size=0.05-0.10, random_state=42) for small datasets (<50K)
    - For images: use larger input size (128-224, not 32x32) to preserve details
