@@ -100,13 +100,10 @@ class Orchestrator:
         plan_workspace.mkdir(exist_ok=True)
         
         tools = ToolRegistry(str(plan_workspace))
-        tools.register(BashTool(str(plan_workspace)))
-        tools.register(ReadTool(str(plan_workspace)))
-        tools.register(WriteTool(str(plan_workspace)))
         
-        context = f"EDA Summary:\n{self.eda_summary}\n"
+        context = f"{self.eda_summary}"
         if self.best_experiment:
-            context += f"\nPrevious best: {self.best_experiment['model']} scored {self.best_score}"
+            context += f"\n\nPrevious best: {self.best_experiment['model']} scored {self.best_score}"
         
         prompt = format_planning_prompt(
             competition_id=self.competition_id,
@@ -116,7 +113,7 @@ class Orchestrator:
         )
         
         agent = Agent(str(plan_workspace), prompt, tools)
-        output = await agent.run("Plan experiments for this round")
+        output = await agent.run("Output JSON array of experiments")
         
         return self._parse_experiments(output)
 
@@ -149,7 +146,9 @@ class Orchestrator:
             return []
 
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:
-        print(f"\n→ Writing & running {len(experiments)} experiments in parallel...")
+        import time
+        start_time = time.time()
+        print(f"\n→ Starting {len(experiments)} experiments in parallel...")
         
         tasks = []
         for exp in experiments:
@@ -158,7 +157,8 @@ class Orchestrator:
         
         training_results = await asyncio.gather(*tasks, return_exceptions=True)
         
-        print(f"\n✓ All experiments completed")
+        elapsed = time.time() - start_time
+        print(f"\n✓ All {len(experiments)} experiments completed in {elapsed:.1f}s")
         
         formatted_results = []
         for i, exp in enumerate(experiments):
