@@ -51,8 +51,8 @@ class BashTool(BaseTool):
                     },
                     "timeout": {
                         "type": "number",
-                        "description": "Timeout in milliseconds (max 600000, only applies to foreground execution)",
-                        "default": 600000
+                        "description": "Timeout in milliseconds (default is 2 minutes, CHNAGE IT IF YOU WANT TO USE THIS FOR BLOCKING TASKS THAT WILL TAKE MORE THAN 2 MINUTES TO COMPLETE, only applies to foreground execution)",
+                        "default": 120000
                     },
                     "background": {
                         "type": "boolean",
