@@ -54,6 +54,11 @@ class WriteTool(BaseTool):
             else:
                 message = f"File created successfully at: {file_path}"
 
+            # Add GPU reminder if this looks like a training/ML script
+            gpu_hint = self._check_gpu_usage(file_path, content)
+            if gpu_hint:
+                message += f"\n\n{gpu_hint}"
+
             return {
                 "content": message,
                 "is_error": False,
@@ -65,3 +70,67 @@ class WriteTool(BaseTool):
                 "content": f"Error writing file: {str(e)}",
                 "is_error": True
             }
+
+    def _check_gpu_usage(self, file_path: str, content: str) -> str:
+        """Check if file should use GPU and return reminder if needed"""
+        # Only check Python files
+        if not file_path.endswith('.py'):
+            return ""
+        
+        # Check if filename suggests training/ML task
+        filename_lower = os.path.basename(file_path).lower()
+        is_ml_script = any(keyword in filename_lower for keyword in [
+            'train', 'model', 'fit', 'predict', 'inference', 'cv', 'fold'
+        ])
+        
+        if not is_ml_script:
+            return ""
+        
+        # Check if content contains ML frameworks
+        content_lower = content.lower()
+        has_pytorch = 'import torch' in content_lower or 'from torch' in content_lower
+        has_xgboost = 'import xgboost' in content_lower or 'from xgboost' in content_lower
+        has_lightgbm = 'import lightgbm' in content_lower or 'from lightgbm' in content_lower
+        has_tensorflow = 'import tensorflow' in content_lower or 'from tensorflow' in content_lower
+        has_catboost = 'import catboost' in content_lower or 'from catboost' in content_lower
+        
+        if not (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
+            return ""
+        
+        # Check if GPU is already configured
+        gpu_configured = False
+        
+        if has_pytorch:
+            gpu_configured = any(indicator in content for indicator in [
+                '.cuda()', '.to(\'cuda\')', '.to("cuda")', 'device=\'cuda\'', 'device="cuda"',
+                'torch.device(\'cuda\')', 'torch.device("cuda")'
+            ])
+        
+        if has_xgboost:
+            gpu_configured = gpu_configured or 'tree_method' in content_lower and 'gpu_hist' in content_lower
+        
+        if has_lightgbm:
+            gpu_configured = gpu_configured or 'device' in content_lower and ('gpu' in content_lower or 'cuda' in content_lower)
+        
+        if has_catboost:
+            gpu_configured = gpu_configured or 'task_type' in content and 'GPU' in content
+        
+        if has_tensorflow:
+            # TensorFlow auto-detects GPU, so assume configured
+            gpu_configured = True
+        
+        # Return hint if GPU not configured
+        if not gpu_configured:
+            hints = []
+            if has_pytorch:
+                hints.append("PyTorch: Add device = torch.device('cuda') and .to(device)")
+            if has_xgboost:
+                hints.append("XGBoost: Add 'tree_method': 'gpu_hist' to params")
+            if has_lightgbm:
+                hints.append("LightGBM: Add 'device': 'gpu' to params")
+            if has_catboost:
+                hints.append("CatBoost: Add task_type='GPU' to constructor")
+            
+            return f"⚠️  GPU CHECK: This script may not be using GPU!\n" + "\n".join(f"   • {hint}" for hint in hints) + "\n   • CPU training is 10-100x slower - verify GPU usage before running"
+        
+        return ""
