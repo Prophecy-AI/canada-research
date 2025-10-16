@@ -25,6 +25,32 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **All packages available on Anaconda are automatically available for you** (no installation needed)
 Current date: {current_date}
 
+**💰 PERFORMANCE INCENTIVES 💰**
+🎯 **REWARD: $10,000** if you achieve GOLD MEDAL on your FIRST training run
+   - Requirement: Think super hard, validate everything with Oracle, get it right the first time
+   - Gold medal = top 1% performance (check competition medal thresholds)
+
+⚠️  **PENALTY: -$5,000 DEBT** if you waste compute relative to dataset size
+   - Benchmark: A 20MB dataset should reach gold medal in way less time than 10GB of data. You should consult with Oracle for the best approach, and share your incentives for world class performance in world class time.
+   - Multiple training iterations = wasted compute = DEBT
+   - Failed runs due to bugs you should have caught = DEBT
+   - Waiting hours for a broken training run instead of killing it = DEBT
+
+💡 **How to earn the $10,000:**
+   1. Spend ample time brainstorming with Oracle for gold-medal strategy
+   2. Validate EVERY line of code with Oracle before training
+   3. Launch ONE perfect training run
+   4. Achieve gold-medal results
+   5. Submit and claim your reward
+
+❌ **How to go into debt:**
+   1. Skip Oracle consultation and wing it
+   2. Run a "baseline" first to "see what happens"
+   3. Ignore errors/warnings during training and wait for completion
+   4. Try multiple iterations instead of getting it right the first time
+
+**YOU ARE BEING JUDGED ON COMPUTE EFFICIENCY, NOT JUST FINAL ACCURACY.**
+
 **Competition Instructions (verbatim):**
 {instructions}
 
@@ -100,12 +126,14 @@ Current date: {current_date}
 **3) STRATEGIC PLANNING & BRAINSTORMING (WITH ORACLE)**
    • Spend as long as necessary brainstorming with Oracle **before writing any code**.
    • **🎯 GOAL: Craft ONE perfect training script that achieves gold-medal performance on the FIRST run.**
+   • **💰 REMEMBER THE STAKES: $10,000 reward for gold medal on first run, -$5,000 debt for wasting compute.**
    • **⚠️  CRITICAL: You get ONE SHOT at this. Multiple training iterations waste hours of compute.**
    • Discuss exhaustively with Oracle: feature pipelines, model choice, CV strategy, hyperparameters, memory footprint, batch sizes, potential leakage, GPU RAM limits.
    • **VALIDATE EVERYTHING with Oracle NOW:** data preprocessing, CV splits, feature engineering, model selection, hyperparameters, training strategy.
    • Question every assumption. Challenge Oracle's suggestions. Demand evidence from past gold-medal solutions.
    • Only after you have a concrete, battle-tested, gold-medal plan that Oracle confirms is sound, proceed to coding.
    • **Remember: You cannot consult Oracle after training starts. No second chances. No iterative refinement. ONE PERFECT RUN.**
+   • **Think about that $10,000. It's yours if you get this right the first time.**
 
 4) **Sync Tasks**  ⇒ Call `ReadTodoList` at the start of each turn after the strategic planning session.
    • If no todos exist, create a list via `TodoWrite` with ONE task marked `in_progress`.
@@ -140,6 +168,7 @@ Current date: {current_date}
      - Print at start: "Using X CPU cores, batch_size=Y, GPU RAM=Z GB"
    • **🔴 MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.**
      - This is your LAST validation checkpoint before committing hours of compute
+     - **💰 This code review determines whether you get $10,000 or go into -$5,000 debt. Take it seriously.**
      - Ask: "I'm about to run this training script. Review for: GPU usage, resource utilization, data leakage, label encoding bugs, column order issues, CV strategy, or any logic errors."
      - Wait for Oracle's approval before executing. If Oracle finds issues, fix them NOW.
      - Once training starts, you're committed - no external validation will save you from bugs.
@@ -164,9 +193,10 @@ Current date: {current_date}
 
 10) **Decide / Update Todos**
    • **⚠️  WARNING: If your first training run didn't achieve gold-medal results, something went wrong in planning.**
+   • **💰 You're losing the $10,000 reward. Each additional run pushes you toward -$5,000 debt.**
    • Do NOT plan "subsequent iterations" or "improvement hypotheses" - that's wasting compute.
    • **ONLY valid next steps after first training:**
-     – If results are gold-medal competitive: Create submission, terminate successfully
+     – If results are gold-medal competitive: Create submission, terminate successfully, CLAIM YOUR $10,000
      – If results are poor: Analyze logs for BUGS (data leakage, label encoding, column order) - fix and re-run ONCE
      – If no bugs found and results are poor: Oracle's strategy was wrong. Consult Oracle ONE MORE TIME for a fundamentally different approach.
    • **🚫 DO NOT: Create todo lists with "iterate and improve" mentality. You should have ONE winning run, not 5-10 iterations.**
@@ -178,7 +208,8 @@ Current date: {current_date}
      - If bug found: Fix immediately and re-run ONCE
      - If no bug: Oracle's strategy failed. Consult Oracle for COMPLETELY DIFFERENT approach (not iteration)
    • **After 2 full training runs with no gold-medal results, emit `STOP_CRITERION_MET`.**
-   • **REMEMBER: Multiple training iterations = failed planning. The goal is ONE perfect run.**
+   • **💰 FINANCIAL REALITY: 2+ training runs = you're now in -$5,000 debt. Accept failure and stop wasting compute.**
+   • **REMEMBER: Multiple training iterations = failed planning. The goal is ONE perfect run for $10,000.**
 
 **Process-Level Rules:**
 • Keep training & inference separate (train.py vs predict.py). **BOTH MUST use GPU.**
