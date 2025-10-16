@@ -34,6 +34,7 @@ class Orchestrator:
         self.best_experiment = None
         self.eda_summary = ""
         self.round_num = 0
+        self.round_history = []
         
         Path(workspace_dir).mkdir(parents=True, exist_ok=True)
         Path(submission_dir).mkdir(parents=True, exist_ok=True)
@@ -103,8 +104,13 @@ class Orchestrator:
         tools = ToolRegistry(str(plan_workspace))
         
         context = f"{self.eda_summary}"
+        if self.round_history:
+            context += f"\n\n**PREVIOUS EXPERIMENTS (DO NOT REPEAT):**"
+            for round_data in self.round_history:
+                for exp in round_data['experiments']:
+                    context += f"\n- {exp['model']} (score: {exp.get('score', 'N/A')}): {exp.get('hypothesis', '')}"
         if self.best_experiment:
-            context += f"\n\nPrevious best: {self.best_experiment['model']} scored {self.best_score}"
+            context += f"\n\n**Current best:** {self.best_experiment['model']} scored {self.best_score}"
         
         prompt = format_planning_prompt(
             competition_id=self.competition_id,
@@ -308,7 +314,8 @@ class Orchestrator:
                 "score": score,
                 "output": output[-1000:] if len(output) > 1000 else output,
                 "model": exp.get('model'),
-                "hypothesis": exp.get('hypothesis')
+                "hypothesis": exp.get('hypothesis'),
+                "workspace": str(workspace)
             }
         
         except Exception as e:
@@ -325,6 +332,19 @@ class Orchestrator:
             }
 
     async def _run_analysis(self, results: List[Dict]) -> str:
+        self.round_history.append({
+            'round': self.round_num,
+            'experiments': results
+        })
+        
+        for r in results:
+            if r.get('status') == 'success' and r.get('score'):
+                score = r['score']
+                if score > self.best_score:
+                    self.best_score = score
+                    self.best_experiment = r
+                    print(f"\n    🏆 New best score!")
+        
         plan_workspace = Path(self.workspace_dir) / "planning"
         
         tools = ToolRegistry(str(plan_workspace))
