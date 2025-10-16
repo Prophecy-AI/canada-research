@@ -372,13 +372,14 @@ class Orchestrator:
             for r in results
         ])
         
+        metric_direction = "LOWER is better" if self.lower_is_better else "HIGHER is better"
+        
         prompt = format_analysis_prompt(
             competition_id=self.competition_id,
             round_num=self.round_num,
             results=results_str,
             best_score=self.best_score,
-            metric="accuracy",
-            submit_threshold=0.85
+            metric_direction=metric_direction
         )
         
         agent = Agent(str(plan_workspace), prompt, tools)

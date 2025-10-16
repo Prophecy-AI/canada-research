@@ -47,7 +47,8 @@ Based on dataset characteristics, select models that are:
 - Images (large dataset >50K): ResNet50, DenseNet161, EfficientNet-B1/B2, Vision Transformer
 - Images (fine-grained): DenseNet161, EfficientNet-B2, ResNet50 (pretrained essential)
 - **For images: Use input size 128-224px (not 32x32), train split 90-95%**
-- Tabular: XGBoost (tree_method='hist'), LightGBM (CPU only), CatBoost, Neural Networks (TabNet)
+- Tabular: XGBoost (tree_method='hist'), LightGBM (CPU only), CatBoost, simple MLPClassifier
+- **For tabular: Prefer gradient boosting over neural networks (simpler, more reliable)**
 - Text: **ONLY use HuggingFace transformers** (distilbert-base-uncased, bert-base-uncased, roberta-base)
   * Use AutoTokenizer + AutoModelForSequenceClassification from transformers library
   * OR simple baselines: TF-IDF + LogisticRegression/XGBoost
@@ -98,6 +99,8 @@ Data: {data_dir}
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
    - Correct data loading based on structure you found
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
+   - **Use standard library implementations (torchvision.models, sklearn, xgboost, lightgbm)**
+   - **DO NOT implement custom model architectures from scratch - use pretrained/library models only**
    - **For text data:**
      * Use: `from transformers import AutoTokenizer, AutoModelForSequenceClassification`
      * Model examples: 'distilbert-base-uncased', 'bert-base-uncased', 'roberta-base'
@@ -118,7 +121,10 @@ Data: {data_dir}
          X_train, X_val, y_train, y_val = train_test_split(
              X, y, test_size=test_size, random_state=42)
      ```
-   - For images: use larger input size (128-224, not 32x32) to preserve details
+   - For images: 
+     * Input size 128-224 (not 32x32)
+     * Use standard torchvision.transforms (RandomHorizontalFlip, RandomRotation, ColorJitter, Normalize)
+     * DO NOT implement custom transforms/mixup/cutmix - use torchvision only to avoid bugs
    - GPU training (model.to(device), data.to(device))
    - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
    - Early stopping with patience 3-5 epochs
@@ -133,21 +139,32 @@ Data: {data_dir}
 Tools: Bash, Read, Write"""
 
 
-ANALYSIS_PROMPT = """Analyze experiment results. Output decision only.
+ANALYSIS_PROMPT = """Analyze results. Output decision.
 
+**Metric: {metric_direction}**
 Results: {results}
-Best so far: {best_score}
-Target: {submit_threshold}
+Current best: {best_score}
+Round: {round_num}
 
-Output ONLY this format (no other text):
+**Instructions:**
+Decide whether to SUBMIT or CONTINUE based on:
+1. Is the score competitive/good enough?
+2. Is there a clear hypothesis for >0.5% improvement?
+3. Have we exhausted promising approaches?
+
+Remember metric direction when evaluating score quality:
+- LOWER is better: smaller scores are better (e.g., logloss 0.1 > logloss 1.0)
+- HIGHER is better: larger scores are better (e.g., AUC 0.99 > AUC 0.9)
+
+Output format (no other text):
 
 DECISION: SUBMIT
-BEST_MODEL: exp_1
-REASONING: Score 0.996 > target 0.85, no clear path to 0.5% improvement
+BEST_MODEL: exp_2
+REASONING: Best logloss 0.62 is competitive, no clear path to major improvement
 
 Criteria:
-- SUBMIT if: score > {submit_threshold} OR improvement < 0.005
-- CONTINUE if: clear hypothesis for >0.5% improvement"""
+- SUBMIT if: Score is good AND (no clear >0.5% improvement path OR round >= 3)
+- CONTINUE if: Clear hypothesis exists for meaningful improvement"""
 
 
 SUBMISSION_PROMPT = """Create submission.csv. Fast.
@@ -207,14 +224,12 @@ def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_cont
     )
 
 
-def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric: str = "accuracy", submit_threshold: float = 0.85) -> str:
+def format_analysis_prompt(competition_id: str, round_num: int, results: str, best_score: float, metric_direction: str) -> str:
     return ANALYSIS_PROMPT.format(
-        competition_id=competition_id,
         round_num=round_num,
         results=results,
         best_score=best_score,
-        metric=metric,
-        submit_threshold=submit_threshold
+        metric_direction=metric_direction
     )
 
 
