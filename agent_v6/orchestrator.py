@@ -149,29 +149,12 @@ class Orchestrator:
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:
         import time
         start_time = time.time()
-        print(f"\n→ Preparing data & starting {len(experiments)} experiments in parallel...")
-        
-        shared_data = Path(self.workspace_dir) / "shared_data"
-        shared_data.mkdir(exist_ok=True)
-        
-        train_extracted = shared_data / "train"
-        test_extracted = shared_data / "test"
-        
-        if not train_extracted.exists():
-            print(f"  Extracting train.zip to shared location...")
-            env = os.environ.copy()
-            process = await asyncio.create_subprocess_shell(
-                f"cd {shared_data} && unzip -q {self.data_dir}/train.zip && unzip -q {self.data_dir}/test.zip",
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-                env=env
-            )
-            await process.wait()
+        print(f"\n→ Starting {len(experiments)} experiments in parallel...")
         
         tasks = []
         for exp in experiments:
             exp_workspace = Path(self.workspace_dir) / "experiments" / exp['id']
-            tasks.append(self._run_single_experiment(exp, exp_workspace, str(shared_data)))
+            tasks.append(self._run_single_experiment(exp, exp_workspace))
         
         training_results = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -211,13 +194,12 @@ class Orchestrator:
         
         return formatted_results
     
-    async def _run_single_experiment(self, exp: Dict, workspace: Path, shared_data_path: str) -> Dict:
+    async def _run_single_experiment(self, exp: Dict, workspace: Path) -> Dict:
         exp_id = exp['id']
         workspace.mkdir(parents=True, exist_ok=True)
         
         try:
-            eda_with_data_path = f"{self.eda_summary}\n\nData extracted to: {shared_data_path}/train/ and {shared_data_path}/test/"
-            worker = Worker(exp, str(workspace), self.data_dir, eda_with_data_path)
+            worker = Worker(exp, str(workspace), self.data_dir, self.eda_summary)
             success = await worker.write_script()
             
             if not success:
