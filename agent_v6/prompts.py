@@ -327,6 +327,8 @@ Decide whether to SUBMIT or CONTINUE based on:
 - ❌ **DO NOT continue for:** More epochs, different learning rate, minor hyperparameter tweaks, same architecture with variations
 - **Goal: Get a good solution FAST, not perfect. Competition rewards speed.**
 
+Most of the time you should SUBMIT!!!! Unless there is a critically different architecture that is worth trying based on the results of the previous round.
+
 Remember metric direction when evaluating score quality:
 - LOWER is better: smaller scores are better (e.g., logloss 0.1 > logloss 1.0)
 - HIGHER is better: larger scores are better (e.g., AUC 0.99 > AUC 0.9)
