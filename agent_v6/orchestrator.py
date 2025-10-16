@@ -149,12 +149,29 @@ class Orchestrator:
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:
         import time
         start_time = time.time()
-        print(f"\n→ Starting {len(experiments)} experiments in parallel...")
+        print(f"\n→ Preparing data & starting {len(experiments)} experiments in parallel...")
+        
+        shared_data = Path(self.workspace_dir) / "shared_data"
+        shared_data.mkdir(exist_ok=True)
+        
+        train_extracted = shared_data / "train"
+        test_extracted = shared_data / "test"
+        
+        if not train_extracted.exists():
+            print(f"  Extracting train.zip to shared location...")
+            env = os.environ.copy()
+            process = await asyncio.create_subprocess_shell(
+                f"cd {shared_data} && unzip -q {self.data_dir}/train.zip && unzip -q {self.data_dir}/test.zip",
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                env=env
+            )
+            await process.wait()
         
         tasks = []
         for exp in experiments:
             exp_workspace = Path(self.workspace_dir) / "experiments" / exp['id']
-            tasks.append(self._run_single_experiment(exp, exp_workspace))
+            tasks.append(self._run_single_experiment(exp, exp_workspace, str(shared_data)))
         
         training_results = await asyncio.gather(*tasks, return_exceptions=True)
         
@@ -194,12 +211,13 @@ class Orchestrator:
         
         return formatted_results
     
-    async def _run_single_experiment(self, exp: Dict, workspace: Path) -> Dict:
+    async def _run_single_experiment(self, exp: Dict, workspace: Path, shared_data_path: str) -> Dict:
         exp_id = exp['id']
         workspace.mkdir(parents=True, exist_ok=True)
         
         try:
-            worker = Worker(exp, str(workspace), self.data_dir, self.eda_summary)
+            eda_with_data_path = f"{self.eda_summary}\n\nData extracted to: {shared_data_path}/train/ and {shared_data_path}/test/"
+            worker = Worker(exp, str(workspace), self.data_dir, eda_with_data_path)
             success = await worker.write_script()
             
             if not success:
@@ -328,14 +346,9 @@ class Orchestrator:
         plan_workspace = Path(self.workspace_dir) / "planning"
         
         tools = ToolRegistry(str(plan_workspace))
-        tools.register(BashTool(str(plan_workspace)))
-        tools.register(ReadTool(str(plan_workspace)))
-        tools.register(WriteTool(str(plan_workspace)))
         
         results_str = "\n".join([
-            f"Experiment {r['id']} ({r.get('model', 'unknown')}): "
-            f"Status={r['status']}, Score={r.get('score', 'N/A')}, "
-            f"Hypothesis={r.get('hypothesis', 'N/A')}"
+            f"{r['id']} ({r.get('model', '?')}): Score={r.get('score', 'N/A')}"
             for r in results
         ])
         
@@ -349,7 +362,7 @@ class Orchestrator:
         )
         
         agent = Agent(str(plan_workspace), prompt, tools)
-        decision = await agent.run("Analyze results and decide next action")
+        decision = await agent.run("Output decision")
         
         return decision
 

@@ -67,98 +67,69 @@ Based on the data characteristics above, select appropriate models and design ex
 Output 1 experiment if confident in approach, 2-3 if testing different hypotheses."""
 
 
-WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
+WORKER_PROMPT = """Write train.py. DO NOT run it.
 
 Experiment: {spec}
 Data: {data_dir}
 EDA: {eda_context}
 
-**CRITICAL: Your ONLY job is to write train.py. DO NOT:**
-- Run train.py (orchestrator will run it)
-- Write summaries/documentation
-- Test imports
-- Create verification scripts
+**Your ONLY job: Write train.py and respond "READY".**
 
-**DO:**
-1. Check data structure (use Bash: ls, zipinfo, head CSV)
-2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
-3. Write train.py with:
-   - Correct data loading based on structure you found
-   - Model/features/hyperparameters from spec
-   - train_test_split (test_size=0.2, random_state=42)
-   - GPU training
-   - Print validation score
-   - Save model
-4. Respond "READY" immediately
+DO NOT:
+- Run train.py
+- Explore data (EDA already done, data paths provided above)
+- Write documentation/summaries
+- Test imports or verify
+
+Write train.py with:
+- Load data from paths in EDA context
+- Model/features/hyperparameters from spec
+- train_test_split (test_size=0.2, random_state=42)
+- GPU training
+- Print validation score
+- Save model
+
+Respond "READY".
 
 Tools: Bash, Read, Write"""
 
 
-ANALYSIS_PROMPT = """You are an expert ML engineer analyzing experiment results and deciding next steps.
+ANALYSIS_PROMPT = """Analyze experiment results. Output decision only.
 
-Competition: {competition_id}
-Round: {round_num}
-Target metric: {metric}
+Results: {results}
+Best so far: {best_score}
+Target: {submit_threshold}
 
-Experiment results:
-{results}
+Output ONLY this format (no other text):
 
-Previous best score: {best_score}
+DECISION: SUBMIT
+BEST_MODEL: exp_1
+REASONING: Score 0.996 > target 0.85, no clear path to 0.5% improvement
 
-Your task: Analyze results and decide next action.
-
-Analysis checklist:
-- Which experiment won and why?
-- Were hypotheses confirmed or rejected?
-- What patterns emerged?
-- Is there clear path to >0.5% improvement?
-
-Output format:
-DECISION: [SUBMIT or CONTINUE]
-REASONING: [Detailed analysis of results and why this decision]
-BEST_MODEL: [Which experiment/model won]
-IMPROVEMENT: [Absolute improvement from previous best]
-NEXT_STRATEGY: [If CONTINUE, specific strategy for next round]
-
-Decision criteria:
-- SUBMIT if: Best score > {submit_threshold} OR improvement < 0.005 (0.5%) from previous round
-- CONTINUE if: Clear hypothesis for >0.5% improvement exists
-
-If CONTINUE:
-- If an algorithm worked exceptionally well, iterate on it (tune hyperparameters, improve features)
-- Don't abandon working approaches for untested ones
-- Focus on ONE clear hypothesis for next round"""
+Criteria:
+- SUBMIT if: score > {submit_threshold} OR improvement < 0.005
+- CONTINUE if: clear hypothesis for >0.5% improvement"""
 
 
-SUBMISSION_PROMPT = """You are creating the final Kaggle submission. Format precision is critical.
+SUBMISSION_PROMPT = """Create submission.csv. Fast.
 
-Competition: {competition_id}
-Best model: {best_model}
-Best model workspace: {best_workspace}
-Test data: {data_dir}/test.csv
-Sample submission: {data_dir}/sample_submission.csv
+Best model: {best_model} at {best_workspace}
+Data: {data_dir}
 Output: {submission_dir}/submission.csv
 
-Your task:
-1. Read sample_submission.csv to understand exact format
-2. Write predict.py that:
-   - Loads trained model from {best_workspace}/model.pkl
-   - Loads and preprocesses test data (SAME preprocessing as training)
-   - Generates predictions
-   - Creates DataFrame matching sample_submission format EXACTLY
-   - Saves to {submission_dir}/submission.csv
-3. Run predict.py
-4. Verify submission.csv matches sample format
+DO:
+1. Write predict.py: Load model, predict on test, save to {submission_dir}/submission.csv
+2. Run predict.py
+3. Respond "DONE"
 
-Critical requirements:
-- EXACT column names from sample_submission.csv
-- EXACT row count from sample_submission.csv  
-- EXACT data types (int/float/string)
-- Same preprocessing as training (features, scaling, encoding)
-- No extra columns, no missing rows
-- Use GPU for inference if model supports it (faster predictions)
+DO NOT:
+- Write summaries/READMEs/documentation
+- Create verification scripts
+- Run extra validation checks
 
-Double-check format before finishing."""
+Match sample_submission.csv format. Use GPU.
+
+Tools: Bash, Read, Write"""
 
 
 def format_eda_prompt(competition_id: str, data_dir: str, instructions_path: str) -> str:
