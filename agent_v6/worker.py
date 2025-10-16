@@ -2,7 +2,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict
 from agent_v6.agent import Agent
-from agent_v6.tools import ToolRegistry, WriteTool
+from agent_v6.tools import ToolRegistry, BashTool, ReadTool, WriteTool
 from agent_v6.prompts import format_worker_prompt
 
 
@@ -16,6 +16,8 @@ class Worker:
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         
         tools = ToolRegistry(str(self.workspace_dir))
+        tools.register(BashTool(str(self.workspace_dir)))
+        tools.register(ReadTool(str(self.workspace_dir)))
         tools.register(WriteTool(str(self.workspace_dir)))
         
         system_prompt = format_worker_prompt(

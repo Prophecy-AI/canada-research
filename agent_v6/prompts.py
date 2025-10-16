@@ -67,43 +67,23 @@ Based on the data characteristics above, select appropriate models and design ex
 Output 1 experiment if confident in approach, 2-3 if testing different hypotheses."""
 
 
-WORKER_PROMPT = """Write train.py implementing this experiment. NO exploration, NO iteration.
+WORKER_PROMPT = """Write train.py implementing this experiment.
 
-Experiment Spec: {spec}
-Data Context: {eda_context}
-Data Directory: {data_dir}
-Workspace: {workspace_dir}
+Experiment spec: {spec}
+Data directory: {data_dir}
+EDA summary: {eda_context}
 
-**Requirements:**
-1. **Import all needed modules** (os, io, numpy, pandas, zipfile, PIL, sklearn, pickle, torch if using CNN)
-2. **Load data** from {data_dir} (images in train.zip, labels in train.csv)
-3. **Implement model** with exact features/hyperparameters from spec
-4. **80/20 train/val split** (random_state=42, stratify=y)
-5. **Print score** in exact format: "VALIDATION_SCORE: 0.847123"
-6. **Save model** as model.pkl
-7. **Wrap in try/except** with error printing
+Write train.py that:
+- Checks data structure in {data_dir} first (use Bash to check zip contents, extract files to workspace if needed)
+- Loads data correctly based on format
+- Implements the model/features/hyperparameters from spec exactly
+- Uses train_test_split (test_size=0.2, random_state=42)
+- NO cross-validation
+- Trains on GPU (device='cuda' for PyTorch, tree_method='gpu_hist' for XGBoost, device='gpu' for LightGBM)
+- Prints validation score
+- Saves model
 
-**For IMAGE data from zip files:**
-- Use ZipFile to read images: `z.read(f'train/{{img_id}}')`
-- Use PIL to open: `Image.open(io.BytesIO(img_bytes))`
-- For XGBoost/LightGBM: Flatten images to vectors, engineer features if specified
-- For CNNs (ResNet/EfficientNet): Create PyTorch Dataset, DataLoader, use transforms
-
-**For PRETRAINED models (ResNet18/EfficientNet/MobileNet):**
-- Load with torchvision.models: `models.resnet18(pretrained=True)`
-- Replace final layer for binary classification: `model.fc = nn.Linear(..., 1)`
-- Use model.cuda(), train on GPU
-- Resize images to 224x224, normalize with ImageNet stats
-- Use BCEWithLogitsLoss, Adam optimizer
-
-**GPU Settings:**
-- XGBoost: tree_method='gpu_hist', device='cuda'
-- LightGBM: device='gpu'
-- PyTorch: model.cuda(), images.cuda()
-
-Implement experiment from spec. Respond "READY".
-
-Tools: Write"""
+Tools: Bash, Read, Write"""
 
 
 ANALYSIS_PROMPT = """You are an expert ML engineer analyzing experiment results and deciding next steps.
