@@ -39,6 +39,9 @@ class BackgroundProcess:
     # Collector task (for cleanup)
     collector_task: Optional[asyncio.Task] = None
 
+    # Track last output time (for stall detection)
+    last_output_time: float = field(default_factory=time.time)
+
     def append_stdout(self, data: bytes) -> None:
         """Append stdout data, enforcing max buffer size"""
         if data:  # Only update timestamp if we got actual data
