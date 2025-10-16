@@ -2,6 +2,10 @@ import asyncio
 import os
 import sys
 from pathlib import Path
+
+AGENT_DIR = os.environ.get('AGENT_DIR', '/home/agent')
+sys.path.insert(0, AGENT_DIR)
+
 from agent_v6.orchestrator import Orchestrator
 
 
