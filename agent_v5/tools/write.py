@@ -93,8 +93,32 @@ class WriteTool(BaseTool):
         has_lightgbm = 'import lightgbm' in content_lower or 'from lightgbm' in content_lower
         has_tensorflow = 'import tensorflow' in content_lower or 'from tensorflow' in content_lower
         has_catboost = 'import catboost' in content_lower or 'from catboost' in content_lower
+        has_cuml = 'import cuml' in content_lower or 'from cuml' in content_lower
         
-        if not (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
+        # Check for BANNED sklearn usage
+        has_sklearn = 'import sklearn' in content_lower or 'from sklearn' in content_lower
+        if has_sklearn and is_ml_script:
+            return (
+                "🔴 ERROR: scikit-learn (sklearn) is BANNED for training!\n"
+                "   scikit-learn runs on CPU only and is 10-100x slower than GPU.\n"
+                "   \n"
+                "   ✅ Use cuML (RAPIDS) instead - GPU-accelerated drop-in replacement:\n"
+                "   \n"
+                "   REPLACE:\n"
+                "   ❌ from sklearn.linear_model import LogisticRegression\n"
+                "   ✅ from cuml.linear_model import LogisticRegression\n"
+                "   \n"
+                "   ❌ from sklearn.ensemble import RandomForestClassifier\n"
+                "   ✅ from cuml.ensemble import RandomForestClassifier\n"
+                "   \n"
+                "   ❌ from sklearn.svm import SVC\n"
+                "   ✅ from cuml.svm import SVC\n"
+                "   \n"
+                "   cuML has the same API as sklearn but runs on GPU automatically.\n"
+                "   Fix this BEFORE running - CPU training will waste hours."
+            )
+        
+        if not (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost or has_cuml):
             return ""
         
         # Check if GPU is already configured
@@ -119,6 +143,10 @@ class WriteTool(BaseTool):
             # TensorFlow auto-detects GPU, so assume configured
             gpu_configured = True
         
+        if has_cuml:
+            # cuML always uses GPU, so assume configured
+            gpu_configured = True
+        
         # Return hint if GPU not configured
         if not gpu_configured:
             hints = []
@@ -134,7 +162,7 @@ class WriteTool(BaseTool):
             return f"⚠️  GPU CHECK: This script may not be using GPU!\n" + "\n".join(f"   • {hint}" for hint in hints) + "\n   • CPU training is 10-100x slower - verify GPU usage before running"
         
         # If GPU is configured and this is a training/prediction script, remind to consult Oracle
-        if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
+        if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost or has_cuml):
             return (
                 "💡 RECOMMENDED: If this is a long-running task, before running this script, consult Oracle for code review.\n"
                 "   Ask: 'I'm about to run this long-running task. Review for: GPU usage, data leakage,\n"
