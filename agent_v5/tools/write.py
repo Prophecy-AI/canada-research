@@ -136,9 +136,9 @@ class WriteTool(BaseTool):
         # If GPU is configured and this is a training/prediction script, remind to consult Oracle
         if is_ml_script and (has_pytorch or has_xgboost or has_lightgbm or has_tensorflow or has_catboost):
             return (
-                "💡 RECOMMENDED: If this is a long-running task, before running this script, consult Oracle for code review.\n"
-                "   Ask: 'I'm about to run this long-running task. Review for: GPU usage, data leakage,\n"
-                "   label encoding bugs, parameter issues, or any logic errors.'\n"
-                "   This catches bugs BEFORE wasting compute time."
-            )        
+                "💡 STRATEGIC HINT: Instead of running iterative baselines, pause and open an extended brainstorming session with Oracle.\n"
+                "   Discuss: (a) fastest GPU-first pipeline, (b) risk of data leakage, (c) minimal full-dataset runs.\n"
+                "   Aim to produce ONE high-quality training script that can reach medal range in the first attempt."
+            )
+        
         return ""
