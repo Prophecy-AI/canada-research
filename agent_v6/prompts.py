@@ -41,6 +41,10 @@ Based on dataset characteristics, select models that are:
 - Appropriate for the data type and size
 - Fast to train (10-15 epochs, early stopping)
 - Batch size 32-64 for parallel GPU training
+- **For train_split hyperparameter:**
+  * For small datasets (<5000 samples): use train_split 0.85 (leaves 15% for validation)
+  * For larger datasets: use train_split 0.9-0.95
+  * Never use train_split > 0.9 for datasets with many classes relative to size
 
 **Model Selection Guidance (you can use ANY model, these are suggestions):**
 - Images (small dataset <50K): DenseNet161, DenseNet121, ResNet18, MobileNet, EfficientNet-B0 (pretrained, fast)
@@ -82,22 +86,24 @@ WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
 Experiment: {spec}
 Data: {data_dir}
 
-**EDA Context (use this to understand the problem):**
+**EDA Context:**
 {eda_context}
 
-**CRITICAL: Your ONLY job is to write train.py. DO NOT:**
-- Run train.py (orchestrator will run it)
-- Write summaries/documentation
-- Test imports
-- Create verification scripts
+**TRAIN/VAL SPLIT (use train_split from spec):**
+```python
+test_size = 1 - train_split
+try:
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=test_size, stratify=y, random_state=42)
+except ValueError:
+    X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=test_size, random_state=42)
+```
 
 **DO:**
-1. Check data structure (use Bash: ls, zipinfo, head CSV)
-2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
+1. Check data structure (ls, head CSV)
+2. Extract zip files if needed
 3. Write train.py with:
-   - **For image datasets:** Read CSV with dtype='id': str to preserve filename format (avoid 1202.0.jpg)
+   - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format
    - GPU memory cleanup: `import torch; torch.cuda.empty_cache()` at start
-   - Correct data loading based on structure you found
    - Model/features/hyperparameters from spec (use EXACT batch_size from spec)
    - **Use standard library implementations (torchvision.models, sklearn, xgboost, lightgbm)**
    - **DO NOT implement custom model architectures from scratch - use pretrained/library models only**
@@ -111,16 +117,6 @@ Data: {data_dir}
      * Multiclass classification (>2 classes): `nn.CrossEntropyLoss(label_smoothing=0.1)` 
      * Multi-label classification (multiple labels per sample): `nn.BCEWithLogitsLoss()`
      * Regression: `nn.MSELoss()` or `nn.L1Loss()`
-   - **Train/validation split (copy this pattern for multiclass):**
-     ```python
-     test_size = 0.15 if len(df) < 5000 else 0.10
-     try:
-         X_train, X_val, y_train, y_val = train_test_split(
-             X, y, test_size=test_size, stratify=y, random_state=42)
-     except ValueError:
-         X_train, X_val, y_train, y_val = train_test_split(
-             X, y, test_size=test_size, random_state=42)
-     ```
    - For images: 
      * Input size 128-224 (not 32x32)
      * Use standard torchvision.transforms (RandomHorizontalFlip, RandomRotation, ColorJitter, Normalize)
