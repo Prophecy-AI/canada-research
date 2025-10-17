@@ -149,17 +149,20 @@ Current date: {current_date}
    • Oracle validates your playbook-based strategy and provides refinements
    • Use Oracle's strategic roadmap as foundation for all work
 
-**4) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE) - WITH TIME ESTIMATION**
+**4) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE) - WITH VALIDATION**
    • Oracle provides initial strategy (approach, features, models, CV strategy)
-   • **Estimate training time BEFORE committing to strategy:**
+   • **VALIDATE MODEL AVAILABILITY (if using pretrained models):**
+     - Check model exists offline: `Bash(command="python -c \"import timm; print('MODEL_NAME' in timm.list_models())\"", background=false)`
+     - If model not available, ask Oracle for alternative (don't silently substitute weaker model)
+   • **ESTIMATE TRAINING TIME:**
      - Calculate: (num_folds × num_epochs × minutes_per_epoch)
      - Example: 3 folds × 8 epochs × 0.5 min/epoch = 12 min training + 5 min inference = 17 min ✓
      - Add 20% buffer for safety
-     - **If estimate >30 min → ask Oracle for faster approach (fewer folds/epochs or smaller model)**
+     - If estimate >30 min → ask Oracle for faster approach (fewer folds/epochs or smaller model)
    • Spend time refining strategy with Oracle to target 20-25 min window
    • Goal: Strong performance in reasonable time (balance quality vs speed)
    • Consult Oracle again for code-level validation AND time estimate review
-   • Only after concrete high-confidence plan with reasonable time estimate, proceed to coding
+   • Only after validated plan with reasonable time estimate, proceed to coding
 
 5) **Sync Tasks**  ⇒ Call `ReadTodoList` at the start of each turn after the strategic planning session.
    • If no todos exist, create a list via `TodoWrite` with ONE task marked `in_progress`.
@@ -233,13 +236,18 @@ Current date: {current_date}
      2. Write train.py following hints guidelines
      3. Validate train.py with Oracle
      4. Launch training: `Bash(command="python -u train.py", background=true)`
-     5. **MANDATORY GPU CHECK (60 seconds after launch):**
+     5. **MANDATORY GPU VALIDATION (60 seconds after launch) - CRITICAL:**
         - Read training output with ReadBashOutput
-        - Look for GPU memory usage print (should show XX.X GB / YY.Y GB)
-        - **If GPU memory <50% → KILL TRAINING IMMEDIATELY, increase batch_size by 2x, relaunch**
-        - **If GPU memory 50-70% → OPTIONAL: Can increase batch_size by 1.5x for better utilization**
-        - **If no GPU memory print found → KILL TRAINING, add GPU monitoring code, relaunch**
-        - Only proceed if GPU memory >50% and batch processing speed looks good
+        - **CHECK 1 - GPU IS BEING USED:** Look for GPU memory usage print (should show XX.X GB / YY.Y GB)
+          * **If GPU memory <10% or no GPU usage → KILL IMMEDIATELY - training on CPU (10-100x slower)**
+          * This is the #1 failure mode - verify GPU is actually being used, not just available
+        - **CHECK 2 - GPU UTILIZATION:** Once confirmed using GPU, check memory %
+          * If GPU memory <50% → KILL, increase batch_size by 2x, relaunch
+          * If GPU memory 50-70% → OPTIONAL: Can increase batch_size by 1.5x for better utilization
+        - **CHECK 3 - LOSS SANITY:** After 1-2 epochs, check validation loss vs random baseline
+          * Random baseline = ln(num_classes). Example: 120 classes → ln(120) ≈ 4.79
+          * If validation loss ≈ baseline (within 0.1) → model not learning, KILL and debug
+        - Only proceed if: GPU >10% usage, GPU >50% memory, loss improving beyond random
      6. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
      7. Validate predict.py with Oracle if needed
      8. **Monitor GPU usage during training (every 120-180s):**
@@ -251,17 +259,19 @@ Current date: {current_date}
      9. **ORACLE CONSULTATION DURING PASSIVE MONITORING (every 5-10 min while training runs):**
         - **Use ElapsedTime tool** to check time spent and % of budget used
         - **Use ReadBashOutput** to get latest training logs (epochs completed, losses, GPU usage)
-        - **Consult Oracle with comprehensive context:**
+        - **Consult Oracle with comprehensive context (MUST include all metrics):**
           * "I've been working for X minutes (Y% of 30-min budget used)"
           * "Training logs: [paste recent epoch outputs showing GPU usage, losses, speed]"
-          * "Current GPU: XX.X GB / 24.0 GB (ZZ%)"
+          * "**GPU validation:** XX.X GB / 24.0 GB (ZZ%) - verify >10% to confirm GPU usage"
+          * "**Loss validation:** Validation loss = A.BC, random baseline = ln(num_classes) = D.EF"
           * "Current strategy: N folds × M epochs, batch_size=B, num_workers=W"
           * "Expected completion: ~A more minutes"
-          * "Ask Oracle: Critique my current process, identify resource underutilization, check if on track for time budget, recommend next steps"
+          * "Ask Oracle: Critique my current process, verify GPU being used, check loss vs baseline, identify issues, recommend next steps"
         - **Oracle will analyze:**
+          * GPU validation (if <10%, training on CPU - immediate kill needed)
+          * Loss sanity (if loss ≈ baseline, model not learning - debug needed)
           * Resource utilization patterns (GPU/CPU underused?)
           * Time trajectory (will we finish in budget?)
-          * Training progress (converging properly? early stopping needed?)
           * Next steps (continue? kill and pivot? adjust strategy?)
         - **Take Oracle's guidance seriously** - if Oracle says kill training, do it immediately
      10. **If training taking too long (>70% of time budget used), kill training and run predict.py with partial models**
