@@ -42,7 +42,7 @@ on:
         default: 'any'
 
       rebuild_image:
-        description: 'Force rebuild Docker image (ignore cache)'
+        description: 'Rebuild Docker image from Dockerfile'
         required: false
         type: boolean
         default: true
@@ -54,7 +54,7 @@ jobs:
       - gpu
       - ${{ github.event.inputs.target_gpu != 'any' && github.event.inputs.target_gpu || 'gpu' }}
 
-    timeout-minutes: 1440  # 24 hours max
+    timeout-minutes: 1440
 
     steps:
       - name: Show run configuration
@@ -69,6 +69,7 @@ jobs:
           echo "Target GPU: ${{ github.event.inputs.target_gpu }}"
           echo "Runner: $(hostname)"
           echo "Run ID: ${{ github.run_id }}"
+          echo "Run Number: ${{ github.run_number }}"
           echo "=========================================="
 
       - name: Clean workspace
@@ -80,7 +81,7 @@ jobs:
           find . -type f -name "*.pyo" -delete 2>/dev/null || true
           git clean -fdx || true
           git reset --hard HEAD || true
-          echo "✅ Workspace cleaned"
+          echo "✅ Workspace cleaned (including Python bytecode)"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -93,13 +94,14 @@ jobs:
           cd mle-bench/experiments/splits
 
           if [ -n "${{ github.event.inputs.custom_competitions }}" ]; then
-            echo "Using custom competitions:"
+            echo "Using custom competitions list:"
             echo "${{ github.event.inputs.custom_competitions }}" | tee custom-set.txt
           else
             COMP_FILE=$(echo "${{ github.event.inputs.competition_set }}" | awk '{print $1}')
             echo "Using competition set: $COMP_FILE"
             if [ "$COMP_FILE" != "custom-set.txt" ]; then
               cp "$COMP_FILE" custom-set.txt
+              echo "Copied $COMP_FILE to custom-set.txt"
             fi
           fi
 
@@ -117,10 +119,13 @@ jobs:
           fi
 
           source venv/bin/activate
-          echo "Installing mlebench..."
+          echo "Installing mlebench (non-editable mode to avoid import conflicts)..."
           pip install --force-reinstall --no-cache-dir . --quiet
 
           echo "✅ Python environment ready"
+          echo "   Python: $(which python)"
+          echo "   mlebench: $(python -c 'import mlebench; print(mlebench.__file__)')"
+          echo "   NOTE: Agent code runs inside Docker container (isolated)"
 
       - name: Run MLE-Bench
         timeout-minutes: 1400
@@ -134,6 +139,15 @@ jobs:
         run: |
           cd mle-bench
           source venv/bin/activate
+
+          echo "Starting MLE-Bench with:"
+          echo "  Working directory: $(pwd)"
+          echo "  IMAGE_TAG: $IMAGE_TAG"
+          echo "  RUN_ID: $RUN_ID"
+          echo "  DRY_RUN: $DRY_RUN"
+          echo "  Python: $(which python)"
+          echo ""
+
           ./RUN_AGENT_V5_KAGGLE.sh
 
       - name: Upload results
@@ -158,6 +172,7 @@ jobs:
         if: always() && github.event.inputs.dry_run == 'false'
         run: |
           cd ${{ github.workspace }}/mle-bench
+
           RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
 
           if [ -n "$RUN_GROUP" ]; then
@@ -166,14 +181,23 @@ jobs:
             echo "Results Summary"
             echo "=========================================="
             echo "Run group: $RUN_GROUP"
+            echo ""
 
             GRADING_REPORT=$(find "runs/$RUN_GROUP/" -name "*_grading_report.json" -o -name "results.json" | head -1)
+
             if [ -n "$GRADING_REPORT" ]; then
               echo "Grading Results:"
               cat "$GRADING_REPORT" | head -50
             else
-              echo "⚠️  No grading results found"
+              echo "⚠️  Grading results not found"
+              echo "Files in run directory:"
+              ls -la "runs/$RUN_GROUP/"
             fi
+
+            echo ""
+            echo "Download artifacts above to see full results"
+          else
+            echo "⚠️  No results found"
           fi
 
       - name: Cleanup Docker
@@ -181,21 +205,30 @@ jobs:
         env:
           RUN_ID: ${{ github.run_id }}
         run: |
-          echo "Docker Cleanup..."
+          echo "=========================================="
+          echo "Docker Cleanup"
+          echo "=========================================="
+
           cd ${{ github.workspace }}
           bash scripts/cleanup-containers.sh || true
+
+          echo ""
+          echo "Cleaning up Docker images..."
 
           docker image rm agent_v5_kaggle:run-${{ github.run_id }} 2>/dev/null || true
           docker container prune -f
           docker image prune -f
 
-          echo "Docker disk usage:"
+          echo ""
+          echo "Docker disk usage after cleanup:"
           docker system df
 
       - name: Cleanup workspace
         if: always()
         run: |
           cd ${{ github.workspace }}/mle-bench
+
           rm -rf data/ 2>/dev/null || true
           find runs/ -name "*.pth" -o -name "*.pt" -o -name "*.h5" | xargs rm -f 2>/dev/null || true
+
           echo "Workspace cleanup complete"

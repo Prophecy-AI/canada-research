@@ -38,11 +38,17 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
     && conda clean -afy
 
 # Install build tools for LightGBM CUDA compilation
+# Need CMake 3.28+ (base image has 3.16)
 RUN apt-get update && apt-get install -y \
-    cmake \
     build-essential \
     git \
+    wget \
     && rm -rf /var/lib/apt/lists/*
+
+# Install newer CMake (3.28+ required by LightGBM)
+RUN wget -qO- https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz | tar -xz -C /opt && \
+    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
+    cmake --version
 
 # Build LightGBM from source with CUDA support
 # Compiles with -DUSE_CUDA=ON flag which enables CUDA Tree Learner (for NVIDIA GPUs)
