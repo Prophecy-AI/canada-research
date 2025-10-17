@@ -79,6 +79,7 @@ COPY environment/grading_server.py /private/grading_server.py
 COPY environment/instructions.txt /home/instructions.txt
 COPY environment/instructions_obfuscated.txt /home/instructions_obfuscated.txt
 COPY environment/training_hints.txt /home/training_hints.txt
+COPY environment/kaggle_competition_strategy.txt /home/kaggle_competition_strategy.txt
 COPY environment/validate_submission.sh /home/validate_submission.sh
 COPY environment/entrypoint.sh /entrypoint.sh
 
