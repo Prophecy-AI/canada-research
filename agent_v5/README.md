@@ -6,6 +6,8 @@
 
 Agent V5 completely replaces the Claude Code SDK dependency with a custom implementation while maintaining 100% functionality. All tools, MCP integration, and agentic loops work identically to the original.
 
+**NEW:** Agent V5 now supports using different models for planning vs execution. Use OpenAI's o3-mini or o1 for planning while Claude executes the plan. See [PLANNING_MODELS.md](PLANNING_MODELS.md) for details.
+
 ---
 
 ## What Was Built
