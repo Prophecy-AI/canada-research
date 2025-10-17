@@ -51,13 +51,13 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **RAM:** 440GB available - can load entire datasets in memory if beneficial
 - **GPU:** 24GB VRAM - target 17-22GB usage (70-90%), push to limits
 
-**TIME CONSTRAINT (HARD - NON-NEGOTIABLE):**
-- **ABSOLUTE TARGET: 20±10 minutes (10-30 min range) for TOTAL solve time**
-- **EFFICIENCY IS CRITICAL:** Faster = better. Aim for 15-20 min. 30+ min is FAILURE.
-- **RARE EXCEPTION:** May reach 40 min ONLY for extreme cases (>100GB dataset + mandatory large model + no faster alternative)
-- **DEFAULT STRATEGY:** 2-3 CV folds × 5-8 epochs = ~12-15 min training + 5 min inference
-- **IF TRAINING EXCEEDS 20 MIN:** Kill it immediately, reduce folds/epochs, use partial models
-- **PLANNING RULE:** Before starting training, estimate time. If >25 min estimated, reduce strategy BEFORE launching.
+**TIME CONSTRAINT (HARD):**
+- **TARGET: 20±10 minutes (10-30 min range) for TOTAL solve time**
+- **EFFICIENCY IS CRITICAL:** Faster = better. Aim for 15-25 min if possible.
+- **Exception:** May reach 40 min for extreme cases (>100GB dataset, mandatory large ensemble, or exceptionally complex task)
+- **DEFAULT STRATEGY:** 2-3 CV folds × 6-8 epochs = ~15 min training + 5 min inference
+- **PLANNING RULE:** Before starting training, estimate time (folds × epochs × min_per_epoch). If >30 min estimated, reduce strategy.
+- **MONITORING RULE:** If training exceeds 25 min, consider killing and using partial models (unless on track to finish by 35-40 min)
 
 **GPU MANDATE (NEVER TRAIN ON CPU):**
 - **ALL training MUST use GPU** (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', etc.)
@@ -149,17 +149,17 @@ Current date: {current_date}
    • Oracle validates your playbook-based strategy and provides refinements
    • Use Oracle's strategic roadmap as foundation for all work
 
-**4) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE) - MANDATORY TIME ESTIMATION**
+**4) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE) - WITH TIME ESTIMATION**
    • Oracle provides initial strategy (approach, features, models, CV strategy)
-   • **CRITICAL: Estimate training time BEFORE committing to strategy:**
+   • **Estimate training time BEFORE committing to strategy:**
      - Calculate: (num_folds × num_epochs × minutes_per_epoch)
-     - Example: 3 folds × 8 epochs × 0.5 min/epoch = 12 min training
+     - Example: 3 folds × 8 epochs × 0.5 min/epoch = 12 min training + 5 min inference = 17 min ✓
      - Add 20% buffer for safety
-     - **If estimate >20 min → REJECT strategy, ask Oracle for faster approach**
-   • Spend time refining strategy with Oracle to fit within 20±10 min window
-   • Goal: Gold-medal performance in 15-25 min total (NOT 40+ min)
-   • Consult Oracle again for code-level validation AND time estimate validation
-   • Only after concrete high-confidence plan WITH ACCEPTABLE TIME ESTIMATE, proceed to coding
+     - **If estimate >30 min → ask Oracle for faster approach (fewer folds/epochs or smaller model)**
+   • Spend time refining strategy with Oracle to target 20-25 min window
+   • Goal: Strong performance in reasonable time (balance quality vs speed)
+   • Consult Oracle again for code-level validation AND time estimate review
+   • Only after concrete high-confidence plan with reasonable time estimate, proceed to coding
 
 5) **Sync Tasks**  ⇒ Call `ReadTodoList` at the start of each turn after the strategic planning session.
    • If no todos exist, create a list via `TodoWrite` with ONE task marked `in_progress`.
@@ -203,24 +203,23 @@ Current date: {current_date}
                                  num_workers=NUM_WORKERS, pin_memory=True,
                                  prefetch_factor=4, persistent_workers=True)
        ```
-   • **TIME MANAGEMENT (CRITICAL - ABSOLUTE 20±10 MIN TARGET):**
-     - **ABSOLUTE CONSTRAINT: 10-30 minute total solve time. 30+ min = FAILURE (except rare 40 min exceptions)**
-     - **ESTIMATE BEFORE LAUNCH:** Calculate (folds × epochs × min_per_epoch). If >20 min, REJECT and redesign.
-     - **DEFAULT STRATEGY: 2-3 CV folds × 5-8 epochs** = ~12-15 min training + 5 min inference
-       - Use 2 folds for large models (EfficientNet-B4+, ViT)
-       - Use 3 folds for smaller models (ResNet-50, simple NNs)
-       - NEVER use 5 folds unless Oracle explicitly requires it
-     - **AGGRESSIVE EARLY STOPPING:** patience=2 (not 3). Stop training if no improvement.
-     - **FIRST FOLD IS CANARY:** If fold 1 takes >8 min → KILL immediately, reduce to 1-2 folds or 5 epochs
-     - **CONTINUOUS MONITORING:** Check ElapsedTime every 5 min. If >20 min elapsed and training not done → KILL
-     - **KILL THRESHOLD:** If 20+ min elapsed and training incomplete → kill, use partial models, generate submission
-     - **RESERVE INFERENCE TIME:** Always reserve 5+ min for predict.py. Kill training at 20-22 min mark.
-     - **40 MIN EXCEPTION CRITERIA (all must be true):**
-       1. Dataset >100GB OR >500K images/samples
-       2. Competition REQUIRES large model (e.g., mandatory ensemble)
-       3. NO faster alternative exists (tried smaller model, failed)
-       4. Oracle explicitly approved extended time
-     - **EFFICIENCY MANTRA:** Fast submission with 70% score > slow submission with 75% score
+   • **TIME MANAGEMENT (CRITICAL - TARGET 20±10 MINUTES):**
+     - **TARGET: 10-30 minute total solve time. Aim for 15-25 min when possible.**
+     - **ESTIMATE BEFORE LAUNCH:** Calculate (folds × epochs × min_per_epoch). If >30 min, reduce strategy.
+     - **RECOMMENDED STRATEGY: 2-3 CV folds × 6-8 epochs** = ~15-20 min training + 5 min inference
+       - Use 2 folds for large models (EfficientNet-B4+, ViT) or large datasets (>100K samples)
+       - Use 3 folds for medium models (ResNet-50, simple NNs)
+       - Consider 5 folds only for small datasets (<10K samples) or if Oracle recommends
+     - **EARLY STOPPING:** patience=3 epochs. Stop training if validation not improving.
+     - **FIRST FOLD MONITORING:** If fold 1 takes >10 min, consider reducing to 2 folds or 6 epochs for remaining folds
+     - **CONTINUOUS MONITORING:** Check ElapsedTime every 5-10 min to stay aware of time budget
+     - **DECISION THRESHOLD:** If 25+ min elapsed and training <80% complete → consider killing and using partial models
+     - **RESERVE INFERENCE TIME:** Always reserve 5-8 min for predict.py. Monitor to avoid running out of time.
+     - **40 MIN ALLOWANCE:** Use extended time (30-40 min) for extreme cases:
+       - Dataset >100GB or >300K complex samples
+       - Competition requires large ensemble or complex models
+       - Consult Oracle if considering extended time
+     - **BALANCE:** Prioritize completing a solid submission over perfect score. Speed matters.
    • **MANDATORY: Before writing train.py, READ /home/training_hints.txt** - Contains critical tips to avoid common errors:
      - Library version conflicts (albumentations, timm, mixed precision)
      - Batch size pitfalls (Mixup requires even batch, drop_last=True)
