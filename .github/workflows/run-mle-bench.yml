@@ -132,21 +132,6 @@ jobs:
           echo "   mlebench: $(python -c 'import mlebench; print(mlebench.__file__)')"
           echo "   NOTE: Agent code runs inside Docker container (isolated)"
 
-      - name: Force rebuild base image (if Dockerfile changed)
-        run: |
-          echo "Checking if base image needs rebuild..."
-
-          # Check if Dockerfile was modified in this branch compared to what's running
-          # Simple approach: if Dockerfile was modified in last 5 commits, force rebuild
-          DOCKERFILE_CHANGED=$(git log -5 --oneline --name-only -- mle-bench/environment/Dockerfile | wc -l)
-
-          if [ "$DOCKERFILE_CHANGED" -gt 0 ]; then
-            echo "⚠️  Dockerfile modified in recent commits - forcing base image rebuild"
-            docker image rm mlebench-env:latest 2>/dev/null || echo "No existing base image to remove"
-          else
-            echo "✅ Dockerfile unchanged in recent commits - will use cached base image if available"
-          fi
-
       - name: Run MLE-Bench
         timeout-minutes: 1400  # 23.3 hours (slightly less than job timeout for cleanup)
         env:
