@@ -51,12 +51,12 @@ class BashTool(BaseTool):
                     },
                     "timeout": {
                         "type": "number",
-                        "description": "Timeout in milliseconds (default is 2 minutes, CHNAGE IT IF YOU WANT TO USE THIS FOR BLOCKING TASKS THAT WILL TAKE MORE THAN 2 MINUTES TO COMPLETE, only applies to foreground execution)",
-                        "default": 120000
+                        "description": "Timeout in milliseconds (default is 30 minutes for sleep commands between background task checks, only applies to foreground execution)",
+                        "default": 1800000
                     },
                     "background": {
                         "type": "boolean",
-                        "description": "REQUIRED: Explicitly choose execution mode. If true, run command in background and return shell_id immediately. Use ReadBashOutput(shell_id) to monitor progress and KillShell(shell_id) to stop it. Perfect for long-running tasks like model training. If false, command blocks until completion (max 120s timeout)."
+                        "description": "REQUIRED: Explicitly choose execution mode. If true, run command in background and return shell_id immediately. Use ReadBashOutput(shell_id) to monitor progress and KillShell(shell_id) to stop it. Perfect for long-running tasks like model training. If false, command blocks until completion (max 30min timeout for sleep commands)."
                     }
                 },
                 "required": ["command", "background"]
@@ -71,8 +71,8 @@ class BashTool(BaseTool):
         if background:
             return await self._execute_background(command)
         else:
-            timeout_ms = input.get("timeout", 120000)
-            timeout_s = min(timeout_ms / 1000, 1000)
+            timeout_ms = input.get("timeout", 1800000)  # 30 minutes default
+            timeout_s = min(timeout_ms / 1000, 1800)  # Cap at 30 minutes
             return await self._execute_foreground(command, timeout_s)
 
     async def _execute_foreground(self, command: str, timeout_s: float) -> Dict:
@@ -111,7 +111,7 @@ class BashTool(BaseTool):
             original_length = len(output)
             if len(output) > MAX_FOREGROUND_OUTPUT:
                 output = (
-                    f"⚠️  Output truncated: showing last {MAX_FOREGROUND_OUTPUT:,} chars of {original_length:,} total chars\n"
+                    f"Output truncated: showing last {MAX_FOREGROUND_OUTPUT:,} chars of {original_length:,} total chars\n"
                     f"(Full output not stored, only recent output shown to save context)\n\n"
                     + output[-MAX_FOREGROUND_OUTPUT:]
                 )

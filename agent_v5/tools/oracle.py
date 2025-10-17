@@ -221,7 +221,7 @@ class OracleTool(BaseTool):
                     "  - Prefer 6-8 epochs with early stopping over 10+ epochs\n"
                     "• **TIME ESTIMATION:** Calculate (folds × epochs × min_per_epoch) before recommending\n"
                     "  - If estimate >30 min → recommend faster approach (fewer folds/epochs or smaller model)\n"
-                    "  - Examples: 3 folds × 8 epochs × 0.5 min = 12 min ✓ | 3 folds × 8 epochs × 3 min = 72 min ✗ (reduce)\n"
+                    "  - Examples: 3 folds × 8 epochs × 0.5 min = 12 min OK | 3 folds × 8 epochs × 3 min = 72 min BAD (reduce)\n"
                     "• **MONITORING GUIDANCE (CRITICAL CHECKS):**\n"
                     "  - **GPU validation:** If agent reports GPU <10% → IMMEDIATELY tell them to KILL training (running on CPU)\n"
                     "  - **Loss sanity:** If validation loss ≈ ln(num_classes) after 2+ epochs → model not learning, tell them to KILL and debug\n"
@@ -360,7 +360,6 @@ class OracleTool(BaseTool):
                 model="o3",
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=1.0
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -393,7 +392,6 @@ class OracleTool(BaseTool):
                 model="deepseek-reasoner",  # Reasoning mode (R1)
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=1.0
             )
             return response.choices[0].message.content
         except Exception as e:
@@ -456,7 +454,6 @@ class OracleTool(BaseTool):
                 model="o3",
                 messages=critic_messages,
                 max_completion_tokens=16384,  # More tokens for synthesis
-                temperature=1.0
             )
             return response.choices[0].message.content
         except Exception as e:

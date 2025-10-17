@@ -77,16 +77,16 @@ class ToolRegistry:
         try:
             await self.tools[tool_name].prehook(tool_input)
         except Exception as e:
-            log(f"✗ {tool_name} prehook: {e}", 2)
+            log(f"{tool_name} prehook error: {e}", 2)
             return {"content": str(e), "is_error": True}
 
         result = await self.tools[tool_name].execute(tool_input)
 
         # Smart result logging - use debug_summary if provided, else fallback
         if result.get("is_error"):
-            log(f"✗ {tool_name}: {str(result['content'])}", 2)
+            log(f"{tool_name} error: {str(result['content'])}", 2)
         else:
             summary = result.get("debug_summary") or f"ok"
-            log(f"✓ {tool_name} {summary}", 1)
+            log(f"{tool_name} {summary}", 1)
 
         return result
