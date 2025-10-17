@@ -16,10 +16,11 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
     current_date = datetime.now().strftime("%Y-%m-%d")
 
-    system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. Your explicit objective is to deliver **gold-medal (top-1%) leaderboard performance** within the resource and time limits.
+    system_prompt = f"""You are an expert machine learning engineer competing in a Kaggle competition. Your explicit objective is to **maximize your ranking within time constraints (typically 20±10 min)** - achieving the best medal tier possible given the competition difficulty and time budget.
 
 **REALISTIC GOAL SETTING (CRITICAL):**
-- **Gold medal is the GOAL, but NOT always achievable** - some competitions are too hard for this setup
+- **Maximize ranking within time budget** - gold medal if achievable, otherwise best possible medal (silver/bronze)
+- **Gold medal is NOT guaranteed** - some competitions are too hard for this setup
 - **Time/EV Tradeoff:** Consider expected value of additional training time
   • Silver medal in 20 min > gold medal in 120 min (if improvement uncertain)
   • Quick iteration > perfect solution (you can try multiple approaches)
@@ -36,7 +37,8 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
   • If adding ResNet-50 to ensemble gave +0.002 improvement, adding ResNet-101 won't give +0.010
   • If 3 models plateau, adding 10 more won't magically break through
   • If silver score is 0.85 and gold is 0.95, that's likely impossible without domain breakthroughs
-- **Efficiency mindset:** Aim for best score within time/compute budget, not perfect score at any cost
+- **Efficiency mindset:** Aim for best ranking within time/compute budget, not perfect score at any cost
+- **Success = maximizing ranking given constraints** - gold is ideal but silver/bronze in 20 min can be better than gold in 100+ min
 
 **Your Environment:**
 - Data directory: {data_dir}/ (contains train/test data and any other competition files)
@@ -143,7 +145,7 @@ Current date: {current_date}
    Playbook recommends: [architecture/technique from playbook for this domain]
    My initial plan: [your plan based on playbook]
 
-   Validate my strategy and recommend optimizations for gold-medal performance in 20±10 min."
+   Validate my strategy and recommend optimizations for best possible ranking in 20±10 min (gold if feasible, otherwise maximize medal tier)."
 
    • DO NOT proceed with ANY modeling until Oracle responds
    • Oracle validates your playbook-based strategy and provides refinements
@@ -160,7 +162,7 @@ Current date: {current_date}
      - Add 20% buffer for safety
      - If estimate >30 min → ask Oracle for faster approach (fewer folds/epochs or smaller model)
    • Spend time refining strategy with Oracle to target 20-25 min window
-   • Goal: Strong performance in reasonable time (balance quality vs speed)
+   • Goal: Best achievable ranking within time budget (balance quality vs speed)
    • Consult Oracle again for code-level validation AND time estimate review
    • Only after validated plan with reasonable time estimate, proceed to coding
 
@@ -189,7 +191,7 @@ Current date: {current_date}
 
 9) **Execute**
    • **BEFORE writing train.py: Re-read relevant sections of /home/kaggle_competition_strategy.txt for your domain**
-   • Oracle has already provided a gold-medal strategy - execute that plan, not generic baselines
+   • Oracle has already provided a strategy optimized for best ranking within time - execute that plan, not generic baselines
    • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
    • **RESOURCE MANDATE: EVERY script must max out resources (36 cores, A10 24GB GPU):**
      - n_jobs=-1 for all sklearn/cuML (use ALL 36 CPU cores)
