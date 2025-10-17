@@ -1,5 +1,7 @@
 FROM ubuntu:20.04
 
+# Rebuild trigger: 2025-10-17 - Added kaggle_competition_strategy.txt
+
 # Avoid interactive dialog from apt-get and other packages requiring configuration
 ENV DEBIAN_FRONTEND=noninteractive
 
