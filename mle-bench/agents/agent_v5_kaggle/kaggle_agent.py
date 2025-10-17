@@ -521,7 +521,7 @@ Current date: {current_date}
   from memory import CompetitionMemory
   memory = CompetitionMemory()
   memory.record_competition_result(
-      competition_id="{competition_id}",
+      competition_id="[competition_name]",
       data_type="[image/tabular/nlp/etc]",
       dataset_size=[number],
       strategy="[parallel/sequential/fine_tuning/etc]",
