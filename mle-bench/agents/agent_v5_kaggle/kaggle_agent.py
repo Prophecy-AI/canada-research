@@ -24,6 +24,8 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - Working directory: the agent's workspace (create scripts, logs, and artifacts here)
 - **All packages available on Anaconda are automatically available for you** (no installation needed)
 - **CRITICAL GPU ASSUMPTION: Although you may see A100 in nvidia-smi, ALWAYS assume you have NVIDIA A10 GPU (24GB VRAM, not 40GB). Plan batch sizes and memory usage for A10 specs. This prevents OOM errors in production environments where A10 is standard.**
+- **TARGET SOLVE TIME: 20±10 minutes (10-30 min range).** This is a HARD CONSTRAINT for planning. You may exceed this if the competition is exceptionally difficult or the dataset is extremely large (>100GB), but always aim for efficiency. Plan cv_folds, epochs, and batch_size to fit this time budget.
+- **GPU UTILIZATION MANDATE: MAXIMIZE A10 GPU usage at all times (target: 70-90% GPU memory, 80-95% GPU utilization). Underutilizing the GPU is wasteful and slow.**
 Current date: {current_date}
 
 **Competition Instructions (verbatim):**
@@ -116,12 +118,16 @@ Current date: {current_date}
                                  num_workers=10, pin_memory=True,
                                  prefetch_factor=4, persistent_workers=True)
        ```
-   • **TIME MANAGEMENT (CRITICAL):**
+   • **TIME MANAGEMENT (CRITICAL - TARGET: 20±10 minutes total solve time):**
+     - **HARD CONSTRAINT: Aim for 10-30 minute total solve time.** Plan everything around this budget.
      - Estimate total training time before starting (epochs × steps_per_epoch × seconds_per_step)
-     - **If estimated time > 80% of total budget:** Reduce cv_folds from 5→3, or max_epochs by 30-50%
-     - Monitor training speed continuously - if first fold takes >20% of budget, adjust strategy immediately
-     - **Always reserve 15% of time for inference/submission generation** - kill training early if needed
-     - Use early stopping aggressively (patience=3-5 epochs) to avoid wasting time on plateaued models
+     - **Default strategy for 20-min target:** 3 CV folds × 10 epochs × early stopping = ~15 min training + 5 min inference
+     - **If estimated time >25 minutes:** Reduce to 3 folds, 8 epochs, or smaller model
+     - **If dataset extremely large (>100GB) or exceptionally complex:** You may exceed 30 min, but justify the decision
+     - Monitor training speed continuously - if first fold takes >5 min, adjust strategy immediately (reduce epochs or folds)
+     - **Always reserve 15-20% of time for inference/submission generation** - kill training at 25 min if needed
+     - Use early stopping aggressively (patience=3 epochs) to avoid wasting time on plateaued models
+     - **Efficiency is key:** Don't waste time on marginal improvements. Get a good baseline fast, then iterate if time permits.
    • **MANDATORY: Before writing train.py, READ /home/training_hints.txt** - Contains critical tips to avoid common errors:
      - Library version conflicts (albumentations, timm, mixed precision)
      - Batch size pitfalls (Mixup requires even batch, drop_last=True)
@@ -139,11 +145,17 @@ Current date: {current_date}
         - Read training output with ReadBashOutput
         - Look for GPU memory usage print (should show XX.X GB / YY.Y GB)
         - **If GPU memory <50% → KILL TRAINING IMMEDIATELY, increase batch_size by 2x, relaunch**
+        - **If GPU memory 50-70% → OPTIONAL: Can increase batch_size by 1.5x for better utilization**
         - **If no GPU memory print found → KILL TRAINING, add GPU monitoring code, relaunch**
         - Only proceed if GPU memory >50% and batch processing speed looks good
      6. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
      7. Validate predict.py with Oracle if needed
-     8. Monitor training progress occasionally (every 60-120s, not more frequent)
+     8. **Monitor GPU usage during training (every 120-180s):**
+        - Check GPU memory in training logs (should print every epoch)
+        - **If model small (e.g., ResNet-18, tabular NN) and GPU <60%:** This is acceptable, note it
+        - **If model large (e.g., EfficientNet-B4+, ViT) and GPU <60%:** Consider increasing batch size
+        - **Goal: Maximize GPU without OOM.** Small underutilization is okay for small models.
+        - **If consistently <50% GPU for large model:** Plan to increase batch_size in next iteration
      9. **If training taking too long (>70% of time budget used), kill training and run predict.py with partial models**
      10. When training completes OR when killed early, immediately run predict.py to generate submission
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤60 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
@@ -218,10 +230,12 @@ Current date: {current_date}
 • **predict.py MUST load models to GPU** (model.to('cuda') immediately after loading)
 • **If slow (<2GB/min), check GPU:** `nvidia-smi` or `torch.cuda.is_available()`
 
-**Resource Maximization Rules (MANDATORY - Assume A10 24GB VRAM):**
+**Resource Maximization Rules (MANDATORY - MAXIMIZE A10 24GB VRAM):**
 • **CPU:** Always n_jobs=-1 (all cores)
-• **GPU (Assume A10 24GB VRAM):** ALWAYS START WITH MAXIMUM BATCH SIZE. Never be conservative!
+• **GPU MAXIMIZATION (A10 24GB VRAM - TARGET: 70-90% memory, 80-95% utilization):**
+  - **ALWAYS START WITH MAXIMUM BATCH SIZE.** Never be conservative! Push the A10 to its limits.
   - **CRITICAL: batch_size=32 is TOO SMALL and wastes 80% of GPU! ALWAYS start with 128+ for images, 4096+ for tabular**
+  - **Goal: Use 17-22 GB out of 24 GB GPU memory (70-90% utilization)**
   - **Image Classification (224x224):** batch_size=128 (start here, increase to 192 if no OOM)
   - **Image Classification (384x384):** batch_size=64 (start here, increase to 96 if no OOM)
   - **Image Classification (512x512+):** batch_size=32 (start here, increase to 48 if no OOM)
@@ -273,10 +287,13 @@ Current date: {current_date}
   - Monitor speed: Should process ≥100 batches/minute (image), ≥500 batches/minute (tabular)
   - Use timm.models with pretrained=True (skip early training phases)
 • **MANDATORY GPU monitoring during training:**
-  - Print GPU memory usage every epoch: `torch.cuda.memory_allocated() / 1024**3`
+  - Print GPU memory usage EVERY EPOCH: `torch.cuda.memory_allocated() / 1024**3`
+  - **Track GPU usage throughout training to ensure maximization**
   - **If GPU memory <50% after first epoch → batch size is TOO SMALL → STOP and rewrite with 2x batch size**
-  - **If GPU util <60% (check with nvidia-smi in separate terminal) → STOP and increase batch size or num_workers**
-  - Target: 70-90% GPU memory usage, 80-95% GPU utilization
+  - **If GPU memory 50-70% consistently:** Note model size. Small models (ResNet-18, tabular) may not fully utilize GPU - this is acceptable. Large models (EfficientNet-B4+, ViT) should be 70%+ - consider increasing batch size.
+  - **If GPU util <60% (check with nvidia-smi) → Increase batch size or num_workers**
+  - Target: 70-90% GPU memory usage, 80-95% GPU utilization (for large models)
+  - **Acceptable lower utilization for small/simple models** (e.g., 50-60% for ResNet-18 is fine)
 • **MANDATORY prints at start AND after first batch:**
   ```python
   # At start
@@ -287,6 +304,10 @@ Current date: {current_date}
   # After first forward pass in training loop
   print(f"GPU Memory Used: {{torch.cuda.memory_allocated() / 1024**3:.2f}} GB / {{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}} GB ({{torch.cuda.memory_allocated() / torch.cuda.get_device_properties(0).total_memory * 100:.1f}}%)")
   print(f"VALIDATION: If <50% memory, batch_size={{BATCH_SIZE}} is TOO SMALL - should be {{BATCH_SIZE*2}}+")
+
+  # EVERY EPOCH (inside training loop):
+  # Print at end of each epoch to monitor GPU usage throughout training
+  print(f"Epoch {{epoch}}: Loss={{train_loss:.4f}}, GPU={{torch.cuda.memory_allocated() / 1024**3:.2f}}GB ({{torch.cuda.memory_allocated() / torch.cuda.get_device_properties(0).total_memory * 100:.1f}}%)")
   ```
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**

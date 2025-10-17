@@ -387,6 +387,11 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
         model.eval()
         val_loss, val_acc = validate(model, val_loader)
 
+        # Print GPU usage every epoch (for monitoring)
+        mem = torch.cuda.memory_allocated() / 1024**3
+        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        print(f"Epoch {epoch}: Loss={val_loss:.4f}, Acc={val_acc:.4f}, GPU={mem:.2f}GB ({mem/total*100:.1f}%)")
+
         # Save checkpoints
         if val_acc > best_score:
             best_score = val_acc
