@@ -80,6 +80,73 @@ The updated `mlebench/data.py` now:
    - Fails with error explaining the requirement
    - Prevents cryptic `EOFError`
 
+## Helper Scripts for Multiple Competitions
+
+If you're running against multiple competitions (e.g., `custom-set.txt`), we provide helper scripts to accept rules in bulk:
+
+### Option 1: Python Script (Recommended)
+
+**Features:**
+- ✅ Checks acceptance status via Kaggle API
+- ✅ Only opens unaccepted competitions
+- ✅ Verifies acceptance after you click
+- ✅ Progress tracking
+
+**Usage:**
+
+```bash
+cd mle-bench
+
+# Check which competitions need acceptance (no browser opens)
+python scripts/accept_kaggle_rules.py --check-only
+
+# Output:
+# [1/5] competition-1... ✅ Accepted
+# [2/5] competition-2... ❌ Not accepted
+# [3/5] competition-3... ✅ Accepted
+# ...
+
+# Open rules pages for all unaccepted competitions
+python scripts/accept_kaggle_rules.py experiments/splits/custom-set.txt
+
+# The script will:
+# 1. Open each unaccepted competition in your browser
+# 2. Wait for you to click "I Understand and Accept"
+# 3. Verify the acceptance
+# 4. Move to next competition
+```
+
+### Option 2: Bash Script (Simpler)
+
+**Features:**
+- ✅ Simple and fast
+- ✅ Works on macOS, Linux, WSL
+- ✅ No API calls needed
+
+**Usage:**
+
+```bash
+cd mle-bench
+
+# Opens all competitions in your browser (one at a time)
+./scripts/accept-kaggle-rules.sh experiments/splits/custom-set.txt
+
+# Press Enter after accepting each competition's rules
+```
+
+### Manual Approach
+
+If you prefer to do it manually:
+
+```bash
+# View all competitions in your run
+cat mle-bench/experiments/splits/custom-set.txt
+
+# For each competition, visit:
+# https://www.kaggle.com/c/{competition-id}/rules
+# and click "I Understand and Accept"
+```
+
 ## Example: CI/CD Workflow
 
 ```yaml
@@ -101,7 +168,8 @@ jobs:
           chmod 600 ~/.kaggle/kaggle.json
 
       # IMPORTANT: Accept rules manually BEFORE running CI!
-      # Visit: https://www.kaggle.com/c/{competition-id}/rules
+      # Use the helper scripts locally first:
+      #   python scripts/accept_kaggle_rules.py experiments/splits/custom-set.txt
 
       - name: Run agent
         env:
