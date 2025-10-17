@@ -41,9 +41,14 @@ on:
           - gpu-7
         default: 'any'
 
+      rebuild_image:
+        description: 'Force rebuild Docker image (ignore cache)'
+        required: false
+        type: boolean
+        default: true
+
 jobs:
   run-agent:
-    # Support concurrency: 7 (no group = all can run simultaneously)
     runs-on:
       - self-hosted
       - gpu
@@ -60,27 +65,22 @@ jobs:
           echo "Branch: ${{ github.ref_name }}"
           echo "Competition set: ${{ github.event.inputs.competition_set }}"
           echo "Dry run: ${{ github.event.inputs.dry_run }}"
+          echo "Rebuild image: ${{ github.event.inputs.rebuild_image }}"
           echo "Target GPU: ${{ github.event.inputs.target_gpu }}"
           echo "Runner: $(hostname)"
           echo "Run ID: ${{ github.run_id }}"
-          echo "Run Number: ${{ github.run_number }}"
           echo "=========================================="
 
       - name: Clean workspace
         run: |
           echo "Cleaning workspace..."
           cd $GITHUB_WORKSPACE || true
-
-          # Remove ALL Python bytecode
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find . -type f -name "*.pyc" -delete 2>/dev/null || true
           find . -type f -name "*.pyo" -delete 2>/dev/null || true
-
-          # Clean git
           git clean -fdx || true
           git reset --hard HEAD || true
-
-          echo "✅ Workspace cleaned (including Python bytecode)"
+          echo "✅ Workspace cleaned"
 
       - name: Checkout code
         uses: actions/checkout@v4
@@ -92,19 +92,14 @@ jobs:
         run: |
           cd mle-bench/experiments/splits
 
-          # If custom competitions provided, use those
           if [ -n "${{ github.event.inputs.custom_competitions }}" ]; then
-            echo "Using custom competitions list:"
+            echo "Using custom competitions:"
             echo "${{ github.event.inputs.custom_competitions }}" | tee custom-set.txt
           else
-            # Extract filename from selection (e.g., "low.txt (Lite - 21 competitions)" -> "low.txt")
             COMP_FILE=$(echo "${{ github.event.inputs.competition_set }}" | awk '{print $1}')
             echo "Using competition set: $COMP_FILE"
-
-            # If not custom-set.txt, copy to custom-set.txt for script
             if [ "$COMP_FILE" != "custom-set.txt" ]; then
               cp "$COMP_FILE" custom-set.txt
-              echo "Copied $COMP_FILE to custom-set.txt"
             fi
           fi
 
@@ -116,24 +111,19 @@ jobs:
         run: |
           cd mle-bench
 
-          # Create venv if it doesn't exist
           if [ ! -d "venv" ]; then
             echo "Creating virtual environment..."
             python3 -m venv venv
           fi
 
-          # Activate venv and install mlebench in NON-EDITABLE mode
           source venv/bin/activate
-          echo "Installing mlebench (non-editable mode to avoid import conflicts)..."
+          echo "Installing mlebench..."
           pip install --force-reinstall --no-cache-dir . --quiet
 
           echo "✅ Python environment ready"
-          echo "   Python: $(which python)"
-          echo "   mlebench: $(python -c 'import mlebench; print(mlebench.__file__)')"
-          echo "   NOTE: Agent code runs inside Docker container (isolated)"
 
       - name: Run MLE-Bench
-        timeout-minutes: 1400  # 23.3 hours (slightly less than job timeout for cleanup)
+        timeout-minutes: 1400
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
@@ -143,21 +133,7 @@ jobs:
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
           cd mle-bench
-
-          # Activate venv
           source venv/bin/activate
-
-          echo "Starting MLE-Bench with:"
-          echo "  Working directory: $(pwd)"
-          echo "  IMAGE_TAG: $IMAGE_TAG"
-          echo "  RUN_ID: $RUN_ID"
-          echo "  DRY_RUN: $DRY_RUN"
-          echo "  Python: $(which python)"
-          echo ""
-
-          # Run the script (foreground execution with trap handlers)
-          # Logs will stream in real-time
-          # Ctrl+C or cancellation will trigger cleanup automatically
           ./RUN_AGENT_V5_KAGGLE.sh
 
       - name: Upload results
@@ -182,8 +158,6 @@ jobs:
         if: always() && github.event.inputs.dry_run == 'false'
         run: |
           cd ${{ github.workspace }}/mle-bench
-
-          # Find latest run
           RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
 
           if [ -n "$RUN_GROUP" ]; then
@@ -192,24 +166,14 @@ jobs:
             echo "Results Summary"
             echo "=========================================="
             echo "Run group: $RUN_GROUP"
-            echo ""
 
-            # Find grading report (either format)
             GRADING_REPORT=$(find "runs/$RUN_GROUP/" -name "*_grading_report.json" -o -name "results.json" | head -1)
-
             if [ -n "$GRADING_REPORT" ]; then
               echo "Grading Results:"
               cat "$GRADING_REPORT" | head -50
             else
-              echo "⚠️  Grading results not found"
-              echo "Files in run directory:"
-              ls -la "runs/$RUN_GROUP/"
+              echo "⚠️  No grading results found"
             fi
-
-            echo ""
-            echo "Download artifacts above to see full results"
-          else
-            echo "⚠️  No results found"
           fi
 
       - name: Cleanup Docker
@@ -217,41 +181,21 @@ jobs:
         env:
           RUN_ID: ${{ github.run_id }}
         run: |
-          echo "=========================================="
-          echo "Docker Cleanup"
-          echo "=========================================="
-
-          # Use cleanup script (idempotent, safe to run multiple times)
+          echo "Docker Cleanup..."
           cd ${{ github.workspace }}
           bash scripts/cleanup-containers.sh || true
 
-          echo ""
-          echo "Cleaning up Docker images..."
-
-          # Remove the specific image we built
           docker image rm agent_v5_kaggle:run-${{ github.run_id }} 2>/dev/null || true
-
-          # Clean up stopped containers
           docker container prune -f
-
-          # Clean up dangling images
           docker image prune -f
 
-          # Show remaining disk usage
-          echo ""
-          echo "Docker disk usage after cleanup:"
+          echo "Docker disk usage:"
           docker system df
 
       - name: Cleanup workspace
         if: always()
         run: |
-          # Clean up large files but keep code for debugging
           cd ${{ github.workspace }}/mle-bench
-
-          # Remove downloaded competition data (can be re-downloaded)
           rm -rf data/ 2>/dev/null || true
-
-          # Remove large model checkpoints if any
           find runs/ -name "*.pth" -o -name "*.pt" -o -name "*.h5" | xargs rm -f 2>/dev/null || true
-
           echo "Workspace cleanup complete"

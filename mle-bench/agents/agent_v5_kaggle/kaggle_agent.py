@@ -215,7 +215,7 @@ Current date: {current_date}
 9) **Execute**
    • **BEFORE writing train.py: Re-read relevant sections of /home/kaggle_competition_strategy.txt for your domain**
    • Oracle has already provided a strategy optimized for best ranking within time - execute that plan, not generic baselines
-   • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
+   • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device_type='cuda', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
    • **RESOURCE MANDATE: EVERY script must max out resources (36 cores, A10 24GB GPU):**
      - n_jobs=-1 for all sklearn/cuML (use ALL 36 CPU cores)
      - **IMAGES: Start with batch_size=128 (NOT 32!). For A10 24GB, 128 is safe for most models**
@@ -408,7 +408,7 @@ Current date: {current_date}
 
 **XGBoost:** `params = {{'tree_method': 'gpu_hist', 'gpu_id': 0, 'predictor': 'gpu_predictor', 'max_bin': 63}}`
 
-**LightGBM:** `params = {{'device': 'gpu', 'max_bin': 63, 'gpu_use_dp': False}}`
+**LightGBM:** `params = {{'device_type': 'cuda', 'max_bin': 255}}`  (use 'cuda' for CUDA build, 'gpu' for OpenCL build)
 
 **CatBoost:** `task_type='GPU', devices='0'`
 

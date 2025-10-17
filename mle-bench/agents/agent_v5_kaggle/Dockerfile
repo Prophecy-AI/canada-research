@@ -25,10 +25,9 @@ COPY mle-bench/agents/agent_v5_kaggle/requirements.txt ${AGENT_DIR}/requirements
 RUN conda run -n ${CONDA_ENV_NAME} pip install -r ${AGENT_DIR}/requirements.txt && \
     conda clean -afy
 
-# Pre-install common ML packages to save time during competition
+# Pre-install common ML packages to save time during competition (WITHOUT lightgbm - built separately)
 RUN conda run -n ${CONDA_ENV_NAME} pip install \
     xgboost>=2.0.0 \
-    lightgbm>=4.0.0 \
     catboost>=1.2.0 \
     scikit-learn>=1.3.0 \
     pandas>=2.0.0 \
@@ -37,6 +36,27 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
     seaborn>=0.12.0 \
     scipy>=1.11.0 \
     && conda clean -afy
+
+# Install build tools for LightGBM CUDA compilation
+RUN apt-get update && apt-get install -y \
+    cmake \
+    build-essential \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Build LightGBM from source with CUDA support
+# Compiles with -DUSE_CUDA=ON flag which enables CUDA Tree Learner (for NVIDIA GPUs)
+RUN conda run -n ${CONDA_ENV_NAME} bash -c " \
+    cd /tmp && \
+    git clone --recursive --branch stable --depth 1 https://github.com/microsoft/LightGBM && \
+    cd LightGBM && \
+    cmake -B build -S . -DUSE_CUDA=ON && \
+    cmake --build build -j\$(nproc) && \
+    cd python-package && \
+    pip install . --no-cache-dir \
+    " && \
+    rm -rf /tmp/LightGBM && \
+    conda clean -afy
 
 # Install PyTorch with CUDA support for GPU
 RUN conda run -n ${CONDA_ENV_NAME} pip install \
