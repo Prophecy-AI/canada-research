@@ -147,11 +147,15 @@ class Orchestrator:
         json_match = re.search(r'\[[\s\S]*\]', output)
         if not json_match:
             print(f"\n⚠️  No JSON array found in planning output")
+            print(f"Output length: {len(output)} chars")
             print(f"Output preview: {output[:500]}")
+            print(f"Output suffix: ...{output[-200:]}")
             return []
         
+        json_str = json_match.group(0)
+        
         try:
-            experiments = json.loads(json_match.group(0))
+            experiments = json.loads(json_str)
             if not isinstance(experiments, list):
                 print(f"\n⚠️  JSON is not a list")
                 return []
@@ -171,8 +175,11 @@ class Orchestrator:
             return experiments
         except json.JSONDecodeError as e:
             print(f"\n⚠️  JSON parse error: {e}")
-            json_str = json_match.group(0)
-            print(f"JSON preview: {json_str[:500]}")
+            print(f"JSON length: {len(json_str)} chars")
+            print(f"JSON preview (first 500): {json_str[:500]}")
+            print(f"JSON suffix (last 200): ...{json_str[-200:]}")
+            print(f"\n💡 This usually means the LLM response was cut off mid-generation.")
+            print(f"   Check if the response hit max_tokens limit or if there was an API error.")
             return []
 
     async def _run_experiments(self, experiments: List[Dict]) -> List[Dict]:

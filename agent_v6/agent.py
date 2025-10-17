@@ -29,7 +29,7 @@ class Agent:
                 try:
                     with self.client.messages.stream(
                         model="claude-sonnet-4-5-20250929",
-                        max_tokens=20000,
+                        max_tokens=80000,
                         system=self.system_prompt,
                         messages=self.conversation_history,
                         tools=self.tools.get_schemas(),
@@ -44,6 +44,10 @@ class Agent:
                                     print(text, end="", flush=True)
 
                         final_message = stream.get_final_message()
+                        
+                        if final_message.stop_reason == "max_tokens":
+                            print("\n⚠️  WARNING: Response hit max_tokens limit!")
+                        
                         for block in final_message.content:
                             if block.type == "tool_use":
                                 tool_uses.append({
