@@ -407,3 +407,173 @@ Expected output showing all 6 changes:
 ```
 
 ✅ All changes verified successfully!
+
+---
+
+# Efficient Training Strategies Added (2025-10-17)
+
+**Commit:** TBD
+**Status:** ✅ Complete
+
+## Objective
+
+Added domain-specific model sizing guidance optimized for 20-30 minute time budget to:
+1. Kaggle Competition Strategy playbook
+2. Kaggle Agent prompt
+3. Oracle system prompt
+
+## Changes Made
+
+### 1. **kaggle_competition_strategy.txt** - Added Part V ✓
+
+**Location:** `/Users/Yifan/canada-research/mle-bench/environment/kaggle_competition_strategy.txt`
+
+**Added Section:** "PART V: EFFICIENT TRAINING STRATEGIES (20-30 MINUTE BUDGET)"
+
+**Contents (~90 lines):**
+- **Image Classification:** EfficientNet-B0/ResNet-34, 3-5 epochs, 224x224
+- **Image Segmentation:** U-Net + EfficientNet-B0/ResNet-34, 256x256 tiles, 5-10 epochs
+- **Object Detection:** YOLOv5s/v8n, PointPillars (3D), 5-10 epochs fine-tuning
+- **Tabular & Time Series:** LightGBM, minimal features, 3-fold CV
+- **NLP:** distilbert/small DeBERTa, 1-2 epochs, max_length=128/256
+- **Audio:** Mel-spectrogram → EfficientNet-B0/ResNet
+
+**Updated:** Quick Decision Tree to reference Part V and include specific model choices
+
+**Rationale:** Provides concrete model sizing guidance for each domain based on time constraints
+
+---
+
+### 2. **kaggle_agent.py** - Condensed Model Sizing ✓
+
+**Location:** `/Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/kaggle_agent.py`
+
+**Modified:** Lines 75-82 (Domain-specific architectures section)
+
+**Before:**
+```
+- Tabular: GBDTs (LightGBM/XGBoost/CatBoost), heavy feature engineering, GBDT+NN ensembles
+- Computer Vision: EfficientNet/ResNeXt/ViT, advanced augmentation (MixUp/CutMix), TTA
+- NLP: Transformer models (BERT/RoBERTa/DeBERTa), fine-tuning strategies, knowledge distillation
+- Time Series: Transform to tabular + GBDTs, lag/window features, TimeSeriesSplit CV
+```
+
+**After:**
+```
+- Tabular: LightGBM (fastest), XGBoost, CatBoost. Minimal feature engineering for speed.
+- Image Classification: EfficientNet-B0/B2 (20-30 min), B3/B4 (40-60 min), ResNet-34 baseline. MixUp/CutMix.
+- Image Segmentation: U-Net + EfficientNet-B0/ResNet-34 backbone, 256x256 tiles, 5-10 epochs
+- Object Detection: YOLOv5s/v8n (fast), PointPillars (3D). Fine-tune 5-10 epochs.
+- NLP: distilbert (fastest), DeBERTa (stronger). Train 1-2 epochs only. max_length=128/256.
+- Time Series: Transform to tabular + LightGBM. Lag/rolling features. TimeSeriesSplit CV.
+- Audio: Mel-spectrogram → EfficientNet-B0/ResNet (treat as image classification)
+```
+
+**Rationale:** Agent sees specific model choices for each domain with time budget in parentheses
+
+---
+
+### 3. **oracle.py** - Model Sizing Guide + Goal Alignment ✓
+
+**Location:** `/Users/Yifan/canada-research/agent_v5/tools/oracle.py`
+
+**Changes:**
+
+#### A. Added MODEL SIZING GUIDE section (lines 192-200) ✓
+```
+**MODEL SIZING GUIDE (20-30 MIN BUDGET):**
+• **Tabular:** LightGBM (fastest), 3-fold CV, default params + early stopping
+• **Image Classification:** EfficientNet-B0/B2 or ResNet-34. 3-fold CV, 3-5 epochs, 224x224 images.
+• **Image Segmentation:** U-Net + EfficientNet-B0/ResNet-34 backbone. 256x256 tiles, 3-fold CV, 5-10 epochs.
+• **Object Detection:** YOLOv5s/v8n (images), PointPillars (3D). Fine-tune 5-10 epochs, 512x512 images.
+• **NLP:** distilbert-base-uncased (fastest) or small DeBERTa. 1-2 epochs only, max_length=128/256.
+• **Time Series:** Transform to tabular + LightGBM. Lag/rolling features, TimeSeriesSplit CV.
+• **Audio:** Mel-spectrogram → EfficientNet-B0/ResNet. Treat as image classification.
+• **AVOID THESE FOR SPEED:** EfficientNet-B4+ (too slow for 30-min), 5-fold CV (use 3), >8 epochs, >300x300 images
+```
+
+#### B. Updated REALISTIC GOAL SETTING (lines 220-226) ✓
+**Before:**
+```
+• **Gold medal is the GOAL, but NOT always achievable** - some competitions are too hard for this setup
+• **Time/EV Tradeoff:** Consider expected value of additional training time
+  - Silver medal in 20 min > gold medal in 120 min (if improvement uncertain)
+  - Quick iteration > perfect solution (we can try multiple approaches)
+```
+
+**After:**
+```
+• **Maximize ranking within time budget** - gold medal if achievable, otherwise best possible medal (silver/bronze)
+• **Gold medal is NOT guaranteed** - some competitions are too hard for this setup
+• **Time/EV Tradeoff:** Consider expected value of additional training time
+  - Silver medal in 20 min > gold medal in 120 min (if improvement uncertain)
+  - Quick iteration > perfect solution (we can try multiple approaches)
+• **Success = maximizing ranking given constraints** - gold is ideal but silver/bronze in 20 min can be better than gold in 100+ min
+```
+
+**Rationale:** Oracle now has concrete model sizing recommendations and aligned goal philosophy
+
+---
+
+## Expected Impact
+
+### For Agent:
+1. **Clearer model choices:** Knows exactly which models to use for each domain
+2. **Time-aware defaults:** Sees time budgets next to model names (B0/B2 for 20-30 min)
+3. **Faster decisions:** Less time exploring model options, more execution
+
+### For Oracle:
+1. **Consistent recommendations:** Has model sizing reference for 20-30 min budget
+2. **Avoids slow models:** Knows to avoid B4+ for 30-min budget
+3. **Aligned goals:** Won't push for gold if time/complexity makes it infeasible
+
+### For Strategy:
+1. **Complete reference:** Part V provides detailed strategies for 6 competition types
+2. **Concrete examples:** Lists actual competition names for each type
+3. **Actionable templates:** Exact configurations (epochs, folds, image sizes)
+
+---
+
+## Philosophy
+
+- **Domain-specific:** Each competition type has tailored model recommendations
+- **Time-first:** Model choices explicitly tied to time budgets (20-30 min vs 40-60 min)
+- **Battle-tested:** Based on winning Kaggle solutions and practical experience
+- **Actionable:** Concrete configurations, not just high-level advice
+
+---
+
+## Validation
+
+### Test 1: Check kaggle_competition_strategy.txt
+```bash
+grep -A 5 "PART V: EFFICIENT TRAINING STRATEGIES" /Users/Yifan/canada-research/mle-bench/environment/kaggle_competition_strategy.txt
+```
+Should show Part V section with 6 domain types.
+
+### Test 2: Check kaggle_agent.py
+```bash
+grep -A 7 "Domain-specific architectures" /Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/kaggle_agent.py
+```
+Should show condensed model sizing with time budgets.
+
+### Test 3: Check oracle.py
+```bash
+grep -A 10 "MODEL SIZING GUIDE" /Users/Yifan/canada-research/agent_v5/tools/oracle.py
+```
+Should show Oracle's model sizing reference.
+
+---
+
+## Summary
+
+Added efficient training strategies to 3 key locations:
+1. **Strategy playbook:** Detailed Part V with 6 competition types
+2. **Agent prompt:** Condensed model sizing with time budgets
+3. **Oracle prompt:** Model sizing guide + aligned goal philosophy
+
+**Total additions:** ~120 lines of actionable domain-specific guidance
+
+**Key principle:** Maximize ranking within time budget, not perfect score at any cost
+
+✅ All changes complete and validated!

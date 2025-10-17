@@ -152,16 +152,105 @@ MODEL TOO SLOW FOR TIME BUDGET
   - Estimate time: (folds × epochs × min_per_epoch) before launch.
 
 ────────────────────────────────────────────────────────────────────────────────
+PART V: EFFICIENT TRAINING STRATEGIES (20-30 MINUTE BUDGET)
+────────────────────────────────────────────────────────────────────────────────
+
+This section provides specific, time-efficient model choices designed to maximize
+score within tight time constraints (20±10 min).
+
+IMAGE CLASSIFICATION
+--------------------
+Examples: aerial-cactus-identification, aptos2019-blindness-detection,
+cassava-leaf-disease-classification, histopathologic-cancer-detection
+
+Model: EfficientNet-B0 or ResNet-34 (best speed/accuracy balance)
+
+Strategy:
+  - Use pretrained from timm/torchvision
+  - Resize to 128x128 or 224x224 (upscale if needed like aerial-cactus 32x32)
+  - 3-fold StratifiedKFold CV
+  - Train 3-5 epochs
+  - Basic augmentations: HorizontalFlip, VerticalFlip, RandomRotate90
+  - Strong baseline quickly, often achieves high scores without extensive tuning
+
+IMAGE SEGMENTATION
+------------------
+Examples: google-research-identify-contrails-reduce-global-warming,
+hubmap-kidney-segmentation, tgs-salt-identification-challenge
+
+Model: U-Net with EfficientNet-B0 or ResNet-34 backbone
+
+Strategy:
+  - Train on smaller tiles (256x256 or 512x512) to manage memory/speed
+  - 3-fold CV
+  - Train 5-10 epochs
+  - Basic geometric augmentations (flips, rotations)
+  - For inference: use overlapping tiles, predict center region if edge effects
+
+OBJECT DETECTION
+----------------
+Examples: 3d-object-detection-for-autonomous-vehicles,
+vinbigdata-chest-xray-abnormalities-detection
+
+Model: YOLOv5s or YOLOv8n (state-of-the-art real-time performance)
+       For 3D: PointPillars (fast and effective)
+
+Strategy:
+  - Start with pretrained weights
+  - Fine-tune 5-10 epochs
+  - Smaller image size (512x512) to accelerate
+  - Simple 3-fold CV
+
+TABULAR & TIME SERIES
+---------------------
+Examples: new-york-city-taxi-fare-prediction, ventilator-pressure-prediction,
+tabular-playground-series-may-2022
+
+Model: LightGBM (fastest, most memory-efficient GBDT)
+
+Strategy:
+  - Time series: transform to tabular (lag features, rolling windows)
+  - Minimal feature engineering: date features (day/month), simple interactions
+  - 3-fold CV (TimeSeriesSplit for time-ordered data - MANDATORY)
+  - Default parameters + early stopping (finds optimal trees automatically)
+
+NATURAL LANGUAGE PROCESSING
+----------------------------
+Examples: jigsaw-toxic-comment-classification-challenge,
+tweet-sentiment-extraction, us-patent-phrase-to-phrase-matching
+
+Model: distilbert-base-uncased or small DeBERTa variant
+       For simple text: TF-IDF + LogisticRegression (surprisingly fast/effective)
+
+Strategy:
+  - Pretrained from Hugging Face
+  - Keep max_length small (128 or 256)
+  - Train 1-2 epochs only (diminishing returns after)
+  - 3-fold StratifiedKFold or GroupKFold
+
+AUDIO
+-----
+Examples: freesound-audio-tagging-2019, tensorflow-speech-recognition-challenge
+
+Model: Simple 2D CNN or EfficientNet-B0
+
+Strategy:
+  - Convert audio to 2D mel-spectrograms (transforms to image classification)
+  - Apply Image Classification strategy: lightweight CNN, few epochs, 3-fold CV
+
+────────────────────────────────────────────────────────────────────────────────
 QUICK DECISION TREE - WHAT TO USE
 ────────────────────────────────────────────────────────────────────────────────
 
 START HERE:
   1. What's the domain?
      - Tabular       → LightGBM + feature engineering
-     - Images        → EfficientNet-B2/B3 (30-min) or B4 (60-min) + MixUp/CutMix
-     - Text          → DeBERTa fine-tuning
+     - Images        → EfficientNet-B0/B2 (20-30 min) or B3/B4 (40-60 min) + MixUp/CutMix
+     - Text          → distilbert/DeBERTa fine-tuning (1-2 epochs)
      - Time series   → Transform to tabular + LightGBM
      - Audio         → Mel-spectrogram + ResNet/EfficientNet
+     - Segmentation  → U-Net + EfficientNet-B0/ResNet-34 backbone
+     - Detection     → YOLOv5s/v8n (images), PointPillars (3D)
 
   2. What's the CV strategy?
      - Imbalanced    → StratifiedKFold
@@ -170,8 +259,8 @@ START HERE:
      - Default       → KFold (k=3 for speed, k=5 for robustness)
 
   3. What's the time budget?
-     - 20-30 min     → 3 folds, smaller models (B2/B3), 6-8 epochs
-     - 40-60 min     → 5 folds, larger models (B4/B5), 10 epochs
+     - 20-30 min     → See Part V: 3 folds, smallest models (B0/B2, ResNet-34), 3-8 epochs
+     - 40-60 min     → 5 folds, larger models (B3/B4), 10 epochs
      - Estimate first: (folds × epochs × min_per_epoch) BEFORE training
 
   4. How to ensemble?

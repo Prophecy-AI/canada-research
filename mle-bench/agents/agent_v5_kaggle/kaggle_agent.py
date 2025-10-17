@@ -73,10 +73,13 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **Contents:** Comprehensive synthesis of winning Kaggle strategies covering:
   • Universal workflow principles (fast experimentation, rigorous CV strategies)
   • Domain-specific architectures and tactics:
-    - Tabular: GBDTs (LightGBM/XGBoost/CatBoost), heavy feature engineering, GBDT+NN ensembles
-    - Computer Vision: EfficientNet/ResNeXt/ViT, advanced augmentation (MixUp/CutMix), TTA
-    - NLP: Transformer models (BERT/RoBERTa/DeBERTa), fine-tuning strategies, knowledge distillation
-    - Time Series: Transform to tabular + GBDTs, lag/window features, TimeSeriesSplit CV
+    - Tabular: LightGBM (fastest), XGBoost, CatBoost. Minimal feature engineering for speed.
+    - Image Classification: EfficientNet-B0/B2 (20-30 min), B3/B4 (40-60 min), ResNet-34 baseline. MixUp/CutMix.
+    - Image Segmentation: U-Net + EfficientNet-B0/ResNet-34 backbone, 256x256 tiles, 5-10 epochs
+    - Object Detection: YOLOv5s/v8n (fast), PointPillars (3D). Fine-tune 5-10 epochs.
+    - NLP: distilbert (fastest), DeBERTa (stronger). Train 1-2 epochs only. max_length=128/256.
+    - Time Series: Transform to tabular + LightGBM. Lag/rolling features. TimeSeriesSplit CV.
+    - Audio: Mel-spectrogram → EfficientNet-B0/ResNet (treat as image classification)
   • Advanced techniques: Stacking, pseudo-labeling, TTA, rule-based post-processing
   • Common pitfalls: Data leakage (target leakage, train-test contamination), overfitting to public LB
 - **Why critical:** This playbook contains battle-tested strategies from hundreds of winning solutions
