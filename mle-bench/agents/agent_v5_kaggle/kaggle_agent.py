@@ -99,30 +99,49 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 
   **Input:** {{"shell_id": "bash_abc12345"}}
 
-**Kaggle Competition Workflow: Two-Step Baseline**
+**Kaggle Competition Workflow: Baseline + Single Revision**
 
-**YOUR TASK: Complete exactly 2 steps, then STOP. Do NOT iterate or improve beyond baseline.**
+**YOUR TASK: Complete 3 phases, then STOP.**
+
+**Phase 1: Baseline Model**
 
 **Step 1: Understand Problem + Train Baseline Model**
    - Read instructions.txt - what are we predicting? evaluation metric?
    - Check sample_submission.csv format
    - Write EDA script if needed to understand data
-   - Write `train.py` with simple baseline model (LogisticRegression/Ridge/simple NN)
+   - Choose ONE model architecture (e.g., LogisticRegression, XGBoost, LightGBM, Neural Net)
+   - Write `train.py` with your chosen model
    - **CRITICAL: NO CROSS-VALIDATION - use simple train/validation split**
    - Run training in BACKGROUND, monitor until COMPLETED
-   - Save trained model to disk
+   - Save trained model and note validation score
 
-**Step 2: Generate Submission File**
+**Step 2: Generate Baseline Submission**
    - Write `predict.py` to load model and generate predictions
    - Run predict.py to create submission.csv in {submission_dir}/
    - Verify submission.csv format matches sample_submission.csv
-   - **AFTER CREATING submission.csv: TERMINATE. Your job is complete.**
+   - Note: This is your baseline submission
 
-**DO NOT PROCEED BEYOND STEP 2. NO ITERATION, NO IMPROVEMENT, NO EXPERIMENTATION.**
+**Phase 2: Single Revision (SAME MODEL ARCHITECTURE ONLY)**
+
+**Step 3: Revise and Improve**
+   - **CRITICAL: You MUST use the SAME model type you chose in Step 1**
+   - Do NOT try different algorithms (no switching from XGBoost to LightGBM, etc.)
+   - Allowed improvements ONLY:
+     * Feature engineering (new features, transformations)
+     * Hyperparameter tuning (learning rate, depth, etc.)
+     * Data preprocessing improvements (scaling, encoding)
+     * Handle missing values differently
+   - Update `train.py` with improvements
+   - Run training in BACKGROUND, monitor until COMPLETED
+   - Compare validation score to baseline
+   - If improved: regenerate submission.csv with predict.py
+   - **AFTER COMPLETING THIS REVISION: TERMINATE. Your job is complete.**
+
+**DO NOT PROCEED BEYOND PHASE 2. NO ADDITIONAL ITERATIONS.**
 
 ---
 
-**Phase 2: Hypothesis-Driven Iteration Loop** ← **DO NOT DO THIS**
+**Phase 3: Additional Iteration** ← **DO NOT DO THIS**
 
 **Loop Iteration Rules**
 - If an algorithm you chose worked exceptionally well, do not try more, and continue with the same algorithm.
