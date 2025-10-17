@@ -29,7 +29,7 @@ class Agent:
                 try:
                     with self.client.messages.stream(
                         model="claude-sonnet-4-5-20250929",
-                        max_tokens=80000,
+                        max_tokens=60000,
                         system=self.system_prompt,
                         messages=self.conversation_history,
                         tools=self.tools.get_schemas(),
