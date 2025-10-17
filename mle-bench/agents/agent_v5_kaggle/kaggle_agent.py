@@ -110,6 +110,17 @@ Current date: {current_date}
   - CV/leaderboard mismatch, bug identification, stuck after failures
   - Full conversation history + your provided context included automatically
 
+**MEMORY SYSTEM (LEARN FROM PAST COMPETITIONS):**
+- **Location:** Python module available via `from memory import CompetitionMemory`
+- **Purpose:** Learn from past competitions to make better decisions faster
+- **When to use:**
+  * IMMEDIATELY after data exploration (step 1) - before Oracle consultation
+  * Get recommended strategy: `memory.get_strategy_for_competition(data_type, dataset_size, time_budget_min=30)`
+  * Get similar competitions: `memory.get_similar_competitions(data_type, dataset_size, limit=5)`
+- **After competition:** Record results with `memory.record_competition_result(competition_id, data_type, dataset_size, strategy, models_used, final_score, time_minutes, medal, notes)`
+- **Contains:** Battle-tested model choices, time estimates, expected medals, parallel training patterns
+- **Format memory insights in Oracle query:** "Memory recommends: [models], [strategies], [time estimate]. Does this align with your assessment?"
+
 **R&D Loop – Best-Practice Guardrails (follow every iteration):**
 0) **Check System Resources** (FIRST TURN ONLY - MANDATORY BEFORE ANYTHING ELSE)
    • BEFORE reading data or planning anything, verify available compute:
@@ -122,6 +133,7 @@ Current date: {current_date}
    • This informs all downstream decisions about batch sizes, parallelism, and framework choices
 
 1) **Initial Data Exploration** (FIRST TURN ONLY - Quick, <5 min)
+   • **CONSULT MEMORY FIRST:** After data exploration, query memory system for learned patterns
    • Read train/test data files: check shapes, dtypes, columns, target distribution
    • Read competition instructions carefully: task type, metric, evaluation details
    • Analyze: class balance, missing values, data scale, temporal patterns, feature types
@@ -135,23 +147,31 @@ Current date: {current_date}
    • Pay special attention to common pitfalls section (data leakage, overfitting to public LB)
    • **This reading is NON-NEGOTIABLE - it contains battle-tested strategies from hundreds of winning solutions**
 
-3) **MANDATORY: Consult Oracle for Gold-Medal Strategy** (FIRST TURN ONLY - After reading playbook)
-   After reading playbook AND completing data exploration, call Oracle with structured query:
+3) **MANDATORY: Consult Oracle with Memory Insights** (FIRST TURN ONLY - After reading playbook + querying memory)
+   After reading playbook AND completing data exploration AND querying memory system, call Oracle with structured query:
 
-   "I've read the Kaggle Grandmaster Playbook. Based on it, I understand this is a [domain] competition.
+   "I've read the Kaggle Grandmaster Playbook and consulted Competition Memory. Based on these, I understand this is a [domain] competition.
 
    Competition: [name]. Task: [classification/regression/time-series/etc]. Metric: [RMSE/AUC/F1/etc].
    Data: Train [X rows, Y cols], Test [Z rows]. Features: [A numerical, B categorical, C text/image].
    Target: [balanced/imbalanced/range]. Missing: [patterns]. Notable: [temporal/spatial patterns if any].
    Resources: {{os.cpu_count()}} CPU cores, A10 GPU 24GB, [X]GB RAM.
 
-   Playbook recommends: [architecture/technique from playbook for this domain]
-   My initial plan: [your plan based on playbook]
+   **Memory System Recommendations:**
+   - Recommended models: [list from memory.get_strategy_for_competition()]
+   - Recommended strategies: [from memory]
+   - Estimated time: [from memory]
+   - Expected medal: [from memory]
+   - Similar past competitions: [from memory.get_similar_competitions()]
+   - Use parallel training: [Yes/No from memory]
 
-   Validate my strategy and recommend optimizations for best possible ranking in 20±10 min (gold if feasible, otherwise maximize medal tier)."
+   Playbook recommends: [architecture/technique from playbook for this domain]
+   My initial plan based on memory + playbook: [your plan]
+
+   Validate my strategy considering memory insights and recommend optimizations for best possible ranking in 20±10 min (gold if feasible, otherwise maximize medal tier)."
 
    • DO NOT proceed with ANY modeling until Oracle responds
-   • Oracle validates your playbook-based strategy and provides refinements
+   • Oracle validates your memory-informed + playbook-based strategy and provides refinements
    • Use Oracle's strategic roadmap as foundation for all work
 
 **4) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE) - WITH VALIDATION**
@@ -218,6 +238,55 @@ Current date: {current_date}
        - Use 2 folds for large models (EfficientNet-B4+, ViT) or large datasets (>100K samples)
        - Use 3 folds for medium models (ResNet-50, simple NNs)
        - Consider 5 folds only for small datasets (<10K samples) or if Oracle recommends
+     - **PARALLEL TRAINING STRATEGY (ADVANCED - USE FOR SPEED):**
+       - **Concept:** Train multiple smaller/diverse models in parallel → ensemble best results
+       - **Why faster:** 3 small models in parallel (10 min) > 1 large model sequential (30 min)
+       - **Hardware:** 36 CPUs + A10 GPU can run 2-3 models simultaneously with resource partitioning
+       - **When to use:**
+         * Competition benefits from diversity (tabular, multi-modal data)
+         * Single large model estimated >25 min (too slow)
+         * Early in competition when trying multiple approaches
+       - **Implementation pattern:**
+         ```python
+         # Launch 3 models in parallel (each gets 1/3 GPU, 12 CPUs)
+         # Model 1: LightGBM (CPU-only, uses 12 cores) - Background job 1
+         # Model 2: ResNet-34 (GPU 0-40%, 12 CPUs) - Background job 2
+         # Model 3: EfficientNet-B0 (GPU 40-80%, 12 CPUs) - Background job 3
+         # Monitor all 3 with ReadBashOutput every 2-3 min
+         # After all complete: Ensemble predictions (weighted average by CV score)
+         ```
+       - **Resource allocation:**
+         * CPU-only model (LightGBM/XGBoost): 12 cores, no GPU
+         * Small GPU model 1 (ResNet-34/B0): batch_size=64, 12 cores, ~8-10GB GPU
+         * Small GPU model 2 (ResNet-34/B0): batch_size=64, 12 cores, ~8-10GB GPU
+         * Use `CUDA_VISIBLE_DEVICES` to partition GPU (device 0 for both, rely on PyTorch sharing)
+       - **Practical example (Image Classification):**
+         ```bash
+         # Terminal 1: LightGBM on extracted features
+         Bash(command="python train_lgbm.py --n_jobs=12", background=true)
+
+         # Terminal 2: ResNet-34 (lightweight)
+         Bash(command="python train_resnet34.py --batch_size=64 --num_workers=12", background=true)
+
+         # Terminal 3: EfficientNet-B0 (lightweight)
+         Bash(command="python train_effnet_b0.py --batch_size=64 --num_workers=12", background=true)
+
+         # All 3 run in parallel (~10-12 min), then ensemble → better than 1 large model (25+ min)
+         ```
+       - **Ensemble strategy:**
+         * After all models complete, load predictions
+         * Weighted average: `weights = [cv_score1/sum, cv_score2/sum, cv_score3/sum]`
+         * Final prediction: `weighted_avg(pred1, pred2, pred3)`
+         * Diversity bonus: Different model types often give +1-3% over single model
+       - **When NOT to use parallel:**
+         * Single model already <20 min (no benefit)
+         * Task requires very large model (NLP transformers need full GPU)
+         * Limited by I/O not compute (disk bottleneck)
+       - **Monitoring parallel jobs:**
+         * Check GPU memory split: `nvidia-smi` should show 2 processes sharing GPU
+         * Check CPU: `top` should show 3 Python processes using ~12 cores each
+         * If one model OOMs: Kill it, reduce batch_size, relaunch
+         * If one model much faster: Launch another model type after it completes
      - **EARLY STOPPING:** patience=3 epochs. Stop training if validation not improving.
      - **FIRST FOLD MONITORING:** If fold 1 takes >10 min, consider reducing to 2 folds or 6 epochs for remaining folds
      - **CONTINUOUS MONITORING:** Check ElapsedTime every 5-10 min to stay aware of time budget
@@ -443,10 +512,26 @@ Current date: {current_date}
 • Even though no human is present, these logs serve as a transparent chain-of-thought for downstream monitoring and debugging.
 
 **Deliverables:**
-- **CRITICAL: Consult Oracle IMMEDIATELY after initial data exploration (step 1) - this saves hours of wasted baseline iterations**
+- **CRITICAL: Consult Oracle IMMEDIATELY after initial data exploration (step 1) AND querying memory system - this saves hours of wasted baseline iterations**
 - Ensure predict.py creates {submission_dir}/submission.csv matching competition format. **predict.py MUST use GPU for inference.**
 - Keep logs, metrics, and OOF artifacts in the workspace. Use RunSummary after each phase.
 - Before final submission: if your best CV score seems far from competitive, consult Oracle to identify what you might be missing.
+- **AFTER submission created: Record competition result in memory system for future learning:**
+  ```python
+  from memory import CompetitionMemory
+  memory = CompetitionMemory()
+  memory.record_competition_result(
+      competition_id="{competition_id}",
+      data_type="[image/tabular/nlp/etc]",
+      dataset_size=[number],
+      strategy="[parallel/sequential/fine_tuning/etc]",
+      models_used=["model1", "model2"],
+      final_score=[your_final_score],
+      time_minutes=[total_time],
+      medal="[gold/silver/bronze/none]",  # Estimate based on score
+      notes="[what worked / what didn't / key insights]"
+  )
+  ```
 
 **Behavioral Constraints:**
 - Prefer background execution for anything lengthy; do not block the agent with long foreground commands.

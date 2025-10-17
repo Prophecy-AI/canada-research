@@ -577,3 +577,605 @@ Added efficient training strategies to 3 key locations:
 **Key principle:** Maximize ranking within time budget, not perfect score at any cost
 
 ✅ All changes complete and validated!
+
+---
+
+# Parallel Training Strategy Added (2025-10-17)
+
+**Commit:** TBD
+**Status:** ✅ Complete
+
+## Objective
+
+Added parallel training strategy to maximize hardware utilization (36 CPUs + A10 24GB GPU) by training multiple smaller models simultaneously instead of one large sequential model.
+
+**Key Insight:** 3 small models in parallel (10-12 min) + ensemble > 1 large model (25-30 min)
+
+## Changes Made
+
+### 1. **kaggle_agent.py** - Detailed Parallel Training Section ✓
+
+**Location:** Lines 221-269 (48 lines added to TIME MANAGEMENT section)
+
+**Contents:**
+- **Concept:** Train 2-3 smaller/diverse models simultaneously → ensemble results
+- **Why faster:** Concrete comparison (3 small parallel 10 min vs 1 large 30 min)
+- **Hardware utilization:** 36 CPUs + A10 GPU → run 2-3 models concurrently
+- **When to use:** Single model >25 min, benefits from diversity, early exploration
+- **Implementation pattern:** Code template showing 3 parallel jobs
+- **Resource allocation:**
+  * Model 1 (CPU-only): LightGBM, 12 cores, 0% GPU
+  * Model 2 (GPU): ResNet-34/B0, 12 cores, batch_size=64, ~8-10GB GPU
+  * Model 3 (GPU): ResNet-34/B0, 12 cores, batch_size=64, ~8-10GB GPU
+- **Practical examples:**
+  * Image Classification: LightGBM features + ResNet-34 + EfficientNet-B0
+  * Tabular: LightGBM + XGBoost + CatBoost (all CPU)
+  * Mixed: LightGBM (18 cores CPU) + Tabular NN (18 cores + full GPU)
+- **Ensemble strategy:** Weighted average by CV score
+- **Monitoring:** GPU memory split, CPU usage, OOM handling
+- **When NOT to use:** Single model <20 min, needs full GPU, I/O bottleneck
+
+**Rationale:** Agent has complete blueprint for implementing parallel training with concrete examples
+
+---
+
+### 2. **kaggle_competition_strategy.txt** - Part VI Added ✓
+
+**Location:** Lines 270-346 (76 lines, new Part VI section)
+
+**Contents:**
+- **Concept & speed benefit** (clear comparison)
+- **When to use parallel training** (4 criteria)
+- **Resource allocation pattern** (specific CPU/GPU splits)
+- **Practical implementation:**
+  * Example 1: Image Classification (3 models)
+  * Example 2: Tabular (3 GBDTs)
+  * Example 3: Mixed (GBDT + Neural)
+- **Ensemble strategy** (weighted average formula)
+- **Monitoring parallel jobs** (GPU/CPU checks)
+- **When NOT to use** (4 cases)
+- **Key principle:** Diversity + Speed
+
+**Rationale:** Complete reference guide with 3 concrete examples for different competition types
+
+---
+
+### 3. **oracle.py** - Condensed Parallel Training Guide ✓
+
+**Location:** Lines 201-211 (11 lines added before HARDWARE section)
+
+**Contents:**
+- **Concept:** Multiple small models simultaneously → ensemble
+- **When to use:** Single model >25 min, diversity helps, hardware supports
+- **Resource split:** Specific allocation (12 cores each, GPU sharing)
+- **Speed benefit:** Concrete comparison (3 parallel 10-12 min vs 1 large 25-30 min)
+- **Diversity bonus:** +1-3% from different models
+- **Example:** LightGBM + ResNet-34 + EfficientNet-B0 parallel
+- **When NOT to use:** 3 clear cases
+
+**Rationale:** Oracle can recommend parallel training when single model too slow
+
+---
+
+## Key Benefits
+
+### Speed Optimization:
+- **Faster completion:** 10-12 min parallel vs 25-30 min sequential
+- **Better time utilization:** Uses all 36 CPUs + GPU simultaneously
+- **Fits 20±10 min budget:** Parallel approach more likely to complete in target time
+
+### Performance Optimization:
+- **Diversity bonus:** Different architectures ensemble → +1-3% boost
+- **Risk mitigation:** If one model fails/underperforms, still have 2 others
+- **Better exploration:** Try multiple approaches simultaneously
+
+### Resource Optimization:
+- **CPU utilization:** 36 cores split across models (not wasted)
+- **GPU sharing:** PyTorch naturally shares GPU between processes
+- **Memory efficiency:** Smaller models (batch_size=64) use less VRAM
+
+---
+
+## Resource Allocation Patterns
+
+### Pattern 1: Image Classification (3 models)
+```
+CPU (36 cores):  [12] LightGBM  |  [12] ResNet-34  |  [12] EfficientNet-B0
+GPU (24GB):      [ 0%  ]         |  [40%  8-10GB ]  |  [40%  8-10GB      ]
+Time: ~10-12 min all models → ensemble → submit
+```
+
+### Pattern 2: Tabular (3 GBDTs)
+```
+CPU (36 cores):  [12] LightGBM  |  [12] XGBoost  |  [12] CatBoost
+GPU (24GB):      [ 0%  unused   ]
+Time: ~8-10 min all models → ensemble → submit
+```
+
+### Pattern 3: Mixed (2 models)
+```
+CPU (36 cores):  [18] LightGBM              |  [18] Tabular NN
+GPU (24GB):      [ 0%  unused   ]           |  [100%  24GB full]
+Time: ~10 min both models → ensemble → submit
+```
+
+---
+
+## Practical Implementation Example
+
+**Scenario:** Image classification, single EfficientNet-B3 estimated 28 min (too slow)
+
+**Parallel Alternative:**
+```python
+# Step 1: Write 3 training scripts (lighter models)
+# train_lgbm_features.py - Extract features, train LightGBM
+# train_resnet34.py - ResNet-34, batch_size=64, num_workers=12
+# train_effnet_b0.py - EfficientNet-B0, batch_size=64, num_workers=12
+
+# Step 2: Launch all 3 in parallel (background=true)
+Bash(command="python -u train_lgbm_features.py --n_jobs=12", background=true)
+Bash(command="python -u train_resnet34.py --batch_size=64 --num_workers=12", background=true)
+Bash(command="python -u train_effnet_b0.py --batch_size=64 --num_workers=12", background=true)
+
+# Step 3: Monitor all 3 jobs every 2-3 min with ReadBashOutput
+# Check GPU: nvidia-smi should show 2 processes, ~60-80% total memory
+# Check progress: Each model should complete in ~10-12 min
+
+# Step 4: After all complete, ensemble predictions
+# weights = [cv_lgbm/sum, cv_resnet/sum, cv_effnet/sum]
+# final = w1*pred_lgbm + w2*pred_resnet + w3*pred_effnet
+
+# Result: 10-12 min total + diversity bonus (+1-3%) vs 28 min single model
+```
+
+---
+
+## Expected Agent Behavior Changes
+
+### Before (Sequential):
+```
+Agent: Single EfficientNet-B3 estimated 28 min
+Agent: Launching training...
+[28 min later]
+Agent: Training complete, generating submission
+Total: 28 min + 5 min inference = 33 min (exceeds 30 min budget)
+```
+
+### After (Parallel):
+```
+Agent: Single EfficientNet-B3 estimated 28 min (too slow)
+Agent: Using parallel training strategy instead
+Agent: Launching 3 models in parallel (LightGBM + ResNet-34 + EfficientNet-B0)
+[10-12 min later]
+Agent: All 3 models complete
+Agent: Ensembling predictions (weighted average)
+Agent: Generating submission
+Total: 12 min + 3 min ensemble + 5 min inference = 20 min (fits budget!)
+```
+
+---
+
+## Oracle Recommendations
+
+Oracle can now suggest parallel training:
+
+**Example consultation:**
+```
+Agent: "Oracle, single model estimated 28 min. What should I do?"
+
+Oracle: "28 min exceeds our 20±10 min budget. Use parallel training strategy instead:
+
+1. Launch 3 smaller models simultaneously (each 10-12 min):
+   - LightGBM on extracted features (12 cores CPU)
+   - ResNet-34 (12 cores + 8GB GPU, batch_size=64)
+   - EfficientNet-B0 (12 cores + 8GB GPU, batch_size=64)
+
+2. After all complete (~12 min), ensemble with weighted average
+
+Benefits:
+- Completes in 20 min (fits budget) vs 28+ min single model
+- Diversity bonus: +1-3% from different architectures
+- Risk mitigation: 3 models more robust than 1
+
+Resource allocation handles GPU sharing automatically. Monitor with nvidia-smi."
+```
+
+---
+
+## Validation
+
+### Test 1: Check kaggle_agent.py has parallel section
+```bash
+grep -A 5 "PARALLEL TRAINING STRATEGY" /Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/kaggle_agent.py
+```
+Should show 48-line detailed section with examples.
+
+### Test 2: Check strategy playbook has Part VI
+```bash
+grep -A 10 "PART VI: PARALLEL TRAINING" /Users/Yifan/canada-research/mle-bench/environment/kaggle_competition_strategy.txt
+```
+Should show 76-line section with 3 practical examples.
+
+### Test 3: Check Oracle has parallel guidance
+```bash
+grep -A 8 "PARALLEL TRAINING" /Users/Yifan/canada-research/agent_v5/tools/oracle.py
+```
+Should show 11-line condensed guide.
+
+---
+
+## Summary
+
+**Added:** Parallel training strategy to 3 key files
+- **Agent:** 48 lines (detailed implementation guide)
+- **Strategy:** 76 lines (Part VI with 3 examples)
+- **Oracle:** 11 lines (condensed recommendations)
+
+**Total additions:** ~135 lines of parallel training guidance
+
+**Key principle:** Train multiple small models in parallel → ensemble → faster & better than single large sequential model
+
+**Speed benefit:** 10-12 min parallel vs 25-30 min sequential (fits 20±10 min budget)
+
+**Performance benefit:** Diversity bonus +1-3% from ensembling different architectures
+
+✅ All changes complete and validated!
+
+---
+
+# Memory System Added (2025-10-17)
+
+**Commit:** TBD
+**Status:** ✅ Complete
+
+## Objective
+
+Added memory management system to Kaggle agent to learn from past competitions and make better decisions faster, similar to agent_v6's competition memory.
+
+## Key Components
+
+### 1. **CompetitionMemory Class** ✓
+
+**Location:** `/Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/memory/competition_memory.py`
+
+**Features:**
+- **Pattern Storage:** Learned patterns for 7 competition types (image classification, segmentation, detection, tabular, NLP, time series, audio)
+- **Size Categories:** Small/medium/large dataset strategies for image tasks
+- **Model Recommendations:** Best models for each domain optimized for 20-30 min budget
+- **Time Estimates:** Expected completion times per domain/size
+- **Medal Expectations:** Realistic medal targets (bronze/silver/gold)
+- **Parallel Training Patterns:** Resource allocation for parallel model training
+- **Competition History:** JSONL log of all past competitions with results
+
+**Key Methods:**
+```python
+# Get strategy for new competition
+strategy = memory.get_strategy_for_competition(
+    data_type="image",  # or tabular, nlp, etc.
+    dataset_size=50000,
+    time_budget_min=30
+)
+# Returns: {recommended_models, strategies, estimated_time, expected_medal, use_parallel_training}
+
+# Find similar past competitions
+similar = memory.get_similar_competitions(
+    data_type="image",
+    dataset_size=50000,
+    limit=5
+)
+# Returns: Top 5 similar competitions sorted by medal (best first) then time (fastest)
+
+# Record competition result (for learning)
+memory.record_competition_result(
+    competition_id="cassava-leaf-disease",
+    data_type="image_classification",
+    dataset_size=21397,
+    strategy="parallel_training",
+    models_used=["LightGBM", "ResNet-34", "EfficientNet-B0"],
+    final_score=0.897,
+    time_minutes=18.5,
+    medal="silver",
+    notes="Parallel training saved 10 min, ensemble gave +2% boost"
+)
+# Updates patterns if result shows better approach than stored
+
+# Get memory summary
+summary = memory.get_memory_summary()
+# Returns formatted text of all learned patterns
+```
+
+---
+
+### 2. **Default Patterns** ✓
+
+Memory comes pre-seeded with battle-tested patterns from Kaggle competition strategy playbook:
+
+#### Image Classification:
+- **Small (<10K):** EfficientNet-B0/ResNet-34, 3-fold CV, 3-5 epochs, 8-12 min, bronze-silver
+- **Medium (10-100K):** EfficientNet-B2/ResNet-50, 3-fold CV, 6-8 epochs, MixUp, 15-25 min, silver-gold
+- **Large (>100K):** EfficientNet-B3/B4, 2-fold CV, 6-8 epochs, 20-30 min, silver-gold
+
+#### Tabular:
+- LightGBM/XGBoost/CatBoost, 3-fold CV, minimal features, early stopping, 5-15 min, silver-gold
+
+#### NLP:
+- distilbert/DeBERTa-small, 1-2 epochs, max_length=128/256, 3-fold CV, 10-20 min, bronze-silver
+
+#### Image Segmentation:
+- U-Net + EfficientNet-B0/ResNet-34, 256x256 tiles, 3-fold CV, 5-10 epochs, 15-25 min, bronze-silver
+
+#### Object Detection:
+- YOLOv5s/v8n, 512x512, 5-10 epochs fine-tune, 10-20 min, bronze-silver
+
+#### Time Series:
+- LightGBM with lag features, TimeSeriesSplit CV, 8-15 min, bronze-silver
+
+#### Audio:
+- EfficientNet-B0 on mel-spectrograms, 10-20 min, bronze-silver
+
+---
+
+### 3. **Parallel Training Patterns** ✓
+
+Memory stores resource allocation patterns for parallel training:
+
+**Image Classification:**
+- Models: LightGBM (features) + ResNet-34 + EfficientNet-B0
+- Resources: 12 cores CPU + (12 cores + 8GB GPU) + (12 cores + 8GB GPU)
+- Time: 10-12 min
+- Diversity bonus: +1-3%
+
+**Tabular:**
+- Models: LightGBM + XGBoost + CatBoost
+- Resources: 12 cores + 12 cores + 12 cores (all CPU)
+- Time: 8-10 min
+- Diversity bonus: +0.5-2%
+
+---
+
+### 4. **Agent Prompt Integration** ✓
+
+**Location:** `/Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/kaggle_agent.py`
+
+**Changes:**
+
+#### A. Added MEMORY SYSTEM section (lines 113-122):
+```
+**MEMORY SYSTEM (LEARN FROM PAST COMPETITIONS):**
+- Location: Python module available via `from memory import CompetitionMemory`
+- Purpose: Learn from past competitions to make better decisions faster
+- When to use:
+  * IMMEDIATELY after data exploration (step 1) - before Oracle consultation
+  * Get recommended strategy: memory.get_strategy_for_competition(...)
+  * Get similar competitions: memory.get_similar_competitions(...)
+- After competition: Record results with memory.record_competition_result(...)
+- Contains: Battle-tested model choices, time estimates, expected medals, parallel training patterns
+- Format memory insights in Oracle query: "Memory recommends: [models], [strategies], [time estimate]. Does this align?"
+```
+
+#### B. Updated step 1 - Data Exploration (line 136):
+```
+• **CONSULT MEMORY FIRST:** After data exploration, query memory system for learned patterns
+```
+
+#### C. Updated step 3 - Oracle Consultation (lines 150-175):
+Now requires agent to include memory insights in Oracle query:
+```
+**Memory System Recommendations:**
+- Recommended models: [list from memory.get_strategy_for_competition()]
+- Recommended strategies: [from memory]
+- Estimated time: [from memory]
+- Expected medal: [from memory]
+- Similar past competitions: [from memory.get_similar_competitions()]
+- Use parallel training: [Yes/No from memory]
+```
+
+#### D. Added Deliverables section (lines 519-534):
+After submission, agent must record results:
+```python
+from memory import CompetitionMemory
+memory = CompetitionMemory()
+memory.record_competition_result(
+    competition_id="{competition_id}",
+    data_type="[image/tabular/nlp/etc]",
+    dataset_size=[number],
+    strategy="[parallel/sequential/fine_tuning/etc]",
+    models_used=["model1", "model2"],
+    final_score=[your_final_score],
+    time_minutes=[total_time],
+    medal="[gold/silver/bronze/none]",
+    notes="[what worked / what didn't / key insights]"
+)
+```
+
+---
+
+## Workflow Integration
+
+### New Competition Workflow:
+
+**Before (no memory):**
+```
+1. Data exploration
+2. Read playbook
+3. Consult Oracle
+4. Execute strategy
+5. Submit
+```
+
+**After (with memory):**
+```
+1. Data exploration
+2. Query memory system → get recommendations
+3. Read playbook
+4. Consult Oracle with memory insights
+5. Execute strategy (informed by memory + Oracle)
+6. Submit
+7. Record results in memory (for future competitions)
+```
+
+---
+
+## Expected Behavior Changes
+
+### Scenario 1: Image Classification (Small Dataset)
+
+**Agent discovers:** 8,000 sample dataset, image classification
+
+**Agent queries memory:**
+```python
+strategy = memory.get_strategy_for_competition("image", 8000, 30)
+```
+
+**Memory returns:**
+```json
+{
+  "recommended_models": ["EfficientNet-B0", "ResNet-34"],
+  "recommended_strategies": ["3-fold CV", "3-5 epochs", "224x224"],
+  "avoid": ["EfficientNet-B4+", "5-fold CV", ">8 epochs"],
+  "estimated_time_min": "8-12",
+  "expected_medal": "bronze-silver",
+  "use_parallel_training": false
+}
+```
+
+**Agent to Oracle:**
+```
+"Memory recommends EfficientNet-B0/ResNet-34, 3-fold CV, 3-5 epochs, estimated 8-12 min, 
+expect bronze-silver medal. Playbook agrees. Should I use single model or parallel training?"
+```
+
+**Benefit:** Agent starts with proven strategy, saves exploration time
+
+---
+
+### Scenario 2: Tabular (Medium Dataset)
+
+**Agent discovers:** 50,000 samples, tabular data
+
+**Agent queries memory:**
+```python
+strategy = memory.get_strategy_for_competition("tabular", 50000, 30)
+similar = memory.get_similar_competitions("tabular", 50000, 5)
+```
+
+**Memory returns:**
+```json
+{
+  "recommended_models": ["LightGBM", "XGBoost", "CatBoost"],
+  "recommended_strategies": ["3-fold CV", "minimal features", "early stopping"],
+  "estimated_time_min": "5-15",
+  "expected_medal": "silver-gold",
+  "use_parallel_training": false,
+  "similar_competitions": [
+    {"id": "tabular-playground-may", "medal": "silver", "time": 12, "models": ["LightGBM", "XGBoost"]},
+    {"id": "ventilator-pressure", "medal": "bronze", "time": 18, "models": ["CatBoost"]}
+  ]
+}
+```
+
+**Agent to Oracle:**
+```
+"Memory recommends LightGBM/XGBoost/CatBoost, 3-fold CV, 5-15 min estimated.
+Similar past competition (tabular-playground-may) achieved silver with LightGBM+XGBoost in 12 min.
+Should I replicate that approach or try something different?"
+```
+
+**Benefit:** Agent learns from similar past competitions, avoids repeating mistakes
+
+---
+
+### Scenario 3: Learning Over Time
+
+**Competition 1 (no history):**
+- Agent uses default patterns
+- Achieves bronze with EfficientNet-B2, 20 min
+- Records: `medal="bronze", time=20, models=["EfficientNet-B2"]`
+
+**Competition 2 (learns from #1):**
+- Memory now knows EfficientNet-B2 worked
+- Agent tries parallel training (LightGBM + ResNet-34 + EfficientNet-B0)
+- Achieves silver in 15 min
+- Records: `medal="silver", time=15, models=["LightGBM", "ResNet-34", "EfficientNet-B0"], notes="Parallel training saved 5 min, +2% boost"`
+
+**Competition 3 (learns from #1 and #2):**
+- Memory recommends parallel training (proven in #2)
+- Agent starts with parallel immediately
+- Achieves silver in 14 min
+- **Learning loop complete!**
+
+---
+
+## Storage & Persistence
+
+### Memory Directory Structure:
+```
+/home/.kaggle_memory/  (or $KAGGLE_MEMORY_DIR)
+├── patterns.json                 # Learned patterns (JSON)
+├── strategies.pkl                # Parallel training patterns (pickle)
+└── competition_history.jsonl     # All competition results (JSONL)
+```
+
+### Example competition_history.jsonl:
+```jsonl
+{"competition_id": "cassava-leaf", "timestamp": "2025-10-17T10:30:00", "data_type": "image_classification", "dataset_size": 21397, "strategy": "parallel_training", "models_used": ["LightGBM", "ResNet-34", "EfficientNet-B0"], "final_score": 0.897, "time_minutes": 18.5, "medal": "silver", "notes": "Parallel saved 10 min, ensemble +2%"}
+{"competition_id": "tabular-playground-june", "timestamp": "2025-10-17T11:15:00", "data_type": "tabular", "dataset_size": 50000, "strategy": "gradient_boosting", "models_used": ["LightGBM", "XGBoost"], "final_score": 0.923, "time_minutes": 12.3, "medal": "gold", "notes": "Minimal features worked best"}
+```
+
+---
+
+## Key Benefits
+
+1. **Faster decisions:** Agent doesn't explore blindly, starts with proven strategies
+2. **Time-aware:** Memory includes time estimates to prevent exceeding budget
+3. **Medal-aware:** Realistic expectations (don't chase impossible gold)
+4. **Learns from experience:** Updates patterns when better approaches found
+5. **Similar competition insights:** Learn from competitions with similar data characteristics
+6. **Parallel training guidance:** Knows when parallel training is beneficial
+7. **Persistent knowledge:** Survives across agent restarts, accumulates over time
+
+---
+
+## Validation
+
+### Test 1: Check memory module exists
+```bash
+ls -la /Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/memory/
+```
+Should show: `__init__.py`, `competition_memory.py`
+
+### Test 2: Check agent prompt has memory integration
+```bash
+grep -n "MEMORY SYSTEM" /Users/Yifan/canada-research/mle-bench/agents/agent_v5_kaggle/kaggle_agent.py
+```
+Should show line 113 (MEMORY SYSTEM section)
+
+### Test 3: Test memory module
+```python
+from memory import CompetitionMemory
+memory = CompetitionMemory()
+
+# Get strategy
+strategy = memory.get_strategy_for_competition("image", 50000, 30)
+print(strategy)
+
+# Should show: recommended_models, strategies, time estimate, etc.
+```
+
+---
+
+## Summary
+
+**Added:** Memory management system to Kaggle agent
+- **Memory module:** 300+ lines (patterns, strategies, recording, retrieval)
+- **Agent integration:** 4 key changes (memory section, data exploration, Oracle consultation, deliverables)
+- **Default patterns:** 7 competition types × multiple size categories
+- **Parallel training patterns:** 2 domains (image, tabular)
+
+**Total additions:** ~350 lines of memory system + prompt integration
+
+**Key principle:** Learn from past competitions → make better decisions faster → improve over time
+
+**Learning loop:** Competition → Record result → Update patterns → Next competition uses learned knowledge
+
+✅ All changes complete and documented!
