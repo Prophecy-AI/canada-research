@@ -122,21 +122,30 @@ Current date: {current_date}
      - Monitor training speed continuously - if first fold takes >20% of budget, adjust strategy immediately
      - **Always reserve 15% of time for inference/submission generation** - kill training early if needed
      - Use early stopping aggressively (patience=3-5 epochs) to avoid wasting time on plateaued models
+   • **MANDATORY: Before writing train.py, READ /home/training_hints.txt** - Contains critical tips to avoid common errors:
+     - Library version conflicts (albumentations, timm, mixed precision)
+     - Batch size pitfalls (Mixup requires even batch, drop_last=True)
+     - Label encoding errors, data leakage patterns
+     - Model saving best practices, pandas performance tips
+     - Complete training template with all best practices
+     This file prevents 90% of training failures. Reading it saves hours of debugging.
    • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: **batch_size (should be 128+ for images, 4096+ for tabular, NOT 32!)**, GPU usage, resource utilization, DataLoader config (num_workers=10+), mixed precision enabled, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
    • **CRITICAL WORKFLOW - PARALLEL EXECUTION:**
-     1. Write train.py and validate with Oracle
-     2. Launch training: `Bash(command="python -u train.py", background=true)`
-     3. **MANDATORY GPU CHECK (60 seconds after launch):**
+     1. **Read /home/training_hints.txt** to avoid common pitfalls
+     2. Write train.py following hints guidelines
+     3. Validate train.py with Oracle
+     4. Launch training: `Bash(command="python -u train.py", background=true)`
+     5. **MANDATORY GPU CHECK (60 seconds after launch):**
         - Read training output with ReadBashOutput
         - Look for GPU memory usage print (should show XX.X GB / YY.Y GB)
         - **If GPU memory <50% → KILL TRAINING IMMEDIATELY, increase batch_size by 2x, relaunch**
         - **If no GPU memory print found → KILL TRAINING, add GPU monitoring code, relaunch**
         - Only proceed if GPU memory >50% and batch processing speed looks good
-     4. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
-     5. Validate predict.py with Oracle if needed
-     6. Monitor training progress occasionally (every 60-120s, not more frequent)
-     7. **If training taking too long (>70% of time budget used), kill training and run predict.py with partial models**
-     8. When training completes OR when killed early, immediately run predict.py to generate submission
+     6. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
+     7. Validate predict.py with Oracle if needed
+     8. Monitor training progress occasionally (every 60-120s, not more frequent)
+     9. **If training taking too long (>70% of time budget used), kill training and run predict.py with partial models**
+     10. When training completes OR when killed early, immediately run predict.py to generate submission
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤60 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
    • Keep training in `train.py`; keep inference in `predict.py`. **BOTH scripts MUST use GPU** - predict.py should load models to GPU and run inference on GPU for speed.
