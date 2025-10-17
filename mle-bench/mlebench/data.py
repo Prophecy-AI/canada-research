@@ -248,12 +248,46 @@ def _need_to_accept_rules(error_msg: str) -> bool:
 
 
 def _prompt_user_to_accept_rules(competition_id: str) -> None:
+    import sys
+
+    # Check if running in non-interactive environment
+    is_interactive = sys.stdin.isatty()
+    auto_accept = os.getenv("KAGGLE_AUTO_ACCEPT_RULES", "0") == "1"
+
+    rules_url = f"https://www.kaggle.com/c/{competition_id}/rules"
+
+    if auto_accept:
+        logger.warning(
+            f"KAGGLE_AUTO_ACCEPT_RULES=1 detected. "
+            f"You MUST manually accept competition rules before re-running.\n"
+            f"   1. Visit: {rules_url}\n"
+            f"   2. Click 'I Understand and Accept'\n"
+            f"   3. Re-run this command\n"
+        )
+        raise RuntimeError(
+            f"Competition rules not yet accepted for '{competition_id}'. "
+            f"Visit {rules_url} to accept, then re-run."
+        )
+
+    if not is_interactive:
+        logger.error(
+            f"Running in non-interactive mode but competition rules not accepted.\n"
+            f"Options:\n"
+            f"   1. Manually accept rules at {rules_url}\n"
+            f"   2. Set KAGGLE_AUTO_ACCEPT_RULES=1 to acknowledge this requirement\n"
+        )
+        raise RuntimeError(
+            f"Cannot prompt for input in non-interactive mode. "
+            f"Accept rules at {rules_url} first."
+        )
+
+    # Interactive mode - original behavior
     response = input("Would you like to open the competition page in your browser now? (y/n): ")
 
     if response.lower() != "y":
         raise RuntimeError("You must accept the competition rules before downloading the dataset.")
 
-    webbrowser.open(f"https://www.kaggle.com/c/{competition_id}/rules")
+    webbrowser.open(rules_url)
     input("Press Enter to continue after you have accepted the rules...")
 
 

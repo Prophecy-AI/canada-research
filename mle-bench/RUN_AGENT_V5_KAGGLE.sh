@@ -103,6 +103,10 @@ fi
 
 echo "✅ ANTHROPIC_API_KEY is set"
 
+# Set auto-accept for Kaggle rules (prevents interactive prompts in CI/CD)
+# User must manually accept competition rules on Kaggle website first
+export KAGGLE_AUTO_ACCEPT_RULES=1
+
 # Check if mlebench is installed
 if ! python -c "import mlebench" 2>/dev/null; then
     echo ""
