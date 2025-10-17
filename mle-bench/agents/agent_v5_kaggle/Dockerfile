@@ -51,20 +51,15 @@ RUN wget -qO- https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3
     cmake --version
 
 # Build LightGBM from source with CUDA support
-# Compiles with -DUSE_CUDA=ON flag which enables CUDA Tree Learner (for NVIDIA GPUs)
 # Uses CUDA 11.8 toolkit from base image
+# scikit-build-core (LightGBM 4.0+) runs cmake with -DUSE_CUDA=ON via config-settings
 RUN conda run -n ${CONDA_ENV_NAME} bash -c " \
     export PATH=/usr/local/cuda-11.8/bin:\$PATH && \
     export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:\$LD_LIBRARY_PATH && \
-    cd /tmp && \
-    git clone --recursive --branch stable --depth 1 https://github.com/microsoft/LightGBM && \
-    cd LightGBM && \
-    cmake -B build -S . -DUSE_CUDA=ON && \
-    cmake --build build -j\$(nproc) && \
-    cd python-package && \
-    pip install . --no-cache-dir \
+    pip install --no-binary lightgbm --no-cache-dir \
+        --config-settings=cmake.define.USE_CUDA=ON \
+        'lightgbm>=4.0.0' \
     " && \
-    rm -rf /tmp/LightGBM && \
     conda clean -afy
 
 # Install PyTorch with CUDA support for GPU
