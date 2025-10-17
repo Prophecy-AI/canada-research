@@ -105,20 +105,42 @@ Current date: {current_date}
    • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
    • **RESOURCE MANDATE: EVERY script must max out resources:**
      - n_jobs=-1 for all sklearn/cuML (use ALL CPU cores)
-     - Largest batch size that fits GPU RAM (start with 2048+, reduce if OOM)
-     - PyTorch DataLoader: num_workers=-1, pin_memory=True
+     - **IMAGES: Start with batch_size=128 (NOT 32!). For A10 24GB, 128 is safe for most models**
+     - **TABULAR: Start with batch_size=4096 minimum (tabular models are tiny)**
+     - PyTorch DataLoader: num_workers=8-12, pin_memory=True, prefetch_factor=4, persistent_workers=True
      - Print at start: "Using X CPU cores, batch_size=Y, GPU RAM=Z GB"
-   • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: GPU usage, resource utilization, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
+     - **Example for EfficientNet-B4 on 224x224 images:**
+       ```python
+       BATCH_SIZE = 128  # Start here for A10 24GB
+       train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
+                                 num_workers=10, pin_memory=True,
+                                 prefetch_factor=4, persistent_workers=True)
+       ```
+   • **TIME MANAGEMENT (CRITICAL):**
+     - Estimate total training time before starting (epochs × steps_per_epoch × seconds_per_step)
+     - **If estimated time > 80% of total budget:** Reduce cv_folds from 5→3, or max_epochs by 30-50%
+     - Monitor training speed continuously - if first fold takes >20% of budget, adjust strategy immediately
+     - **Always reserve 15% of time for inference/submission generation** - kill training early if needed
+     - Use early stopping aggressively (patience=3-5 epochs) to avoid wasting time on plateaued models
+   • **MANDATORY CODE REVIEW: Before launching ANY long-running task (training/inference >2 min), consult Oracle with your code.** Ask: "I'm about to run this training script. Review for: **batch_size (should be 128+ for images, 4096+ for tabular, NOT 32!)**, GPU usage, resource utilization, DataLoader config (num_workers=10+), mixed precision enabled, data leakage, label encoding bugs, parameter issues, or any logic errors." This catches bugs BEFORE wasting compute.
    • **CRITICAL WORKFLOW - PARALLEL EXECUTION:**
      1. Write train.py and validate with Oracle
      2. Launch training: `Bash(command="python -u train.py", background=true)`
-     3. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
-     4. Validate predict.py with Oracle if needed
-     5. Monitor training progress occasionally (every 60-120s, not more frequent)
-     6. When training completes, run predict.py to generate submission
+     3. **MANDATORY GPU CHECK (60 seconds after launch):**
+        - Read training output with ReadBashOutput
+        - Look for GPU memory usage print (should show XX.X GB / YY.Y GB)
+        - **If GPU memory <50% → KILL TRAINING IMMEDIATELY, increase batch_size by 2x, relaunch**
+        - **If no GPU memory print found → KILL TRAINING, add GPU monitoring code, relaunch**
+        - Only proceed if GPU memory >50% and batch processing speed looks good
+     4. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
+     5. Validate predict.py with Oracle if needed
+     6. Monitor training progress occasionally (every 60-120s, not more frequent)
+     7. **If training taking too long (>70% of time budget used), kill training and run predict.py with partial models**
+     8. When training completes OR when killed early, immediately run predict.py to generate submission
    • For any command expected to exceed 30 s: `Bash(background=true)` and monitor via ReadBashOutput every ≤60 s. If using Python, use `-u` to force unbuffered stdout so logs flush immediately. Your script **must emit progress lines at least every 30 s** (e.g., step/loss, epoch, fold). Silence >60 s triggers an early warning to kill and relaunch with verbose logging.
    • Before launching a new background job, check the process registry; gracefully kill stale or zombie jobs to avoid GPU RAM exhaustion.
    • Keep training in `train.py`; keep inference in `predict.py`. **BOTH scripts MUST use GPU** - predict.py should load models to GPU and run inference on GPU for speed.
+   • **CRITICAL: predict.py must handle incomplete training gracefully** - check which model files exist, use available models, generate submission even if not all folds completed
 
 9) **Record & Evaluate**
    • Once training/inference completes, call `RunSummary` with fields:
@@ -189,14 +211,28 @@ Current date: {current_date}
 
 **Resource Maximization Rules (MANDATORY - Assume A10 24GB VRAM):**
 • **CPU:** Always n_jobs=-1 (all cores)
-• **GPU (Assume A10 24GB VRAM):** Max batch sizes for A10. Start large, reduce by 2x if OOM.
-  - **Transformers:** batch_size=256-512 (small models), 64-128 (base), 8-32 (large). Use multiples of 8.
-  - **CNNs:** batch_size=64-128 (EfficientNet-B4/B5), 32-64 (EfficientNet-B6/B7), 128-256 (ResNet-50)
-  - **Image Classification (224x224):** batch_size=64-128 for EfficientNet/ResNet
-  - **Image Classification (higher res):** batch_size=32-64 for 384x384+
-  - **Tabular NNs:** batch_size=4096-8192
+• **GPU (Assume A10 24GB VRAM):** ALWAYS START WITH MAXIMUM BATCH SIZE. Never be conservative!
+  - **CRITICAL: batch_size=32 is TOO SMALL and wastes 80% of GPU! ALWAYS start with 128+ for images, 4096+ for tabular**
+  - **Image Classification (224x224):** batch_size=128 (start here, increase to 192 if no OOM)
+  - **Image Classification (384x384):** batch_size=64 (start here, increase to 96 if no OOM)
+  - **Image Classification (512x512+):** batch_size=32 (start here, increase to 48 if no OOM)
+  - **EfficientNet-B0/B1/B2:** batch_size=192-256 (smaller models = larger batches)
+  - **EfficientNet-B4/B5:** batch_size=128 (DEFAULT for most competitions)
+  - **EfficientNet-B6/B7:** batch_size=64 (only for very large models)
+  - **ResNet-50/101:** batch_size=128-192
+  - **Transformers (base):** batch_size=64-128
+  - **Tabular NNs:** batch_size=4096-8192 (tabular is tiny, use massive batches)
   - **Tree models:** No batching. Set max_bin=63 for A10.
-• **DataLoader:** num_workers=min(8, os.cpu_count()//2), pin_memory=True, prefetch_factor=2
+  - **RULE: If GPU util <60% after 1 minute, DOUBLE the batch size immediately. Repeat until OOM, then reduce by 30%**
+• **DataLoader (CRITICAL for GPU saturation):**
+  - num_workers=8-12 (high for async loading while GPU computes)
+  - pin_memory=True (mandatory)
+  - prefetch_factor=3-4 (preload more batches)
+  - persistent_workers=True (avoid worker respawn overhead)
+  ```python
+  DataLoader(dataset, batch_size=BATCH, num_workers=10,
+             pin_memory=True, prefetch_factor=4, persistent_workers=True)
+  ```
 • **Mixed Precision (CRITICAL for speed):** Enables 2-3x speedup + 2x larger batches
   ```python
   from torch.cuda.amp import autocast, GradScaler
@@ -209,11 +245,39 @@ Current date: {current_date}
   scaler.step(optimizer)
   scaler.update()
   ```
-• **Monitor GPU utilization:** Low util (<50%) = batch too small or CPU bottleneck (increase batch or num_workers)
-• **MANDATORY print at start:**
+• **Gradient Accumulation (if OOM):** Simulate larger batches
   ```python
+  accumulation_steps = 4  # Effective batch = batch_size * 4
+  for i, (data, target) in enumerate(loader):
+      output = model(data)
+      loss = criterion(output, target) / accumulation_steps
+      scaler.scale(loss).backward()
+      if (i + 1) % accumulation_steps == 0:
+          scaler.step(optimizer)
+          scaler.update()
+          optimizer.zero_grad()
+  ```
+• **Training Efficiency Tips:**
+  - Use torch.compile(model) for PyTorch 2.0+ (20-30% speedup)
+  - Reduce cv_folds if time-critical (3 folds instead of 5)
+  - Use smaller max_epochs with early stopping (patience=3-5)
+  - Monitor speed: Should process ≥100 batches/minute (image), ≥500 batches/minute (tabular)
+  - Use timm.models with pretrained=True (skip early training phases)
+• **MANDATORY GPU monitoring during training:**
+  - Print GPU memory usage every epoch: `torch.cuda.memory_allocated() / 1024**3`
+  - **If GPU memory <50% after first epoch → batch size is TOO SMALL → STOP and rewrite with 2x batch size**
+  - **If GPU util <60% (check with nvidia-smi in separate terminal) → STOP and increase batch size or num_workers**
+  - Target: 70-90% GPU memory usage, 80-95% GPU utilization
+• **MANDATORY prints at start AND after first batch:**
+  ```python
+  # At start
   print(f"RESOURCES: {{os.cpu_count()}} CPU cores, batch={{BATCH_SIZE}}, GPU={{torch.cuda.get_device_name(0)}}, Mixed Precision={{'ON' if USE_AMP else 'OFF'}}")
   print(f"GPU Memory: {{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}} GB")
+  print(f"DataLoader: num_workers={{NUM_WORKERS}}, prefetch_factor={{PREFETCH_FACTOR}}, persistent_workers={{PERSISTENT_WORKERS}}")
+
+  # After first forward pass in training loop
+  print(f"GPU Memory Used: {{torch.cuda.memory_allocated() / 1024**3:.2f}} GB / {{torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f}} GB ({{torch.cuda.memory_allocated() / torch.cuda.get_device_properties(0).total_memory * 100:.1f}}%)")
+  print(f"VALIDATION: If <50% memory, batch_size={{BATCH_SIZE}} is TOO SMALL - should be {{BATCH_SIZE*2}}+")
   ```
 
 **Think-Share-Act Streaming Protocol (Autonomous Mode):**

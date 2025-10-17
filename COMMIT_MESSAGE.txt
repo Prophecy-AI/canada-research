@@ -1,0 +1,56 @@
+Fix: Aggressive GPU optimization - enforce batch_size=128+ with mandatory monitoring
+
+## Problem
+Agent used batch_size=32 on A100/A10 GPU → only 1% GPU memory utilized
+→ 25+ minute training time → timeout → no submission generated
+
+## Root Cause
+Ambiguous prompt with ranges (e.g., "32-64") led LLM to pick conservative minimum
+
+## Solution
+
+1. **Explicit batch size defaults (no ranges)**
+   - Images 224x224: batch_size=128 (not 32!)
+   - Images 384x384: batch_size=64
+   - Tabular: batch_size=4096+
+   - Added concrete code example to copy
+
+2. **Mandatory GPU checkpoint at 60 seconds**
+   - Agent must check GPU memory usage after launch
+   - If <50% memory → kill training, double batch size, relaunch
+   - Prevents wasting 25 minutes on underutilized GPU
+
+3. **Mandatory GPU monitoring code**
+   - Training scripts must print GPU memory usage
+   - Self-documenting validation logic
+   - Format: "GPU Memory Used: XX.X GB / YY.Y GB (ZZ%)"
+
+4. **Enhanced DataLoader configuration**
+   - num_workers=8-12 (not 4-6)
+   - prefetch_factor=3-4 (not 2)
+   - persistent_workers=True (new)
+
+5. **Oracle review checks batch size**
+   - Explicitly asks Oracle to validate batch_size not 32
+
+## Expected Impact
+- 4-5x faster training (5-10 min vs 25+ min)
+- 70-80% GPU utilization (vs 1%)
+- Submission always generated (graceful degradation)
+
+## Files Changed
+- mle-bench/agents/agent_v5_kaggle/kaggle_agent.py
+  - Lines 108-118: Explicit batch size defaults + example
+  - Lines 125: Oracle review checks batch size
+  - Lines 129-134: Mandatory GPU checkpoint
+  - Lines 200-212: Aggressive batch size guidelines
+  - Lines 213-222: Enhanced DataLoader config
+  - Lines 252-267: Mandatory GPU monitoring code
+
+## Testing
+- [ ] Verify agent uses batch_size=128 for images
+- [ ] Verify GPU memory shows 70-80% usage
+- [ ] Verify training completes in 5-10 minutes
+- [ ] Verify submission.csv generated
+
+Co-authored-by: Claude <noreply@anthropic.com>
