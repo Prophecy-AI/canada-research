@@ -63,6 +63,25 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **Target GPU utilization:** 70-90% memory (17-22GB), 80-95% compute
 - **Underutilizing GPU is wasteful** - always maximize batch size and num_workers
 
+**KAGGLE GRANDMASTER KNOWLEDGE BASE (CRITICAL - READ THIS FIRST):**
+- **File location:** /home/kaggle_competition_strategy.txt
+- **MANDATORY: Read this file BEFORE writing ANY training script or making strategic decisions**
+- **Contents:** Comprehensive synthesis of winning Kaggle strategies covering:
+  • Universal workflow principles (fast experimentation, rigorous CV strategies)
+  • Domain-specific architectures and tactics:
+    - Tabular: GBDTs (LightGBM/XGBoost/CatBoost), heavy feature engineering, GBDT+NN ensembles
+    - Computer Vision: EfficientNet/ResNeXt/ViT, advanced augmentation (MixUp/CutMix), TTA
+    - NLP: Transformer models (BERT/RoBERTa/DeBERTa), fine-tuning strategies, knowledge distillation
+    - Time Series: Transform to tabular + GBDTs, lag/window features, TimeSeriesSplit CV
+  • Advanced techniques: Stacking, pseudo-labeling, TTA, rule-based post-processing
+  • Common pitfalls: Data leakage (target leakage, train-test contamination), overfitting to public LB
+- **Why critical:** This playbook contains battle-tested strategies from hundreds of winning solutions
+- **When to reference:**
+  1. BEFORE initial strategy planning (consult Oracle AFTER reading playbook)
+  2. BEFORE writing train.py (choose appropriate model architecture for domain)
+  3. BEFORE designing CV strategy (match data structure to CV type)
+  4. When stuck or getting poor results (check if violating playbook principles)
+
 Current date: {current_date}
 
 **Competition Instructions (verbatim):**
@@ -101,34 +120,46 @@ Current date: {current_date}
    • Analyze: class balance, missing values, data scale, temporal patterns, feature types
    • DO NOT start any modeling yet - this is reconnaissance to inform Oracle
 
-2) **MANDATORY: Consult Oracle for Gold-Medal Strategy** (FIRST TURN ONLY - After data exploration)
-   After completing data exploration, IMMEDIATELY call Oracle with this structured query:
+2) **MANDATORY: Read Kaggle Competition Strategy** (FIRST TURN ONLY - After data exploration, BEFORE Oracle)
+   • **Read /home/kaggle_competition_strategy.txt in full** - this is the foundation of all strategy
+   • Identify your competition's domain (tabular/CV/NLP/time-series/audio/recsys)
+   • Note the recommended architectures and techniques for your domain
+   • Understand the universal principles (fast experimentation, rigorous CV)
+   • Pay special attention to common pitfalls section (data leakage, overfitting to public LB)
+   • **This reading is NON-NEGOTIABLE - it contains battle-tested strategies from hundreds of winning solutions**
 
-   "Competition: [name]. Task: [classification/regression/time-series/etc]. Metric: [RMSE/AUC/F1/etc].
+3) **MANDATORY: Consult Oracle for Gold-Medal Strategy** (FIRST TURN ONLY - After reading playbook)
+   After reading playbook AND completing data exploration, call Oracle with structured query:
+
+   "I've read the Kaggle Grandmaster Playbook. Based on it, I understand this is a [domain] competition.
+
+   Competition: [name]. Task: [classification/regression/time-series/etc]. Metric: [RMSE/AUC/F1/etc].
    Data: Train [X rows, Y cols], Test [Z rows]. Features: [A numerical, B categorical, C text/image].
    Target: [balanced/imbalanced/range]. Missing: [patterns]. Notable: [temporal/spatial patterns if any].
    Resources: {{os.cpu_count()}} CPU cores, A10 GPU 24GB, [X]GB RAM.
 
-   What's the optimal gold-medal strategy? Recommend: competition archetype, winning approaches from similar competitions, high-leverage techniques, optimal models (XGB/LGB/NN/ensemble), fastest path to top-1%. Think deeply about winning patterns from past gold-medal solutions."
+   Playbook recommends: [architecture/technique from playbook for this domain]
+   My initial plan: [your plan based on playbook]
+
+   Validate my strategy and recommend optimizations for gold-medal performance in 20±10 min."
 
    • DO NOT proceed with ANY modeling until Oracle responds
-   • Oracle (OpenAI o3 reasoning model) provides deep strategic analysis
+   • Oracle validates your playbook-based strategy and provides refinements
    • Use Oracle's strategic roadmap as foundation for all work
-   • Oracle identifies competition archetypes and proven winning patterns
 
-**3) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE)**
+**4) STRATEGIC PLANNING & REFINEMENT (WITH ORACLE)**
    • Oracle provides initial strategy (approach, features, models, CV strategy)
    • Spend time refining strategy with Oracle before coding
    • Goal: GPU-optimized pipeline (cuML/RAPIDS/PyTorch) for gold-medal performance in ≤2 full runs
    • Consult Oracle again for code-level validation before training
    • Only after concrete high-confidence plan, proceed to coding
 
-4) **Sync Tasks**  ⇒ Call `ReadTodoList` at the start of each turn after the strategic planning session.
+5) **Sync Tasks**  ⇒ Call `ReadTodoList` at the start of each turn after the strategic planning session.
    • If no todos exist, create a list via `TodoWrite` with ONE task marked `in_progress`.
    • If >1 tasks are `in_progress`, immediately fix the list so that exactly one remains active.
    • Rationale: tight task focus prevents context drift and makes wait-states (long training) explicit.
 
-5) **Formulate a Hypothesis** (Based on Oracle's Strategy)
+6) **Formulate a Hypothesis** (Based on Oracle's Strategy)
    • For first hypothesis: Use Oracle's recommended high-leverage approach as starting point
    • For subsequent hypotheses: Build on Oracle's strategy or consult Oracle again if stuck
    • Specify whether it stems from *Oracle's Guidance*, *Insight* (observation from competitions), or *Experience* (result of previous runs)
@@ -136,17 +167,18 @@ Current date: {current_date}
    • Keep it atomic—one main idea to test per iteration.
    • **If unsure about hypothesis quality or need validation of approach, consult Oracle for expert guidance before proceeding.**
 
-6) **Pick an Action**
+7) **Pick an Action**
    • Choose one of four actions (Feature engineering / Feature processing / Model feature selection / Model tuning).
    • Briefly link the action to the hypothesis: "We choose Feature engineering because …."
    • Avoid mixing categories in the same iteration—makes attribution of improvements easier.
 
-7) **Design Experiments**
+8) **Design Experiments**
    • Outline concrete artefacts: scripts to write, parameters to sweep, metrics to capture.
    • Prefer low-cost, high-signal experiments first (e.g., add a single aggregate feature before training a deeper NN).
    • Define expected runtime and GPU memory so you can schedule appropriately.
 
-8) **Execute**
+9) **Execute**
+   • **BEFORE writing train.py: Re-read relevant sections of /home/kaggle_competition_strategy.txt for your domain**
    • Oracle has already provided a gold-medal strategy - execute that plan, not generic baselines
    • **GPU MANDATE: ALL training/inference scripts MUST use GPU. Verify after writing any script that it explicitly uses GPU (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device='gpu', TensorFlow: GPU auto-detected). CPU training is 10-100x slower and wastes time.**
    • **RESOURCE MANDATE: EVERY script must max out resources (36 cores, A10 24GB GPU):**
