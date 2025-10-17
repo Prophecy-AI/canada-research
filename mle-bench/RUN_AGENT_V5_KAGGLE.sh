@@ -37,6 +37,7 @@ IMAGE_TAG="${IMAGE_TAG:-agent_v5_kaggle:latest}"
 AGENT_ID="${AGENT_ID:-agent_v5_kaggle}"  # Agent registry ID (no Docker tag)
 DRY_RUN="${DRY_RUN:-false}"
 RUN_ID="${RUN_ID:-local}"  # GitHub run ID for tracking containers
+REBUILD_IMAGE="${REBUILD_IMAGE:-false}"  # Force rebuild base image
 export SUBMISSION_DIR="${SUBMISSION_DIR:-/home/submission}"
 export LOGS_DIR="${LOGS_DIR:-/home/logs}"
 export CODE_DIR="${CODE_DIR:-/home/code}"
@@ -92,6 +93,7 @@ echo "Docker image: $IMAGE_TAG"
 echo "Agent ID: $AGENT_ID"
 echo "Run ID: $RUN_ID"
 echo "Dry run mode: $DRY_RUN"
+echo "Rebuild image: $REBUILD_IMAGE"
 echo ""
 
 # Check API key
@@ -137,9 +139,20 @@ cd mle-bench
 echo "✅ Python bytecode cleaned"
 echo ""
 
-# Check if base mlebench-env image exists (only build once)
-if ! docker image inspect mlebench-env:latest >/dev/null 2>&1; then
-    echo "Building base image 'mlebench-env'..."
+# Check if base mlebench-env image exists or needs rebuild
+if [ "$REBUILD_IMAGE" = "true" ]; then
+    echo "🔄 REBUILD_IMAGE=true: Forcing base image rebuild..."
+    echo ""
+
+    if [ "$DRY_RUN" = "true" ]; then
+        echo "🔍 DRY RUN: Would rebuild mlebench-env base image with --no-cache"
+    else
+        docker build --no-cache --pull --platform=linux/amd64 -t mlebench-env -f environment/Dockerfile .
+        echo "✅ Base image mlebench-env rebuilt successfully"
+    fi
+    echo ""
+elif ! docker image inspect mlebench-env:latest >/dev/null 2>&1; then
+    echo "Building base image 'mlebench-env' (first time)..."
     echo ""
 
     if [ "$DRY_RUN" = "true" ]; then
@@ -151,6 +164,7 @@ if ! docker image inspect mlebench-env:latest >/dev/null 2>&1; then
     echo ""
 else
     echo "✅ Base image mlebench-env already exists (using cached)"
+    echo "   Set REBUILD_IMAGE=true to force rebuild"
     echo ""
 fi
 
