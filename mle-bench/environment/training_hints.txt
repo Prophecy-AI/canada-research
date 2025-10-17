@@ -1,364 +1,275 @@
-KAGGLE COMPETITION TRAINING HINTS & COMMON PITFALLS
+KAGGLE TRAINING HINTS & CRITICAL FAILURE PREVENTION
 ====================================================
 
-READ THIS FILE BEFORE WRITING train.py OR ANY TRAINING SCRIPT!
+READ BEFORE WRITING train.py - Prevent 90% of failures by following this.
 
-This file contains critical tips to avoid common errors that waste time and compute.
-Most failures can be prevented by following these guidelines.
+Most training failures are caused by 10-15 common errors. This file lists them with exact fixes.
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 1: COMMON LIBRARY VERSION CONFLICTS
+SECTION 1: MODEL SIZING - CHOOSE BEFORE TRAINING (MOST CRITICAL)
 ────────────────────────────────────────────────────────────────────────────────
 
-⚠️ ALBUMENTATIONS VERSION CONFLICTS
+⚠️ MODEL TOO LARGE FOR TIME BUDGET (CAUSES INCOMPLETE TRAINING)
+Problem: EfficientNet-B4 + 3 folds takes 50-60 min, exceeds 30-min budget → only 1 fold completes
+Real example: Agent chose B4, had to kill after 1 fold, lost ensemble benefit, suboptimal score
+Solution: ESTIMATE FIRST, choose appropriate model size
+
+Model Sizing Guide (Image Classification, 224x224, A10 GPU):
+  Time Budget  | Recommended Model          | Folds | Epochs | Expected Time
+  -------------|----------------------------|-------|--------|---------------
+  20-30 min    | EfficientNet-B2, B3        | 3     | 6-8    | ~20-25 min
+  30-40 min    | EfficientNet-B3, ResNet50  | 3     | 8-10   | ~30-35 min
+  40-60 min    | EfficientNet-B4, ResNeXt50 | 5     | 10     | ~45-55 min
+  60+ min      | EfficientNet-B5+, ViT      | 5     | 10-15  | ~60-90 min
+
+Time Estimation Formula:
+  total_time = (num_folds × num_epochs × min_per_epoch) + inference_time
+  - min_per_epoch varies: B2=0.5 min, B3=1 min, B4=2-3 min, B5=4-5 min (depends on dataset size)
+  - inference_time = ~5-8 min (predict.py for test set)
+  - Add 20% buffer for overhead (data loading, validation, saving checkpoints)
+
+Example:
+  EfficientNet-B4, 3 folds, 10 epochs, 1000 samples/epoch
+  Estimate: 3 folds × 10 epochs × 2.5 min/epoch = 75 min → TOO SLOW for 30-min budget
+  Fix: Use B3 (1 min/epoch) → 3 × 10 × 1 = 30 min → fits budget
+
+Action: ALWAYS estimate before launching training. If estimate >budget, reduce model size OR folds OR epochs.
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 2: GPU VALIDATION - CHECK IMMEDIATELY AFTER LAUNCH
+────────────────────────────────────────────────────────────────────────────────
+
+⚠️ TRAINING ON CPU (SILENT FAILURE, 10-100X SLOWER)
+Problem: Library conflict or missing .cuda() → tensors on CPU → training runs but extremely slow
+Symptom: GPU memory <10%, validation loss stuck at random baseline (e.g., ln(120)=4.79 for 120 classes)
+Solution: Verify GPU usage 60 seconds after launch
+
+Validation Checklist (60 sec after launch):
+  1. Check GPU memory: torch.cuda.memory_allocated() / total_memory should be >50%
+     Print: f"GPU: {mem_gb:.1f} GB / {total_gb:.1f} GB ({pct:.1f}%)"
+  2. If <10% → KILL immediately, debug:
+     - Verify: data.cuda(), target.cuda(), model.cuda()
+     - Check: torch.cuda.is_available() returns True
+     - Check: No library conflicts (e.g., albumentations incompatible with CUDA in some versions)
+  3. After 1-2 epochs, check loss vs random baseline:
+     - Random baseline = ln(num_classes) for classification
+     - If validation loss ≈ baseline (within 0.1) → model not learning → KILL and debug
+
+Always print GPU usage:
+  ```python
+  # After first batch
+  mem = torch.cuda.memory_allocated() / 1024**3
+  total = torch.cuda.get_device_properties(0).total_memory / 1024**3
+  print(f"GPU: {mem:.1f} GB / {total:.1f} GB ({mem/total*100:.1f}%)")
+  # Should show >50% for proper utilization
+  ```
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 3: LIBRARY VERSION CONFLICTS
+────────────────────────────────────────────────────────────────────────────────
+
+⚠️ ALBUMENTATIONS VERSION CONFLICT
 Problem: ImportError: cannot import name 'preserve_channel_dim' from 'albucore.utils'
-Cause: Incompatible versions of albumentations and albucore
-Solution:
-  - Use torchvision.transforms instead of albumentations (more stable)
-  - OR pin versions: albumentations==1.3.1 albucore==0.0.7
+Solution: Use torchvision.transforms (more stable) OR pin: albumentations==1.3.1 albucore==0.0.7
 
-⚠️ TIMM LIBRARY API CHANGES
+⚠️ TIMM API CHANGES
 Problem: AttributeError: module 'timm' has no attribute 'loss'
-Cause: timm.loss not directly accessible in newer versions
-Solution:
-  - Use: from timm.loss import SoftTargetCrossEntropy
-  - NOT: timm.loss.SoftTargetCrossEntropy()
+Solution: from timm.loss import SoftTargetCrossEntropy (NOT timm.loss.SoftTargetCrossEntropy)
 
-⚠️ PYTORCH MIXED PRECISION TYPE ERRORS
+⚠️ MIXED PRECISION TYPE ERROR
 Problem: RuntimeError: "nll_loss_out_frame" not implemented for 'Half'
-Cause: Loss function expects Float32, but mixed precision passes Float16
-Solution:
-  - Loss calculation must happen INSIDE autocast():
-    ```python
-    with autocast():
-        output = model(data)
-        loss = criterion(output, target)  # ← Must be inside autocast
-    ```
-  - NOT outside: loss = criterion(output.float(), target) will fail
+Solution: Loss calculation MUST be inside autocast():
+  ```python
+  with autocast():
+      output = model(data)
+      loss = criterion(output, target)  # ← Must be inside, NOT outside
+  ```
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 2: BATCH SIZE & DATA LOADING PITFALLS
+SECTION 4: BATCH SIZE & DATA LOADING
 ────────────────────────────────────────────────────────────────────────────────
+
+⚠️ BATCH SIZE TOO SMALL (WASTED GPU)
+Problem: GPU memory 5-10%, training very slow
+Solution: Increase batch size until GPU memory 70-80%
+  - Images 224x224: batch_size=128+ (A10 24GB can handle 192+)
+  - Images 384x384: batch_size=64+ (increase to 96+ if no OOM)
+  - Tabular: batch_size=4096+
+  - Monitor: torch.cuda.memory_allocated() should be 70-80% of total
 
 ⚠️ MIXUP/CUTMIX REQUIRES EVEN BATCH SIZE
 Problem: AssertionError: Batch size should be even when using this
-Cause: Mixup/CutMix requires even batch sizes, but drop_last=False by default
-Solution:
-  - Always use drop_last=True when using Mixup/CutMix:
-    ```python
-    train_loader = DataLoader(dataset, batch_size=128,
-                             shuffle=True, drop_last=True)  # ← Required!
-    ```
+Solution: Always use drop_last=True:
+  ```python
+  DataLoader(dataset, batch_size=128, shuffle=True, drop_last=True)
+  ```
 
-⚠️ BATCH SIZE TOO SMALL = WASTED GPU
-Problem: Training very slow, GPU memory only 5-10% used
-Cause: batch_size=32 or smaller wastes GPU compute
-Solution:
-  - Images 224x224: batch_size=128 minimum (increase to 192 if no OOM)
-  - Images 384x384: batch_size=64 minimum (increase to 96 if no OOM)
-  - Tabular: batch_size=4096 minimum
-  - Monitor: torch.cuda.memory_allocated() should be 70-80% of total
-
-⚠️ DATALOADER NUM_WORKERS TOO LOW
-Problem: GPU sits idle waiting for data, utilization <50%
-Cause: num_workers=0 or too low (e.g., 2-4)
-Solution:
-  - Use num_workers=8-12 for high throughput:
-    ```python
-    DataLoader(dataset, batch_size=128, num_workers=10,
-               pin_memory=True, prefetch_factor=4, persistent_workers=True)
-    ```
+⚠️ NUM_WORKERS TOO LOW (GPU IDLE)
+Problem: GPU utilization <50%, waiting for data
+Solution: num_workers=8-12 for high throughput:
+  ```python
+  DataLoader(dataset, batch_size=128, num_workers=10,
+             pin_memory=True, prefetch_factor=4, persistent_workers=True)
+  ```
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 3: LABEL ENCODING & TARGET ERRORS
+SECTION 5: LABEL ENCODING ERRORS
 ────────────────────────────────────────────────────────────────────────────────
 
 ⚠️ STRING LABELS NOT ENCODED
 Problem: ValueError: invalid literal for int() with base 10: 'cat'
-Cause: Target labels are strings, not integers
-Solution:
-  - Encode labels BEFORE training:
-    ```python
-    from sklearn.preprocessing import LabelEncoder
-    le = LabelEncoder()
-    train_df['target'] = le.fit_transform(train_df['target'])
-    # Save encoder: pickle.dump(le, open('label_encoder.pkl', 'wb'))
-    ```
+Solution: Encode BEFORE training:
+  ```python
+  from sklearn.preprocessing import LabelEncoder
+  le = LabelEncoder()
+  train_df['target'] = le.fit_transform(train_df['target'])
+  pickle.dump(le, open('label_encoder.pkl', 'wb'))  # Save for predict.py
+  ```
 
 ⚠️ LABEL ENCODING MISMATCH (TRAIN VS TEST)
-Problem: Model outputs don't match expected label encoding
-Cause: LabelEncoder fitted on train, but test has different encoding
-Solution:
-  - Fit LabelEncoder on ALL unique labels (train + test if available)
-  - Save encoder and reuse in predict.py:
-    ```python
-    # train.py
-    le = LabelEncoder()
-    all_labels = pd.concat([train_df['target'], test_df['target']]).unique()
-    le.fit(all_labels)
-    pickle.dump(le, open('label_encoder.pkl', 'wb'))
+Problem: Model outputs don't match expected labels in predict.py
+Solution: Fit on ALL unique labels (train + test if available):
+  ```python
+  # train.py
+  all_labels = pd.concat([train_df['target'], test_df['target']]).unique()
+  le.fit(all_labels)
+  pickle.dump(le, open('label_encoder.pkl', 'wb'))
 
-    # predict.py
-    le = pickle.load(open('label_encoder.pkl', 'rb'))
-    predictions = le.inverse_transform(pred_classes)
-    ```
-
-⚠️ MISSING CLASS IN VALIDATION FOLD
-Problem: ValueError: Target values are missing some classes
-Cause: StratifiedKFold with imbalanced data, some classes missing in fold
-Solution:
-  - Use stratified split with min samples check
-  - OR use regular KFold (non-stratified) if classes very rare
+  # predict.py
+  le = pickle.load(open('label_encoder.pkl', 'rb'))
+  predictions = le.inverse_transform(pred_classes)
+  ```
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 4: DATA LEAKAGE & CV/LB MISMATCH
+SECTION 6: DATA LEAKAGE & CV/LB MISMATCH
 ────────────────────────────────────────────────────────────────────────────────
 
-⚠️ TARGET LEAKAGE IN FEATURES
-Problem: CV=0.99 but LB=0.50 (model not generalizing)
-Cause: Features contain information from target variable
-Solution:
-  - Check for: ID columns, target-derived features, future information
-  - Drop: submission_time, user_id, target_encoded features
+⚠️ PREPROCESSING BEFORE SPLIT (LEAKAGE)
+Problem: CV looks good, LB much worse
+Cause: Scaler fitted on full dataset before split
+Solution: ALWAYS fit ONLY on training fold:
+  ```python
+  scaler = StandardScaler()
+  X_train_scaled = scaler.fit_transform(X_train)  # ← fit on train only
+  X_val_scaled = scaler.transform(X_val)          # ← transform val only
+  ```
 
-⚠️ PREPROCESSING BEFORE SPLIT (DATA LEAKAGE)
-Problem: CV looks good, but LB much worse
-Cause: Normalization/scaling fitted on full dataset before split
-Solution:
-  - ALWAYS fit scalers/normalizers ONLY on training fold:
-    ```python
-    scaler = StandardScaler()
-    X_train_scaled = scaler.fit_transform(X_train)  # ← fit on train only
-    X_val_scaled = scaler.transform(X_val)          # ← transform val only
-    ```
-
-⚠️ AUGMENTATION APPLIED TO VALIDATION
+⚠️ AUGMENTATION ON VALIDATION
 Problem: CV score unrealistic (too good)
-Cause: Data augmentation applied to validation set
+Solution: Augmentation ONLY for training:
+  ```python
+  train_transform = transforms.Compose([
+      transforms.RandomHorizontalFlip(),  # ← Training only
+      transforms.ToTensor()
+  ])
+  val_transform = transforms.Compose([
+      transforms.ToTensor()  # ← No augmentation for validation
+  ])
+  ```
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 7: MODEL SAVING & CHECKPOINTING
+────────────────────────────────────────────────────────────────────────────────
+
+⚠️ ONLY SAVING BEST MODEL (THEN KILLING EARLY)
+Problem: Training killed after 1/3 folds, only fold0_best.pth exists → predict.py fails
+Real example: Agent killed training at 25 min, only had 1 model, lost ensemble benefit
+Solution: ALWAYS save last checkpoint even if not best:
+  ```python
+  # Save best
+  if val_loss < best_loss:
+      torch.save(model.state_dict(), f'model_fold{fold}_best.pth')
+  # ALSO save last (in case training killed early)
+  torch.save(model.state_dict(), f'model_fold{fold}_last.pth')
+  ```
+
+predict.py logic:
+  ```python
+  # Try loading best first, fallback to last
+  if os.path.exists(f'model_fold{fold}_best.pth'):
+      model.load_state_dict(torch.load(f'model_fold{fold}_best.pth'))
+  elif os.path.exists(f'model_fold{fold}_last.pth'):
+      model.load_state_dict(torch.load(f'model_fold{fold}_last.pth'))
+  ```
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 8: GPU MEMORY & OOM ERRORS
+────────────────────────────────────────────────────────────────────────────────
+
+⚠️ OUT OF MEMORY (OOM)
 Solution:
-  - Augmentation ONLY for training:
-    ```python
-    train_transform = transforms.Compose([
-        transforms.RandomHorizontalFlip(),  # ← Training only
-        transforms.RandomRotation(15),
-        transforms.ToTensor()
-    ])
-    val_transform = transforms.Compose([
-        transforms.ToTensor()  # ← No augmentation for validation
-    ])
-    ```
+  1. Reduce batch_size by 30-50%
+  2. Use gradient accumulation to simulate larger batches:
+     ```python
+     accumulation_steps = 4
+     for i, (data, target) in enumerate(loader):
+         output = model(data)
+         loss = criterion(output, target) / accumulation_steps
+         loss.backward()
+         if (i + 1) % accumulation_steps == 0:
+             optimizer.step()
+             optimizer.zero_grad()
+     ```
+  3. Enable mixed precision (reduces memory by ~50%)
+
+⚠️ ZOMBIE PROCESS (PREVIOUS RUN DIDN'T RELEASE GPU)
+Problem: OOM on second run, but first run failed
+Real example: Agent's first run OOMed, process didn't exit cleanly, blocked GPU for second run
+Solution: Check and kill zombie processes:
+  ```bash
+  nvidia-smi  # Check GPU processes
+  kill -9 <PID>  # Kill zombie process
+  ```
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 5: MODEL SAVING & CHECKPOINTING
+SECTION 9: SUBMISSION FORMAT
 ────────────────────────────────────────────────────────────────────────────────
 
-⚠️ MODEL NOT SAVED CORRECTLY
-Problem: predict.py can't load model, FileNotFoundError
-Cause: Model checkpoint not saved, or saved to wrong location
-Solution:
-  - Save model after each fold:
-    ```python
-    torch.save({
-        'model_state_dict': model.state_dict(),
-        'optimizer_state_dict': optimizer.state_dict(),
-        'epoch': epoch,
-        'best_score': best_score
-    }, f'model_fold{fold}.pth')
-    ```
-  - Use absolute paths or check current directory
+⚠️ COLUMN NAMES WRONG
+Problem: "Expected column 'label' but got 'prediction'"
+Solution: Read description.md for exact format, match sample_submission.csv
 
-⚠️ ONLY SAVING BEST MODEL (THEN KILL TRAINING EARLY)
-Problem: Training killed after 3/5 folds, only fold0_best.pth exists
-Cause: Only saving when val_loss improves, but killed before all folds done
-Solution:
-  - ALWAYS save last checkpoint even if not best:
-    ```python
-    # Save best
-    if val_loss < best_loss:
-        torch.save(model.state_dict(), f'model_fold{fold}_best.pth')
-    # ALSO save last checkpoint
-    torch.save(model.state_dict(), f'model_fold{fold}_last.pth')
-    ```
-  - predict.py should check for both _best.pth and _last.pth
+⚠️ ROW ORDER MATTERS
+Problem: Score is 0.0 despite validation passing
+Solution: Keep test IDs aligned:
+  ```python
+  test_df['prediction'] = predictions
+  submission = test_df[['id', 'prediction']]  # Preserves order
+  submission.to_csv('submission.csv', index=False)
+  ```
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 6: PANDAS PERFORMANCE WARNINGS
-────────────────────────────────────────────────────────────────────────────────
-
-⚠️ DATAFRAME FRAGMENTATION WARNING
-Problem: PerformanceWarning: DataFrame is highly fragmented
-Cause: Adding columns one-by-one in loop (e.g., OOF predictions)
-Solution:
-  - Create dict/list first, then build DataFrame:
-    ```python
-    # BAD: Adds columns one-by-one
-    for i, pred in enumerate(predictions):
-        oof_df[f'class_{i}'] = pred
-
-    # GOOD: Build dict first, then DataFrame
-    pred_dict = {f'class_{i}': pred for i, pred in enumerate(predictions)}
-    oof_df = pd.DataFrame(pred_dict)
-    # OR use pd.concat([oof_df, pd.DataFrame(pred_dict)], axis=1)
-    ```
-
-────────────────────────────────────────────────────────────────────────────────
-SECTION 7: GPU MEMORY & OOM ERRORS
-────────────────────────────────────────────────────────────────────────────────
-
-⚠️ OUT OF MEMORY (OOM) DURING TRAINING
-Problem: RuntimeError: CUDA out of memory
-Solution:
-  - Reduce batch_size by 30-50%
-  - Use gradient accumulation to simulate larger batches:
-    ```python
-    accumulation_steps = 4
-    for i, (data, target) in enumerate(loader):
-        output = model(data)
-        loss = criterion(output, target) / accumulation_steps
-        loss.backward()
-        if (i + 1) % accumulation_steps == 0:
-            optimizer.step()
-            optimizer.zero_grad()
-    ```
-  - Enable mixed precision (already reduces memory by 50%)
-
-⚠️ MEMORY LEAK (MEMORY GROWS OVER TIME)
-Problem: First epoch fine, but OOM on epoch 2+
-Cause: Tensors not freed, gradients accumulating
-Solution:
-  - Call optimizer.zero_grad() every iteration
-  - Detach loss for logging: loss_value = loss.item() (not loss directly)
-  - Use torch.cuda.empty_cache() between epochs if needed
-
-────────────────────────────────────────────────────────────────────────────────
-SECTION 8: SUBMISSION FORMAT ERRORS
-────────────────────────────────────────────────────────────────────────────────
-
-⚠️ SUBMISSION COLUMN NAMES WRONG
-Problem: Validation fails, "Expected column 'label' but got 'prediction'"
-Cause: Submission format doesn't match competition requirements
-Solution:
-  - Read description.md for exact format (e.g., 'id,label' vs 'ImageId,Label')
-  - Match sample_submission.csv exactly if it exists
-
-⚠️ SUBMISSION ROW ORDER MATTERS
-Problem: Validation passes, but score is 0.0
-Cause: Predictions in wrong order (not matching test set order)
-Solution:
-  - Keep test IDs aligned with predictions:
-    ```python
-    test_df['prediction'] = predictions
-    submission = test_df[['id', 'prediction']]  # Preserves order
-    submission.to_csv('submission.csv', index=False)
-    ```
-
-⚠️ MISSING ROWS IN SUBMISSION
-Problem: Submission has 8000 rows, expected 10000
-Cause: Some test samples skipped or filtered out
-Solution:
-  - Ensure ALL test samples get predictions (even if NaN/error)
-  - Use fillna() for missing predictions
-
-────────────────────────────────────────────────────────────────────────────────
-SECTION 9: KAGGLE-SPECIFIC BEST PRACTICES
-────────────────────────────────────────────────────────────────────────────────
-
-✅ ALWAYS USE CROSS-VALIDATION
-  - K-Fold (k=5 or k=3) for robust evaluation
-  - StratifiedKFold for classification (maintains class balance)
-  - GroupKFold if samples are grouped (e.g., time series, same user)
-
-✅ ENSEMBLE MULTIPLE FOLDS
-  - Average predictions from all folds for final submission
-  - Weighted average if some folds perform better
-  - Reduces variance, usually improves LB score
-
-✅ TRACK OUT-OF-FOLD (OOF) PREDICTIONS
-  - Save predictions for each fold on its validation set
-  - Combine all OOF predictions → full train set predictions
-  - OOF score ≈ LB score (if no leakage)
-
-✅ USE PRETRAINED MODELS
-  - ImageNet pretrained for images (timm library)
-  - BERT/RoBERTa pretrained for NLP
-  - Faster convergence, better performance than random init
-
-✅ LEARNING RATE SCHEDULING
-  - CosineAnnealingLR or ReduceLROnPlateau
-  - Helps model converge better in later epochs
-  - Example: optimizer = Adam(lr=1e-3), scheduler = CosineAnnealingLR(optimizer, T_max=epochs)
-
-✅ EARLY STOPPING
-  - Stop training if validation loss doesn't improve for 3-5 epochs
-  - Saves time, prevents overfitting
-  - Example: if no improvement for 5 epochs → break
-
-────────────────────────────────────────────────────────────────────────────────
-SECTION 10: DEBUGGING CHECKLIST BEFORE TRAINING
-────────────────────────────────────────────────────────────────────────────────
-
-Before running train.py, verify:
-
-□ Batch size is even if using Mixup/CutMix
-□ drop_last=True if using Mixup/CutMix
-□ num_workers=8-12 for DataLoader
-□ pin_memory=True, prefetch_factor=4, persistent_workers=True
-□ Batch size appropriate for GPU (128+ for images, 4096+ for tabular)
-□ Mixed precision enabled (autocast/GradScaler)
-□ Loss calculation INSIDE autocast() context
-□ Labels encoded to integers if classification
-□ Augmentation only applied to training set
-□ Scaler/normalizer fitted only on training fold
-□ Model saving logic includes both best AND last checkpoints
-□ GPU memory monitoring prints (torch.cuda.memory_allocated())
-□ Cross-validation strategy chosen (StratifiedKFold/GroupKFold)
-□ Early stopping patience set (3-5 epochs)
-
-────────────────────────────────────────────────────────────────────────────────
-SECTION 11: QUICK REFERENCE - TRAINING TEMPLATE
+SECTION 10: TRAINING TEMPLATE (COPY-PASTE READY)
 ────────────────────────────────────────────────────────────────────────────────
 
 ```python
 import torch
 from torch.cuda.amp import autocast, GradScaler
-from torch.utils.data import DataLoader
 from sklearn.model_selection import StratifiedKFold
 
-# Config
+# Config (adjust based on time budget)
 BATCH_SIZE = 128  # For images 224x224 on A10 24GB
 NUM_WORKERS = 10
-N_FOLDS = 5
-EPOCHS = 10
+N_FOLDS = 3       # Use 3 for 20-30 min budget, 5 for 40+ min
+EPOCHS = 8        # Use 6-8 for 20-30 min, 10 for 40+ min
 LR = 1e-3
 
-# Mixed precision
 scaler = GradScaler()
-
-# Cross-validation
 skf = StratifiedKFold(n_splits=N_FOLDS, shuffle=True, random_state=42)
 
 for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
     print(f"\n=== Fold {fold+1}/{N_FOLDS} ===")
 
-    # DataLoaders
     train_loader = DataLoader(
         train_dataset, batch_size=BATCH_SIZE, shuffle=True,
         num_workers=NUM_WORKERS, pin_memory=True,
         prefetch_factor=4, persistent_workers=True, drop_last=True
     )
-    val_loader = DataLoader(
-        val_dataset, batch_size=BATCH_SIZE, shuffle=False,
-        num_workers=NUM_WORKERS, pin_memory=True
-    )
 
-    # Model, optimizer, scheduler
     model = create_model().cuda()
     optimizer = torch.optim.Adam(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=EPOCHS)
     criterion = torch.nn.CrossEntropyLoss()
-
-    # Print GPU memory after first batch
-    first_batch = True
 
     best_score = 0
     patience_counter = 0
@@ -377,20 +288,25 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
             scaler.update()
             optimizer.zero_grad()
 
-            if first_batch:
+            # GPU validation (first batch only)
+            if epoch == 0 and i == 0:
                 mem = torch.cuda.memory_allocated() / 1024**3
                 total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                print(f"GPU Memory: {mem:.2f} GB / {total:.1f} GB ({mem/total*100:.1f}%)")
-                first_batch = False
+                print(f"GPU: {mem:.1f} GB / {total:.1f} GB ({mem/total*100:.1f}%)")
+                if mem/total < 0.10:
+                    print("⚠️  CRITICAL: GPU <10% - likely training on CPU!")
+                    raise RuntimeError("GPU not being used - check data.cuda() calls")
 
         # Validation
         model.eval()
         val_loss, val_acc = validate(model, val_loader)
+        print(f"Epoch {epoch}: Loss={val_loss:.4f}, Acc={val_acc:.4f}")
 
-        # Print GPU usage every epoch (for monitoring)
-        mem = torch.cuda.memory_allocated() / 1024**3
-        total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-        print(f"Epoch {epoch}: Loss={val_loss:.4f}, Acc={val_acc:.4f}, GPU={mem:.2f}GB ({mem/total*100:.1f}%)")
+        # Loss sanity check (first 2 epochs)
+        if epoch < 2:
+            random_baseline = torch.log(torch.tensor(num_classes)).item()
+            if abs(val_loss - random_baseline) < 0.1:
+                print(f"⚠️  Loss ≈ random baseline ({random_baseline:.2f}) - model not learning!")
 
         # Save checkpoints
         if val_acc > best_score:
@@ -400,7 +316,7 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
         else:
             patience_counter += 1
 
-        # Always save last
+        # ALWAYS save last (critical if training killed early)
         torch.save(model.state_dict(), f'model_fold{fold}_last.pth')
 
         # Early stopping
@@ -409,15 +325,31 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
             break
 
         scheduler.step()
-
-print("Training complete!")
 ```
 
 ────────────────────────────────────────────────────────────────────────────────
+DEBUGGING CHECKLIST BEFORE LAUNCH
+────────────────────────────────────────────────────────────────────────────────
 
-📌 REMEMBER: Read this file BEFORE writing train.py to avoid these pitfalls!
+□ Time estimated: (folds × epochs × min_per_epoch) < budget?
+□ Model size appropriate for time budget (B2/B3 for 30-min, not B4+)?
+□ Batch size appropriate (128+ for images, 4096+ for tabular)?
+□ Batch size even if using Mixup/CutMix?
+□ drop_last=True if using Mixup/CutMix?
+□ num_workers=8-12, pin_memory=True, prefetch_factor=4?
+□ Mixed precision enabled (autocast/GradScaler)?
+□ Loss calculation INSIDE autocast()?
+□ Labels encoded to integers if classification?
+□ GPU usage print after first batch (should be >50%)?
+□ Loss sanity check after 1-2 epochs (vs ln(num_classes))?
+□ Saving both best AND last checkpoints?
+□ Early stopping patience set (3-5 epochs)?
 
-Most training failures are caused by issues listed above. Following these guidelines
-will save hours of debugging time.
+────────────────────────────────────────────────────────────────────────────────
+
+📌 TOP 3 FAILURE MODES (PREVENT THESE):
+  1. Model too large for time budget → incomplete training, suboptimal score
+  2. Training on CPU instead of GPU → 10-100x slower, wastes entire budget
+  3. Only saving best checkpoint → training killed early, no models for predict.py
 
 ────────────────────────────────────────────────────────────────────────────────
