@@ -52,7 +52,10 @@ RUN wget -qO- https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3
 
 # Build LightGBM from source with CUDA support
 # Compiles with -DUSE_CUDA=ON flag which enables CUDA Tree Learner (for NVIDIA GPUs)
+# Uses CUDA 11.8 toolkit from base image
 RUN conda run -n ${CONDA_ENV_NAME} bash -c " \
+    export PATH=/usr/local/cuda-11.8/bin:\$PATH && \
+    export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:\$LD_LIBRARY_PATH && \
     cd /tmp && \
     git clone --recursive --branch stable --depth 1 https://github.com/microsoft/LightGBM && \
     cd LightGBM && \
