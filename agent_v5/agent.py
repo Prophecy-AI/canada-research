@@ -20,18 +20,21 @@ from agent_v5.tools.list_bash import ListBashProcessesTool
 from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
 from agent_v5.tools.oracle import OracleTool
+from agent_v5.tools.elapsed_time import ElapsedTimeTool
+import time
 
 
 class ResearchAgent:
     """Research agent with agentic loop"""
 
-    def __init__(self, session_id: str, workspace_dir: str, system_prompt: str):
+    def __init__(self, session_id: str, workspace_dir: str, system_prompt: str, start_time: float = None):
         self.session_id = session_id
         self.workspace_dir = workspace_dir
         self.system_prompt = system_prompt
         self.conversation_history: List[Dict] = []
         self.tools = ToolRegistry(workspace_dir)
         self.process_registry = BashProcessRegistry()  # Registry for background bash processes
+        self.start_time = start_time if start_time is not None else time.time()
         self._register_core_tools()
         self.anthropic_client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
         self.run = with_session(session_id)(self.run)
@@ -52,6 +55,7 @@ class ResearchAgent:
         self.tools.register(ReadTodoListTool(self.workspace_dir))
         self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
         self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
+        self.tools.register(ElapsedTimeTool(self.workspace_dir, self.start_time))
 
     async def cleanup(self) -> None:
         """
