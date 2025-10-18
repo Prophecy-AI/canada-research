@@ -222,15 +222,15 @@ Data: {data_dir}
 5. Write train.py based on strategy:
 
 **STRATEGY: "fastai_vision"** (RECOMMENDED for images, gold-medal approach):
-   - Use fastai.vision library for simple, fast, accurate image classification
+   - Use fastai.vision library for simple, fast, accurate image classification (v2 API)
    - Key patterns from gold solutions:
-     * Load images: `ImageList.from_df()` or `ImageList.from_folder()`
-     * Split: `.split_by_rand_pct(0.01)` for 99/1 train/val (maximum training data!)
-     * Augmentation: `get_transforms(do_flip=True, flip_vert=True, max_rotate=10, max_zoom=1.1, max_lighting=0.2, max_warp=0.2, p_affine=0.75, p_lighting=0.75)`
+     * Load images: `ImageDataLoaders.from_df(df, path='.', valid_pct=0.01, seed=42, item_tfms=Resize(size), batch_tfms=aug_transforms())`
+     * Or use DataBlock: `dls = DataBlock(blocks=(ImageBlock, CategoryBlock), get_items=get_image_files, splitter=RandomSplitter(valid_pct=0.01, seed=42), get_y=parent_label, item_tfms=Resize(size), batch_tfms=aug_transforms()).dataloaders(path)`
+     * Augmentation: `aug_transforms(do_flip=True, flip_vert=True, max_rotate=10, max_zoom=1.1, max_lighting=0.2, max_warp=0.2, p_affine=0.75, p_lighting=0.75)`
      * Image size: Use spec['size'] (default 128-224, smaller = faster)
-     * Create learner: `cnn_learner(data, models.densenet161, metrics=[accuracy])`
-     * Train: `learn.fit_one_cycle(epochs, slice(lr))` where epochs from spec (default 5), lr from spec (default 3e-2)
-     * Predict: `preds, _ = learn.get_preds(ds_type=DatasetType.Test)`
+     * Create learner: `vision_learner(dls, resnet34, metrics=accuracy)` or `cnn_learner(dls, resnet34, metrics=accuracy)`
+     * Train: `learn.fit_one_cycle(epochs, lr)` where epochs from spec (default 5), lr from spec (default 3e-2)
+     * Predict: `test_dl = learn.dls.test_dl(test_items); preds, _ = learn.get_preds(dl=test_dl)`
    - Normalize with ImageNet stats (fastai does automatically)
    - Save predictions to submission.csv in correct format
    - Print VALIDATION_SCORE with final validation metric
@@ -511,15 +511,13 @@ DO:
 
 **STRATEGY: fastai** (vision or tabular)
 ```python
-from fastai.vision.all import *  # or from fastai.tabular.all import *
+from fastai.vision.all import *
 
-# Load learner
 learn = load_learner('{best_workspace}/learner.pkl')
 
-# Get predictions on test set
-preds, _ = learn.get_preds(ds_type=DatasetType.Test)
+test_dl = learn.dls.test_dl(test_items)
+preds, _ = learn.get_preds(dl=test_dl)
 
-# Convert to numpy and save to submission.csv
 predictions = preds.numpy()
 ```
 
