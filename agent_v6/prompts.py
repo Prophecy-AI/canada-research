@@ -257,7 +257,7 @@ Data: {data_dir}
        val_metric = learn.recorder.values[-1][1]
        if isinstance(val_metric, torch.Tensor):
            val_metric = val_metric.item()
-       print(f"VALIDATION_SCORE: {val_metric:.6f}")
+       print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
        ```
    - Always convert labels to strings to avoid binary/multi-class confusion
    - Normalize with ImageNet stats (fastai does automatically)
@@ -325,7 +325,7 @@ if 'models' in spec and isinstance(spec['models'], list):
 else:
     model_names = [spec['model']]
 
-print(f"Using {len(model_names)} backbone(s): {model_names}")
+print(f"Using {{len(model_names)}} backbone(s): {{model_names}}")
 
 # Load all backbones
 backbones = []
@@ -339,7 +339,7 @@ for model_name in model_names:
         backbone.head = nn.Identity()
     backbone.eval().to(device)
     backbones.append(backbone)
-    print(f"Loaded {model_name}")
+    print(f"Loaded {{model_name}}")
 
 # Extract features from all backbones
 def extract_features(loader, backbones, device):
@@ -361,11 +361,11 @@ def extract_features(loader, backbones, device):
 
 print("Extracting training features...")
 X_train, y_train = extract_features(train_loader, backbones, device)
-print(f"Training features shape: {X_train.shape}")
+print(f"Training features shape: {{X_train.shape}}")
 
 print("Extracting validation features...")
 X_val, y_val = extract_features(val_loader, backbones, device)
-print(f"Validation features shape: {X_val.shape}")
+print(f"Validation features shape: {{X_val.shape}}")
 
 # Standardize features (CRITICAL for LogReg performance)
 scaler = StandardScaler()
@@ -383,12 +383,12 @@ val_probs = clf.predict_proba(X_val)
 val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
 num_classes = len(clf.classes_)
 val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
-print(f"VALIDATION_SCORE: {val_metric:.6f}")
+print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
 
 # Save models
 for i, backbone in enumerate(backbones):
-    torch.save(backbone.state_dict(), f'backbone_{i}.pth')
-joblib.dump({'model_names': model_names}, 'model_config.pkl')
+    torch.save(backbone.state_dict(), f'backbone_{{i}}.pth')
+joblib.dump({{'model_names': model_names}}, 'model_config.pkl')
 joblib.dump(clf, 'classifier.pkl')
 joblib.dump(scaler, 'scaler.pkl')
 print("Models saved!")
@@ -466,7 +466,7 @@ print("Models saved!")
      ```python
      if isinstance(val_metric, torch.Tensor):
          val_metric = val_metric.item()
-     print(f"VALIDATION_SCORE: {val_metric:.6f}")
+     print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
      ```
      * ALWAYS convert tensors to Python floats using `.item()` before formatting
      * Use the EXACT competition metric from EDA context (e.g., logloss, AUC, accuracy, etc.)
@@ -575,13 +575,13 @@ import numpy as np
 # Load model config to check if single or multi-model
 config = joblib.load('{best_workspace}/model_config.pkl')
 model_names = config['model_names']
-print(f"Loading {len(model_names)} backbone(s): {model_names}")
+print(f"Loading {{len(model_names)}} backbone(s): {{model_names}}")
 
 # Load all backbones
 backbones = []
 for i, model_name in enumerate(model_names):
     backbone = getattr(torchvision.models, model_name.lower().replace('-', '_'))(pretrained=True)
-    backbone.load_state_dict(torch.load(f'{best_workspace}/backbone_{i}.pth'))
+    backbone.load_state_dict(torch.load(f'{best_workspace}/backbone_{{i}}.pth'))
     if hasattr(backbone, 'fc'): backbone.fc = nn.Identity()
     elif hasattr(backbone, 'classifier'): backbone.classifier = nn.Identity()
     elif hasattr(backbone, 'head'): backbone.head = nn.Identity()
