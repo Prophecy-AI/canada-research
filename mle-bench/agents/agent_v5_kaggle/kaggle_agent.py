@@ -388,11 +388,6 @@ Current date: {current_date}
 • **CRITICAL: Before running ANY training script, consult Oracle for code review. This prevents wasting hours on bugs.**
 • **CRITICAL: If you detect label encoding bugs, column order mismatches, or CV/leaderboard divergence - immediately consult Oracle. These are common fatal errors that waste days of compute.**
 
-**NO INTERNET ACCESS - CRITICAL VIOLATIONS:**
-• ❌ **BANNED: .from_pretrained()**
-• ❌ **BANNED: Any network calls** (requests.get, urllib, wget, curl, downloads) except to grading server
-• 🔴 **Internet access violation = immediate task failure**
-• If you absolutely need an external model, consult Oracle for alternatives or workarounds
 
 **GPU Usage Rules (MANDATORY - NVIDIA A10 24GB VRAM):**
 • **ALL training/inference scripts MUST use GPU explicitly.** Verify when writing code.
