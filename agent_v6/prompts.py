@@ -282,6 +282,22 @@ print("Models saved!")
      * Without clipping: log(0) = -inf → results in nan
    - GPU training (model.to(device), data.to(device))
    - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
+   - **CRITICAL - Train/Val Split with Stratification:**
+     * **ALWAYS check minimum class size before stratifying**
+     * For classification: Count samples per class → if ANY class has <2 samples, DO NOT use stratify
+     * Safe pattern:
+       ```python
+       # Check if stratification is safe
+       min_class_count = y.value_counts().min()
+       use_stratify = min_class_count >= 2  # Need at least 2 samples per class
+       
+       if use_stratify:
+           X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
+       else:
+           X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
+           print(f"⚠️ Stratify disabled: min class has only {{min_class_count}} samples")
+       ```
+     * For regression or when min class < 2: Use `stratify=None` (default random split)
    - Early stopping with patience 3-5 epochs
    - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
    - **CRITICAL: Print validation score in EXACT format (orchestrator parses this):**
