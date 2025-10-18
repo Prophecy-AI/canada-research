@@ -126,28 +126,26 @@ Best: {best_score}
   * Custom architectures for specialized tasks
   * When you need fine control over architecture/training
 - **Why it works:** Flexible, can model complex non-linear relationships, dropout prevents overfitting
-- **Architecture guidelines (larger networks converge better):**
-  * Small data (<5K): [768, 512, 256] with Dropout(0.25-0.4), batch_size=32-64
-  * Medium data (5K-50K): [1536, 768, 384] with Dropout(0.15-0.25), batch_size=64-128
-  * Large data (>50K): [2048, 1024, 512, 256] with Dropout(0.1-0.2), batch_size=128-256
-  * Very high dim features: Go wider [2048, 2048, 1024] or [3072, 1536]
+- **Architecture guidelines:**
+  * Small data (<5K): [512, 256] with Dropout(0.3-0.5), batch_size=32-64
+  * Medium data (5K-50K): [1024, 512, 256] with Dropout(0.2-0.3), batch_size=64-128
+  * Large data (>50K): [2048, 1024, 512] with Dropout(0.1-0.2), batch_size=128-256
+  * Very high dim features: Go wider [1500, 1500] or [2048, 1024]
 - **Training best practices:**
-  * Activation: 'relu' for hidden layers (or 'elu' for deeper networks), 'softmax'/'sigmoid' for output
-  * Optimizer: 'adam' (lr=5e-4 to 1e-3, beta_1=0.9, beta_2=0.999) or 'adamw' for better regularization
+  * Activation: 'relu' for hidden layers, 'softmax'/'sigmoid' for output
+  * Optimizer: 'adam' (lr=1e-3 to 1e-4) or 'rmsprop' (lr=1e-3)
   * Loss: 'categorical_crossentropy' (multiclass), 'binary_crossentropy' (binary), 'mse' (regression)
-  * Regularization: Dropout + L2 kernel_regularizer(1e-4 to 1e-5) + EarlyStopping(patience=40-200, restore_best_weights=True)
-  * Batch normalization: Recommended after Dense layers for networks >3 layers
-  * Learning rate schedule: ReduceLROnPlateau(factor=0.5, patience=20-30, min_lr=1e-6)
+  * Regularization: Dropout + EarlyStopping(patience=40-200, restore_best_weights=True)
+  * Batch normalization: Add after Dense layers for large networks (optional)
 - **Data preprocessing:**
   * Features: StandardScaler or MinMaxScaler (REQUIRED)
   * Target: LabelEncoder → to_categorical for classification
   * Missing values: SimpleImputer (mean/median for numeric, most_frequent for categorical)
-- **Hyperparameters (DOUBLED for better convergence):**
-  * epochs: 200-1000 (let EarlyStopping decide, more epochs = better convergence)
-  * batch_size: 64-256 depending on data size (smaller batch = better generalization)
-  * validation_split: 0.15-0.2
-  * patience: 40-200 (larger for more complex models)
-- **Example:** {{"strategy": "keras_neural_network", "architecture": [1536, 768, 384], "dropout": 0.2, "epochs": 600, "batch_size": 128, "lr": 5e-4, "optimizer": "adam", "patience": 80, "use_bn": true, "l2_reg": 1e-4}}
+- **Hyperparameters:**
+  * epochs: 200-1000 (let EarlyStopping decide)
+  * batch_size: 64-256 depending on data size
+  * validation_split: 0.1-0.2
+- **Example:** {{"strategy": "keras_neural_network", "architecture": [1024, 512, 256], "dropout": 0.2, "epochs": 600, "batch_size": 128, "lr": 1e-3, "optimizer": "adam"}}
 
 **Strategy 5: "gradient_boosting"** (for medium/large tabular data)
 - **When to try:** Tabular data with numerical/categorical features in CSV format
@@ -369,49 +367,27 @@ Data: {data_dir}
          stratify=y_encoded if is_classification else None
      )
      
-     # 7. Build model from spec (IMPROVED - larger defaults, BN, L2 support)
-     architecture = spec.get('architecture', [1536, 768, 384])  # Larger default
+     # 7. Build model from spec
+     architecture = spec.get('architecture', [1024, 512, 256])
      dropout_rate = spec.get('dropout', 0.2)
-     use_bn = spec.get('use_bn', False)  # Batch normalization
-     l2_reg = spec.get('l2_reg', 0.0)  # L2 regularization
-     activation = spec.get('activation', 'relu')  # relu or elu
-     
-     from tensorflow.keras import regularizers
      
      model = keras.Sequential()
      model.add(layers.Input(shape=(X_train.shape[1],)))
      
-     for i, units in enumerate(architecture):
-         # Add dense layer with optional L2 reg
-         if l2_reg > 0:
-             model.add(layers.Dense(
-                 units, 
-                 activation=activation,
-                 kernel_regularizer=regularizers.l2(l2_reg)
-             ))
-         else:
-             model.add(layers.Dense(units, activation=activation))
-         
-         # Add batch normalization if requested
-         if use_bn:
-             model.add(layers.BatchNormalization())
-         
-         # Add dropout
+     for units in architecture:
+         model.add(layers.Dense(units, activation='relu'))
          model.add(layers.Dropout(dropout_rate))
      
-     # Output layer
      if num_classes > 2:
          model.add(layers.Dense(num_classes, activation=output_activation))
      else:
          model.add(layers.Dense(1 if num_classes == 1 else num_classes, activation=output_activation))
      
-     # 8. Compile (IMPROVED - better default LR)
-     lr = spec.get('lr', 5e-4)  # Better default learning rate
+     # 8. Compile
+     lr = spec.get('lr', 1e-3)
      optimizer_name = spec.get('optimizer', 'adam')
      if optimizer_name == 'adam':
-         optimizer = keras.optimizers.Adam(learning_rate=lr, beta_1=0.9, beta_2=0.999)
-     elif optimizer_name == 'adamw':
-         optimizer = keras.optimizers.AdamW(learning_rate=lr, weight_decay=l2_reg if l2_reg > 0 else 1e-4)
+         optimizer = keras.optimizers.Adam(learning_rate=lr)
      elif optimizer_name == 'rmsprop':
          optimizer = keras.optimizers.RMSprop(learning_rate=lr)
      else:
@@ -419,34 +395,23 @@ Data: {data_dir}
      
      model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
      
-     # 9. Setup callbacks (IMPROVED - LR scheduling, doubled patience)
-     patience = spec.get('patience', 80)  # Doubled from 40
-     callback_list = [
-         callbacks.EarlyStopping(
-             monitor='val_loss', 
-             patience=patience, 
-             restore_best_weights=True, 
-             verbose=1
-         ),
-         callbacks.ReduceLROnPlateau(
-             monitor='val_loss',
-             factor=0.5,
-             patience=max(20, patience // 4),  # ~20-50 based on main patience
-             min_lr=1e-6,
-             verbose=1
-         )
-     ]
+     # 9. Setup callbacks
+     patience = spec.get('patience', 100)
+     early_stop = callbacks.EarlyStopping(
+         monitor='val_loss', patience=patience, 
+         restore_best_weights=True, verbose=1
+     )
      
-     # 10. Train (DOUBLED epochs)
+     # 10. Train
      batch_size = spec.get('batch_size', 128)
-     epochs = spec.get('epochs', 600)  # Doubled from 300
+     epochs = spec.get('epochs', 600)
      
      history = model.fit(
          X_train, y_train,
          validation_data=(X_val, y_val),
          batch_size=batch_size,
          epochs=epochs,
-         callbacks=callback_list,
+         callbacks=[early_stop],
          verbose=1
      )
      
@@ -471,15 +436,10 @@ Data: {data_dir}
      if is_classification:
          joblib.dump(le_target, 'label_encoder.pkl')
      ```
-   - **Key points (IMPROVED):**
+   - **Key points:**
      * ALWAYS use StandardScaler before training
-     * Use architecture from spec, fallback to [1536, 768, 384] (larger networks)
-     * Support batch normalization (use_bn) and L2 regularization (l2_reg)
-     * Support adamw optimizer for better weight decay
-     * EarlyStopping with patience from spec (default 80, doubled)
-     * ReduceLROnPlateau for adaptive learning rate
-     * Default epochs 600 (doubled), let callbacks decide when to stop
-     * Default lr 5e-4 (better than 1e-3 for most tasks)
+     * Use architecture from spec, fallback to [1024, 512, 256]
+     * EarlyStopping with patience from spec (default 100)
      * Print best validation score (from history or after training)
      * Save model.h5 + scaler.pkl + label_encoder.pkl
 
