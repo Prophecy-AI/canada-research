@@ -43,6 +43,29 @@ Best: {best_score}
 **CRITICAL: ONLY use models from standard libraries (torchvision.models, transformers, sklearn, xgboost, lightgbm)**
 **DO NOT propose custom architectures or models implemented from scratch - worker will fail**
 
+**🚨 CRITICAL - MATCH STRATEGY TO DATA TYPE (READ EDA CAREFULLY!):**
+
+**IF EDA says "Tabular" OR "pre-extracted features" OR "CSV with X numerical features":**
+→ MUST use "gradient_boosting" strategy ONLY
+→ DO NOT use bottleneck_features/fine_tuning (those are for raw images!)
+→ Example: leaf-classification has "192 tabular features" → gradient_boosting, NOT image strategies
+
+**IF EDA says "Image" AND describes actual image files (.jpg/.png) AND NO mention of "pre-extracted features":**
+→ Use "bottleneck_features" (<50K images) or "fine_tuning" (>50K images)
+→ Load actual image files, use CNN models
+
+**IF EDA says "Text" or "NLP" or "comments/reviews/documents":**
+→ Use "transformer_features" (distilbert/roberta) OR "gradient_boosting" with TF-IDF features
+
+**IF EDA says "Audio" or describes .wav/.mp3/.aif files:**
+→ Convert to spectrograms, then use "bottleneck_features" (treat spectrograms as images)
+
+**IF EDA says "Seq->Seq" or "text normalization" or "translation":**
+→ This is advanced - use "transformer_features" or skip if too complex
+
+**Double-check before proceeding:** Does EDA mention "pre-extracted features" or "CSV columns with features"? 
+→ If YES: It's TABULAR (use gradient_boosting), NOT images!
+
 **Available Strategies (choose mix based on EDA context above):**
 
 **Strategy 1: "bottleneck_features"** (feature extraction + LogisticRegression)
@@ -50,16 +73,17 @@ Best: {best_score}
 - **How it works:** Extract features from pretrained CNN (no training), train LogisticRegression on features
 - **Pros:** Very fast (trains in seconds), often better with limited data, low memory
 - **Classifier:** ALWAYS use LogisticRegression (DO NOT use XGBoost - too slow, not worth it)
-- **Single model:** Use one backbone (EfficientNet-B0, ResNet50, DenseNet121, MobileNetV2)
-- **Multi-model (RECOMMENDED for max performance):** Use 2-3 backbones, concatenate features, then train LogisticRegression
-  * Much better performance (2-10x lower logloss)
-  * Still fast (trains in seconds)
-  * **Best model combinations (from gold solutions):** 
-    - ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim
+- **🏆 For MAX ACCURACY (gold-medal techniques, still fast):**
+  * **ALWAYS use 3-model ensembles** (not 2) - adds 30s, improves score 2-10x
+  * **Best 3-model combinations (proven in gold solutions):**
     - EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim
-    - Wide_ResNet50_2 (2048-dim) + RegNetY_8GF (2016-dim) = 4064-dim
-- **Example single:** {{"strategy": "bottleneck_features", "model": "ResNet50", "classifier": "LogisticRegression"}}
-- **Example multi:** {{"strategy": "bottleneck_features", "models": ["ResNet50", "InceptionV3"], "classifier": "LogisticRegression"}}
+    - ResNet50 + InceptionV3 + DenseNet121 = 5120-dim
+    - Wide_ResNet50_2 + EfficientNet-B2 + DenseNet161 = 5664-dim
+  * **Image size: 299x299** (better than 224x224 for feature quality)
+  * **Train split: 0.95** (more data for LogReg = better calibration)
+  * **LogReg tuning: Try C=0.1, 0.5, 1.0** (pick best on val, adds 5s)
+  * **Test-time augmentation (TTA):** Predict on original + horizontal flip, average predictions (+10s, +2-5% accuracy)
+- **Example:** {{"strategy": "bottleneck_features", "models": ["EfficientNet-B2", "DenseNet161", "ResNet50"], "classifier": "LogisticRegression", "image_size": 299, "tta": true, "train_split": 0.95}}
 
 **Strategy 2: "fine_tuning"** (standard deep learning)
 - **When to try:** Images + Classification, any dataset size
@@ -69,27 +93,31 @@ Best: {best_score}
 - **Example:** {{"strategy": "fine_tuning", "model": "ResNet50", "epochs": 12}}
 
 **Strategy 3: "gradient_boosting"** (for tabular)
-- **When to try:** Tabular data
-- **Models:** XGBoost (tree_method='hist'), LightGBM (CPU), CatBoost
-- **CatBoost CRITICAL:** If bootstrap_type="Bayesian", DO NOT use subsample parameter (incompatible). Either:
-  * Use bootstrap_type="Bayesian" WITHOUT subsample, OR
-  * Use bootstrap_type="Bernoulli" WITH subsample=0.8
+- **When to try:** Tabular data with numerical/categorical features in CSV format
+- **Models:** LightGBM (fast, handles categoricals), XGBoost (robust, tree_method='hist')
+- **DO NOT use CatBoost** (parameter conflicts, not worth debugging time)
+- **Example:** {{"strategy": "gradient_boosting", "model": "LightGBM", "hyperparameters": {{"n_estimators": 500, "learning_rate": 0.05}}}}
 
 **Strategy 4: "transformer_features"** (for text)
 - **When to try:** Text data
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
 **Recommendation for Round 1:**
-- **Images <50K (especially for small sample sizes):** 
+- **Tabular data (CSV with features):**
+  * exp_1: LightGBM with feature engineering
+  * exp_2: XGBoost with different hyperparameters  
+  * exp_3: LightGBM with different feature combinations
+  * **DO NOT use image/text strategies on tabular data!**
+- **Images <50K (raw image files):** 
   * **FOCUS ON BOTTLENECK ONLY** - fine-tuning wastes time and gets worse scores
-  * **ALWAYS use LogisticRegression classifier** - XGBoost too slow
-  * exp_1: Multi-model bottleneck (ResNet50 + InceptionV3) + LogReg
-  * exp_2: Multi-model bottleneck (EfficientNet-B2 + DenseNet161) + LogReg
-  * exp_3: Multi-model bottleneck (different combo) OR single EfficientNet-B0 + LogReg
-  * This explores WHICH model combinations work best, all finish in 2-4 min each
-- **Images >50K:** Try 2-3 different fine_tuning models (enough data to train)
-- **Tabular:** Try 2-3 different gradient boosting models
-- **Multi-model bottleneck >> fine-tuning for small datasets** (faster AND better scores)
+  * **🏆 FOR GOLD: ALWAYS use 3-model ensembles** (not 2) - proven 2-10x better scores
+  * exp_1: **3-model** (EfficientNet-B2 + DenseNet161 + ResNet50), image_size=299, train_split=0.95, tta=true
+  * exp_2: **3-model** (ResNet50 + InceptionV3 + DenseNet121), image_size=299, train_split=0.95, tta=true
+  * exp_3: **3-model** (Wide_ResNet50_2 + EfficientNet-B2 + DenseNet161), different C values to test
+  * Each finishes in 3-5 min with TTA, explores best ensemble + hyperparameters
+- **Images >50K:** Skip for now (takes too long, bottleneck doesn't work well)
+- **Text data:** Try transformer_features (distilbert, roberta) with class_weight='balanced'
+- **Audio:** Convert to spectrograms, use bottleneck_features with **3-model** ensembles
 
 **Experiment Design Guidelines:**
 - **For images <50K: Use ONLY bottleneck strategies (skip fine-tuning - wastes time and gets worse results)**
@@ -166,7 +194,38 @@ Data: {data_dir}
 4. **Check strategy from spec** (spec['strategy'] or default to 'fine_tuning')
 5. Write train.py based on strategy:
 
-**STRATEGY: "bottleneck_features"** (extract features, train simple classifier):
+**STRATEGY: "bottleneck_features"** (extract features, train LogisticRegression):
+
+**Implementation guidance (adapt based on spec):**
+- **Image preprocessing:**
+  * Use image_size from spec (default 299 for EfficientNet, 224 for others)
+  * Normalize with ImageNet stats: mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+  * Resize larger (299x299) gives better features than smaller (224x224)
+- **Multi-model ensembles:**
+  * Load all models from spec['models'] (or single spec['model'])
+  * Remove final classification layer (fc/classifier/head → Identity)
+  * Extract features from each backbone, concatenate (np.hstack)
+  * Always use eval() mode, no_grad() for inference
+- **Feature normalization:**
+  * CRITICAL: Use StandardScaler().fit_transform() on features before LogReg
+  * Without scaling, LogReg performs poorly
+- **Train/val split:**
+  * Use train_split from spec (default 0.95 for small datasets, 0.85 for large)
+  * More training data = better LogReg calibration = lower logloss
+- **LogisticRegression hyperparameters:**
+  * If spec has 'C' values list → try each, pick best on validation
+  * If spec has single C → use it (default C=1.0)
+  * Use multi_class='multinomial', solver='lbfgs', max_iter=1000
+- **Test-time augmentation (TTA) if spec['tta']=true:**
+  * Extract features on: original images + horizontal flips
+  * Average the feature vectors before feeding to LogReg
+  * Adds ~10s but improves accuracy 2-5%
+- **Validation metric:**
+  * For classification: Use log_loss with clipped probabilities (1e-7, 1-1e-7)
+  * Print VALIDATION_SCORE with the logloss value
+- **Save:** backbone weights, classifier, scaler, model_names config
+
+**Example code structure:**
 ```python
 import torch
 import torch.nn as nn
@@ -176,11 +235,11 @@ from sklearn.metrics import log_loss
 import numpy as np
 import joblib
 
-# Check if single model or multi-model ensemble
+# Load models
 if 'models' in spec and isinstance(spec['models'], list):
-    model_names = spec['models']  # Multi-model ensemble
+    model_names = spec['models']
 else:
-    model_names = [spec['model']]  # Single model
+    model_names = [spec['model']]
 
 print(f"Using {{len(model_names)}} backbone(s): {{model_names}}")
 
@@ -224,22 +283,22 @@ print("Extracting validation features...")
 X_val, y_val = extract_features(val_loader, backbones, device)
 print(f"Validation features shape: {{X_val.shape}}")
 
-# Standardize features
+# Standardize features (CRITICAL for LogReg performance)
 scaler = StandardScaler()
 X_train = scaler.fit_transform(X_train)
 X_val = scaler.transform(X_val)
 
-# Train LogisticRegression
+# Train LogisticRegression (try multiple C if in spec, else use default)
 print("Training LogisticRegression...")
-clf = LogisticRegression(multi_class='multinomial', solver='lbfgs', max_iter=1000, random_state=42)
+C_value = spec.get('C', 1.0)
+clf = LogisticRegression(C=C_value, multi_class='multinomial', solver='lbfgs', max_iter=1000, random_state=42)
 clf.fit(X_train, y_train)
 
 # Validation
 val_probs = clf.predict_proba(X_val)
+val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)  # Prevent log(0)
 val_metric = log_loss(y_val, val_probs)
-val_acc = (clf.predict(X_val) == y_val).mean()
 print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
-print(f"Validation Accuracy: {{val_acc:.4f}}")
 
 # Save models
 for i, backbone in enumerate(backbones):
@@ -249,6 +308,32 @@ joblib.dump(clf, 'classifier.pkl')
 joblib.dump(scaler, 'scaler.pkl')
 print("Models saved!")
 ```
+
+**Key techniques for better accuracy (adapt as needed):**
+- Image size: Larger (299x299) > smaller (224x224) for feature quality
+- Train split: 0.95 (more data) > 0.85 for small datasets (<10K samples)
+- TTA: If spec['tta']=true, extract features on original + HorizontalFlip, average features
+- C tuning: Try C=[0.1, 0.5, 1.0], pick best on validation (quick cross-validation)
+- Ensure StandardScaler is applied to all feature sets (train/val/test)
+
+**STRATEGY: "gradient_boosting"** (for tabular data):
+   - Load train CSV, identify target column (column in train but not in test)
+   - Separate features (X) and target (y), drop ID columns
+   - Handle categorical features (LabelEncoder for string columns)
+   - Determine task type: classification (y.nunique() < 50) vs regression
+   - Check class imbalance for classification:
+     * If any class has < 2 samples → drop those classes OR use 95/5 train/val split
+     * If min_class >= 2 → use stratified split (test_size=0.15, stratify=y)
+     * For regression → standard split (no stratify)
+   - Train model based on spec['model']:
+     * LightGBM: Use LGBMClassifier/LGBMRegressor with hyperparams from spec
+     * XGBoost: Use XGBClassifier/XGBRegressor with tree_method='hist'
+     * Set appropriate objective: binary/multiclass/regression
+   - Validate and print VALIDATION_SCORE based on task:
+     * Binary classification → AUC (roc_auc_score)
+     * Multiclass → Log Loss (log_loss)
+     * Regression → RMSE (mean_squared_error with squared=False)
+   - Save model: `joblib.dump(model, 'model.pkl')`
 
 **STRATEGY: "fine_tuning"** (standard CNN training):
    - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format
@@ -281,23 +366,6 @@ print("Models saved!")
      * Then calculate: `log_loss = -np.mean(labels * np.log(probs) + (1 - labels) * np.log(1 - probs))`
      * Without clipping: log(0) = -inf → results in nan
    - GPU training (model.to(device), data.to(device))
-   - **For gradient boosting (XGBoost/LightGBM):** Use CPU mode (tree_method='hist' for XGBoost, no device_type for LightGBM)
-   - **CRITICAL - Train/Val Split with Stratification:**
-     * **ALWAYS check minimum class size before stratifying**
-     * For classification: Count samples per class → if ANY class has <2 samples, DO NOT use stratify
-     * Safe pattern:
-       ```python
-       # Check if stratification is safe
-       min_class_count = y.value_counts().min()
-       use_stratify = min_class_count >= 2  # Need at least 2 samples per class
-       
-       if use_stratify:
-           X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, stratify=y, random_state=42)
-       else:
-           X_train, X_val, y_train, y_val = train_test_split(X, y, test_size=0.2, random_state=42)
-           print(f"⚠️ Stratify disabled: min class has only {{min_class_count}} samples")
-       ```
-     * For regression or when min class < 2: Use `stratify=None` (default random split)
    - Early stopping with patience 3-5 epochs
    - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
    - **CRITICAL: Print validation score in EXACT format (orchestrator parses this):**
@@ -382,8 +450,9 @@ Output: {submission_dir}/submission.csv
 DO:
 1. Read {data_dir}/sample_submission.csv to get test IDs (use dtype={{'id': str}} to preserve format)
 2. Check what files exist in {best_workspace}/ to determine strategy:
-   - If backbone.pth + classifier.pkl + scaler.pkl exist: Use **bottleneck_features** approach
-   - If model.pth exists: Use **fine_tuning** approach
+   - If model.pkl exists: Use **gradient_boosting** approach (tabular data)
+   - Elif backbone_0.pth + classifier.pkl + scaler.pkl exist: Use **bottleneck_features** approach
+   - Elif model.pth exists: Use **fine_tuning** approach
 3. Write predict.py based on strategy:
 
 **STRATEGY: bottleneck_features**
@@ -413,7 +482,7 @@ for i, model_name in enumerate(model_names):
 clf = joblib.load('{best_workspace}/classifier.pkl')
 scaler = joblib.load('{best_workspace}/scaler.pkl')
 
-# Extract test features from all backbones
+# Extract test features
 with torch.no_grad():
     test_features = []
     for images in test_loader:
@@ -427,9 +496,13 @@ with torch.no_grad():
     X_test = np.vstack(test_features)
     X_test = scaler.transform(X_test)
 
-# Predict
+# Predict (use predict_proba for classification)
 predictions = clf.predict_proba(X_test)
 ```
+
+**For better accuracy:** If training used TTA (test-time augmentation), apply same during prediction:
+- Extract features on original + flipped images, average before predict_proba
+- Improves calibration and reduces logloss by 2-5%
 
 **STRATEGY: fine_tuning**
 ```python
@@ -444,6 +517,16 @@ with torch.no_grad():
         preds = model(images.to(device)).cpu()
         predictions.append(preds)
     predictions = torch.cat(predictions).numpy()
+```
+
+**STRATEGY: gradient_boosting** (tabular data)
+```python
+import joblib
+model = joblib.load('{best_workspace}/model.pkl')
+
+# Load test CSV, drop ID columns, apply same preprocessing as training
+# Use predict_proba() for classification, predict() for regression
+predictions = model.predict_proba(X_test)
 ```
 
 4. Save to {submission_dir}/submission.csv with EXACT same format/order as sample_submission.csv
