@@ -4,9 +4,10 @@ ResearchAgent - Main agentic loop for Agent V5
 import asyncio
 import os
 import time
-from typing import List, Dict, AsyncGenerator
+from typing import List, Dict, AsyncGenerator, Optional
 from anthropic import Anthropic
 from agent_v5.tools.registry import ToolRegistry
+from agent_v5.timeout_manager import TimeoutManager
 from debug import log, with_session
 from agent_v5.tools.bash import BashTool
 from agent_v5.tools.bash_output import ReadBashOutputTool
@@ -26,9 +27,17 @@ from agent_v5.tools.plan import PlanTaskTool
 
 
 class ResearchAgent:
-    """Research agent with agentic loop"""
+    """Research agent with agentic loop and intelligent timeout management"""
 
-    def __init__(self, session_id: str, workspace_dir: str, system_prompt: str):
+    def __init__(
+        self,
+        session_id: str,
+        workspace_dir: str,
+        system_prompt: str,
+        max_runtime_seconds: Optional[int] = None,  # No limit by default
+        max_turns: Optional[int] = None,  # No limit by default
+        stall_timeout_seconds: int = 600  # 10 minutes default
+    ):
         self.session_id = session_id
         self.workspace_dir = workspace_dir
         self.system_prompt = system_prompt
@@ -37,6 +46,14 @@ class ResearchAgent:
         self.process_registry = BashProcessRegistry()  # Registry for background bash processes
         self._register_core_tools()
         self.anthropic_client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
+
+        # Initialize timeout manager
+        self.timeout_manager = TimeoutManager(
+            max_runtime_seconds=max_runtime_seconds,
+            max_turns=max_turns,
+            stall_timeout_seconds=stall_timeout_seconds
+        )
+
         self.run = with_session(session_id)(self.run)
 
     def _register_core_tools(self):
@@ -144,7 +161,7 @@ class ResearchAgent:
         )
 
     async def run(self, user_message: str) -> AsyncGenerator[Dict, None]:
-        """Main agentic loop"""
+        """Main agentic loop with intelligent timeout management"""
         log(f"→ Agent.run(session={self.session_id})")
 
         self.conversation_history.append({
@@ -153,10 +170,34 @@ class ResearchAgent:
         })
 
         while True:
+            # Start new turn and check for timeouts
+            self.timeout_manager.start_turn()
+            timeout_check = self.timeout_manager.check_timeout()
+
+            if timeout_check["timed_out"]:
+                log(f"⚠️  {timeout_check['reason']}", 2)
+                yield {
+                    "type": "timeout",
+                    "reason": timeout_check["reason"],
+                    "summary": self.timeout_manager.get_summary()
+                }
+                # Send timeout message to agent for graceful termination
+                timeout_msg = (
+                    f"\n\n⏱️ **TIMEOUT REACHED**: {timeout_check['reason']}\n\n"
+                    f"Please provide a summary of work completed so far and create "
+                    f"any necessary output files before terminating."
+                )
+                self.conversation_history.append({
+                    "role": "user",
+                    "content": timeout_msg
+                })
+                # Allow ONE final turn to wrap up
+                break
+
             response_content = []
             tool_uses = []
 
-            log(f"→ API call (turn {len(self.conversation_history)//2})")
+            log(f"→ API call (turn {self.timeout_manager.turn_count})")
 
             with self.anthropic_client.messages.stream(
                 model="claude-sonnet-4-5-20250929",
@@ -175,6 +216,7 @@ class ResearchAgent:
                         if event.delta.type == "text_delta":
                             text = event.delta.text
                             response_content.append({"type": "text", "text": text})
+                            self.timeout_manager.register_activity()  # Track activity
                             yield {"type": "text_delta", "text": text}
 
                 final_message = stream.get_final_message()

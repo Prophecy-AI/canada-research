@@ -289,7 +289,7 @@ Current date: 2025-10-14"""
 
 
 class KaggleAgent(ResearchAgent):
-    """Kaggle competition agent - extends ResearchAgent with Kaggle-specific prompt"""
+    """Kaggle competition agent - extends ResearchAgent with Kaggle-specific prompt and timeouts"""
 
     def __init__(
         self,
@@ -297,7 +297,10 @@ class KaggleAgent(ResearchAgent):
         workspace_dir: str,
         data_dir: str,
         submission_dir: str,
-        instructions_path: str
+        instructions_path: str,
+        max_runtime_seconds: int = 7200,  # 2 hours default
+        max_turns: int = 100,  # 100 turns default
+        stall_timeout_seconds: int = 1200  # 20 minutes for Kaggle (training can be slow)
     ):
         """
         Initialize Kaggle agent
@@ -308,6 +311,9 @@ class KaggleAgent(ResearchAgent):
             data_dir: Directory containing competition data
             submission_dir: Directory where submission.csv must be saved
             instructions_path: Path to competition instructions file
+            max_runtime_seconds: Maximum total runtime (default: 2 hours)
+            max_turns: Maximum agentic loop turns (default: 100)
+            stall_timeout_seconds: Timeout for no activity (default: 20 minutes)
         """
         self.data_dir = data_dir
         self.submission_dir = submission_dir
@@ -321,11 +327,14 @@ class KaggleAgent(ResearchAgent):
             submission_dir
         )
 
-        # Initialize parent ResearchAgent with Kaggle prompt
+        # Initialize parent ResearchAgent with Kaggle prompt and timeout settings
         super().__init__(
             session_id=session_id,
             workspace_dir=workspace_dir,
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            max_runtime_seconds=max_runtime_seconds,
+            max_turns=max_turns,
+            stall_timeout_seconds=stall_timeout_seconds
         )
 
         # Register timer tool
