@@ -10,12 +10,7 @@ echo "=========================================="
 echo ""
 
 # Prompt for machine number
-read -p "Which GPU machine is this? (1-7): " MACHINE_NUM
-
-if [ "$MACHINE_NUM" != "1" ] && [ "$MACHINE_NUM" != "2" ] && [ "$MACHINE_NUM" != "3" ] && [ "$MACHINE_NUM" != "4" ] && [ "$MACHINE_NUM" != "5" ] && [ "$MACHINE_NUM" != "6" ] && [ "$MACHINE_NUM" != "7" ]; then
-    echo "❌ ERROR: Please enter a number between 1 and 7"
-    exit 1
-fi
+read -p "Which GPU machine is this? (1-8): " MACHINE_NUM
 
 RUNNER_NAME="gpu-runner-$MACHINE_NUM"
 RUNNER_LABELS="gpu,gpu-$MACHINE_NUM"

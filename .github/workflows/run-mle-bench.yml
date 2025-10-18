@@ -39,6 +39,7 @@ on:
           - gpu-5
           - gpu-6
           - gpu-7
+          - gpu-8
         default: 'any'
 
 jobs:
