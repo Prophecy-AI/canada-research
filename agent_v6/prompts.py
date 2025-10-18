@@ -210,7 +210,7 @@ Data: {data_dir}
 
 **CRITICAL: Your ONLY job is to write train.py that:**
 1. Trains the model
-2. Prints VALIDATION_SCORE: {score}
+2. Prints VALIDATION_SCORE: {{score}}
 3. Exits
 
 **DO NOT in train.py:**
