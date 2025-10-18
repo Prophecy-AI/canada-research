@@ -5,5 +5,6 @@ agent_v5_kaggle:
   env_vars:
     ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
     DEBUG: "1"
   privileged: false

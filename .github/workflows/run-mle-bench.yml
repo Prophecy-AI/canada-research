@@ -41,15 +41,20 @@ on:
           - gpu-7
         default: 'any'
 
+      rebuild_image:
+        description: 'Rebuild Docker image from Dockerfile'
+        required: false
+        type: boolean
+        default: true
+
 jobs:
   run-agent:
-    # Support concurrency: 7 (no group = all can run simultaneously)
     runs-on:
       - self-hosted
       - gpu
       - ${{ github.event.inputs.target_gpu != 'any' && github.event.inputs.target_gpu || 'gpu' }}
 
-    timeout-minutes: 1440  # 24 hours max
+    timeout-minutes: 1440
 
     steps:
       - name: Show run configuration
@@ -60,6 +65,7 @@ jobs:
           echo "Branch: ${{ github.ref_name }}"
           echo "Competition set: ${{ github.event.inputs.competition_set }}"
           echo "Dry run: ${{ github.event.inputs.dry_run }}"
+          echo "Rebuild image: ${{ github.event.inputs.rebuild_image }}"
           echo "Target GPU: ${{ github.event.inputs.target_gpu }}"
           echo "Runner: $(hostname)"
           echo "Run ID: ${{ github.run_id }}"
@@ -70,16 +76,11 @@ jobs:
         run: |
           echo "Cleaning workspace..."
           cd $GITHUB_WORKSPACE || true
-
-          # Remove ALL Python bytecode
           find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
           find . -type f -name "*.pyc" -delete 2>/dev/null || true
           find . -type f -name "*.pyo" -delete 2>/dev/null || true
-
-          # Clean git
           git clean -fdx || true
           git reset --hard HEAD || true
-
           echo "✅ Workspace cleaned (including Python bytecode)"
 
       - name: Checkout code
@@ -92,16 +93,12 @@ jobs:
         run: |
           cd mle-bench/experiments/splits
 
-          # If custom competitions provided, use those
           if [ -n "${{ github.event.inputs.custom_competitions }}" ]; then
             echo "Using custom competitions list:"
             echo "${{ github.event.inputs.custom_competitions }}" | tee custom-set.txt
           else
-            # Extract filename from selection (e.g., "low.txt (Lite - 21 competitions)" -> "low.txt")
             COMP_FILE=$(echo "${{ github.event.inputs.competition_set }}" | awk '{print $1}')
             echo "Using competition set: $COMP_FILE"
-
-            # If not custom-set.txt, copy to custom-set.txt for script
             if [ "$COMP_FILE" != "custom-set.txt" ]; then
               cp "$COMP_FILE" custom-set.txt
               echo "Copied $COMP_FILE to custom-set.txt"
@@ -116,13 +113,11 @@ jobs:
         run: |
           cd mle-bench
 
-          # Create venv if it doesn't exist
           if [ ! -d "venv" ]; then
             echo "Creating virtual environment..."
             python3 -m venv venv
           fi
 
-          # Activate venv and install mlebench in NON-EDITABLE mode
           source venv/bin/activate
           echo "Installing mlebench (non-editable mode to avoid import conflicts)..."
           pip install --force-reinstall --no-cache-dir . --quiet
@@ -133,17 +128,17 @@ jobs:
           echo "   NOTE: Agent code runs inside Docker container (isolated)"
 
       - name: Run MLE-Bench
-        timeout-minutes: 1400  # 23.3 hours (slightly less than job timeout for cleanup)
+        timeout-minutes: 1400
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
           IMAGE_TAG: agent_v5_kaggle:run-${{ github.run_id }}
           RUN_ID: ${{ github.run_id }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
+          REBUILD_IMAGE: ${{ github.event.inputs.rebuild_image }}
         run: |
           cd mle-bench
-
-          # Activate venv
           source venv/bin/activate
 
           echo "Starting MLE-Bench with:"
@@ -151,12 +146,10 @@ jobs:
           echo "  IMAGE_TAG: $IMAGE_TAG"
           echo "  RUN_ID: $RUN_ID"
           echo "  DRY_RUN: $DRY_RUN"
+          echo "  REBUILD_IMAGE: $REBUILD_IMAGE"
           echo "  Python: $(which python)"
           echo ""
 
-          # Run the script (foreground execution with trap handlers)
-          # Logs will stream in real-time
-          # Ctrl+C or cancellation will trigger cleanup automatically
           ./RUN_AGENT_V5_KAGGLE.sh
 
       - name: Upload results
@@ -182,7 +175,6 @@ jobs:
         run: |
           cd ${{ github.workspace }}/mle-bench
 
-          # Find latest run
           RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
 
           if [ -n "$RUN_GROUP" ]; then
@@ -193,7 +185,6 @@ jobs:
             echo "Run group: $RUN_GROUP"
             echo ""
 
-            # Find grading report (either format)
             GRADING_REPORT=$(find "runs/$RUN_GROUP/" -name "*_grading_report.json" -o -name "results.json" | head -1)
 
             if [ -n "$GRADING_REPORT" ]; then
@@ -220,23 +211,16 @@ jobs:
           echo "Docker Cleanup"
           echo "=========================================="
 
-          # Use cleanup script (idempotent, safe to run multiple times)
           cd ${{ github.workspace }}
           bash scripts/cleanup-containers.sh || true
 
           echo ""
           echo "Cleaning up Docker images..."
 
-          # Remove the specific image we built
           docker image rm agent_v5_kaggle:run-${{ github.run_id }} 2>/dev/null || true
-
-          # Clean up stopped containers
           docker container prune -f
-
-          # Clean up dangling images
           docker image prune -f
 
-          # Show remaining disk usage
           echo ""
           echo "Docker disk usage after cleanup:"
           docker system df
@@ -244,13 +228,9 @@ jobs:
       - name: Cleanup workspace
         if: always()
         run: |
-          # Clean up large files but keep code for debugging
           cd ${{ github.workspace }}/mle-bench
 
-          # Remove downloaded competition data (can be re-downloaded)
           rm -rf data/ 2>/dev/null || true
-
-          # Remove large model checkpoints if any
           find runs/ -name "*.pth" -o -name "*.pt" -o -name "*.h5" | xargs rm -f 2>/dev/null || true
 
           echo "Workspace cleanup complete"

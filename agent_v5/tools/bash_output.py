@@ -112,8 +112,9 @@ class ReadBashOutputTool(BaseTool):
         stalled_hint = ""
         if time_since_last_output > 60 and bg_process.process.returncode is None:
             stalled_hint = (
-                f"\nWARNING: No output for {time_since_last_output:.0f} seconds - process may be stalled/hanging\n"
-                f"Consider: KillShell(shell_id='{shell_id}') if not making progress\n"
+                f"\n⚠️  WARNING: No output for {time_since_last_output:.0f} seconds. "
+                f"Process may be stalled/hanging.\n"
+                f"💡 Consider: KillShell(shell_id='{shell_id}') if not making progress\n"
             )
         
         # Format output
@@ -121,62 +122,15 @@ class ReadBashOutputTool(BaseTool):
             truncation_notice = ""
             if truncated:
                 truncation_notice = (
-                    f"\nOutput truncated: showing last {MAX_OUTPUT_SIZE:,} chars of {total_new_bytes:,} total chars\n"
+                    f"\n⚠️  Output truncated: showing last {MAX_OUTPUT_SIZE:,} chars of {total_new_bytes:,} total chars\n"
                     f"(Full output stored in memory, only recent output shown to save context)\n\n"
                 )
             
-            # AGGRESSIVE ANOMALY DETECTION - kill immediately if anything looks wrong
-            kill_warnings = []
-            output_lower = new_output.lower()
-            
-            # Check for errors/exceptions
-            if any(pattern in new_output for pattern in ['Error:', 'ERROR', 'Exception', 'Traceback', 'FAILED']):
-                kill_warnings.append("ERRORS/EXCEPTIONS detected - training likely failing")
-
-            # Check for GPU issues
-            if 'cpu' in output_lower and 'gpu' not in output_lower and ('train' in output_lower or 'model' in output_lower):
-                kill_warnings.append("Process using CPU instead of GPU - wasting time")
-
-            # Check for NaN/Inf values
-            if 'nan' in output_lower or 'inf' in output_lower:
-                kill_warnings.append("NaN/Inf values detected - model unstable, training will fail")
-
-            # Check for memory issues
-            if any(pattern in output_lower for pattern in ['out of memory', 'oom', 'cuda out of memory', 'memory error']):
-                kill_warnings.append("OUT OF MEMORY - batch size too large, training will crash")
-
-            # Check for warnings
-            if 'warning:' in output_lower or 'warn:' in output_lower:
-                kill_warnings.append("Warnings detected - review carefully, may indicate issues")
-
-            # Check for zero accuracy/terrible metrics (only if running)
-            if bg_process.process.returncode is None:
-                if any(pattern in output_lower for pattern in ['accuracy: 0.', 'auc: 0.', 'f1: 0.', 'loss: nan']):
-                    kill_warnings.append("Terrible metrics (0.0 accuracy/AUC or NaN loss) - something is broken")
-            
-            # Build kill recommendation
-            kill_recommendation = ""
-            if kill_warnings and bg_process.process.returncode is None:
-                kill_recommendation = (
-                    f"\n\n{'='*60}\n"
-                    f"IMMEDIATE ACTION REQUIRED\n"
-                    f"{'='*60}\n"
-                )
-                for warning in kill_warnings:
-                    kill_recommendation += f"  - {warning}\n"
-                kill_recommendation += (
-                    f"\nSTRONGLY RECOMMENDED: KillShell(shell_id='{shell_id}') NOW\n"
-                    f"Every minute of wasted training = wasted compute\n"
-                    f"Kill now, fix the issue, validate with Oracle, then re-run\n"
-                    f"Don't wait hours for a training run you KNOW is broken\n"
-                    f"{'='*60}\n"
-                )
-            
-            # Add hint to wait for more progress (only if still running and no kill warnings)
+            # Add hint to wait for more progress (only if still running)
             progress_hint = ""
-            if bg_process.process.returncode is None and not kill_warnings:
+            if bg_process.process.returncode is None:
                 progress_hint = (
-                    f"\n\nConsider: Bash(command='sleep 30', background=false) to let the process make more progress before polling again"
+                    f"\n\n💡 Consider: Bash(command='sleep 30', background=false) to let the process make more progress before polling again"
                 )
             
             content = (
@@ -185,10 +139,9 @@ class ReadBashOutputTool(BaseTool):
                 f"{stalled_hint}"
                 f"{truncation_notice}\n"
                 f"{new_output}"
-                f"{kill_recommendation}"
                 f"{progress_hint}"
             )
-            debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "") + (f", {len(kill_warnings)} warnings" if kill_warnings else "")
+            debug_summary = f"{status}, {len(new_output)} bytes" + (" (truncated)" if truncated else "")
         else:
             # No new output - give agent options: wait or kill
             wait_time = 30 if time_since_last_output < 60 else 60
@@ -197,7 +150,7 @@ class ReadBashOutputTool(BaseTool):
                 f"Command: {bg_process.command}\n"
                 f"{stalled_hint}\n"
                 f"(no new output since last read)\n\n"
-                f"Options:\n"
+                f"💡 Options:\n"
                 f"  - Wait before polling again: Bash(command='sleep {wait_time}', background=false)\n"
                 f"  - Stop if not needed: KillShell(shell_id='{shell_id}')"
             )

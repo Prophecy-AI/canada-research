@@ -1,0 +1,350 @@
+KAGGLE GRANDMASTER PLAYBOOK - BATTLE-TESTED WINNING STRATEGIES
+================================================================
+
+READ THIS FIRST - Before writing any strategy or training code.
+
+This is a distilled synthesis of winning Kaggle solutions. No theory, just what works.
+
+────────────────────────────────────────────────────────────────────────────────
+PART I: UNIVERSAL WORKFLOW - APPLIES TO ALL COMPETITIONS
+────────────────────────────────────────────────────────────────────────────────
+
+1. MINDSET & COMMUNITY
+   - Progress is incremental. Breakthroughs = many small improvements.
+   - Read forums/notebooks FIRST. Top solutions are public knowledge.
+   - Monitor for new architectures (e.g., DeBERTa dominated NLP after one forum post).
+
+2. FAST EXPERIMENTATION PIPELINE
+   - #1 success factor = experiments per day, not hours per experiment.
+   - Use GPU-accelerated libraries: cuDF/cuML for tabular, mixed precision for deep learning.
+   - Build simple baselines FIRST (logistic regression, quick GBDT) before complex models.
+   - Advanced techniques (stacking, pseudo-labeling) only feasible with fast pipeline.
+
+3. CROSS-VALIDATION STRATEGY (MOST IMPORTANT)
+   - NEVER trust public leaderboard - it's a tiny subset, causes "shake-ups".
+   - "Trust your CV" - local validation must match test data structure.
+   - Choose CV strategy by data type:
+
+   Data Type                  | CV Strategy           | Key Consideration
+   ---------------------------|-----------------------|------------------
+   Standard classification    | KFold (k=3-5)         | General purpose
+   Imbalanced classes         | StratifiedKFold       | Preserves class ratios
+   Grouped data (user/patient)| GroupKFold            | No group in train+val
+   Time series                | TimeSeriesSplit       | Val always after train
+
+   - Use k=3 for speed (20-30 min budget), k=5 for robustness (if time allows).
+
+────────────────────────────────────────────────────────────────────────────────
+PART II: DOMAIN-SPECIFIC ARCHITECTURES - WHAT ACTUALLY WINS
+────────────────────────────────────────────────────────────────────────────────
+
+TABULAR DATA
+------------
+Model Choice:
+  - GBDTs dominate: LightGBM (fastest, large data), XGBoost (stable baseline), CatBoost (categorical features).
+  - LightGBM default for speed-critical scenarios (30-min budget).
+  - Hybrid: GBDT + NN (GRU/Transformer) for +0.5% boost (adds ~5-10 min).
+
+Feature Engineering (most important):
+  - Heavy manual engineering beats automated tools.
+  - Create: interactions (A*B, A/B), polynomials (A²), group aggregations (mean/std by category).
+  - Test each feature against CV before adding.
+
+COMPUTER VISION
+---------------
+Architecture by Task:
+  Classification: EfficientNet (B0-B3 for speed, B4+ for accuracy), ResNeXt, ViT
+  Detection:      YOLOv5/v8, Faster R-CNN
+  Segmentation:   U-Net, FPN
+
+Key Decision - Model Size vs Time Budget:
+  30-min budget → EfficientNet-B2/B3 max (B4+ too slow for 3-fold CV)
+  60-min budget → EfficientNet-B4/B5
+  Medical imaging → ResNet/ResNeXt (better than EfficientNet for grayscale)
+
+Preprocessing:
+  - Medical (DICOM): Convert to Hounsfield Units, resample to isotropic, segment ROI.
+  - CLAHE for contrast enhancement (medical/low-contrast images).
+
+Augmentation (critical):
+  - Standard: RandomHorizontalFlip, RandomRotation, ColorJitter (torchvision stable, albumentations faster).
+  - Advanced: MixUp/CutMix (forces smooth decision boundaries, +1-2% accuracy).
+  - NEVER augment validation set.
+
+NATURAL LANGUAGE PROCESSING
+----------------------------
+Model Evolution (in order of strength):
+  BERT → RoBERTa → DeBERTa (current best for most tasks)
+
+Strategy:
+  - Fine-tune pretrained model (always start here).
+  - Monitor forums for new models - NLP is "architectural meta-game".
+  - Long sequences: Use Longformer or add BiLSTM on top of Transformer embeddings.
+  - Large models + tight constraints: Use knowledge distillation (teacher→student).
+
+TIME SERIES
+-----------
+  - Transform to tabular + use GBDTs (wins most competitions).
+  - Features: time-based (hour/day/month/holiday), lags (past values), rolling stats (mean/std over window).
+  - CV: TimeSeriesSplit (mandatory to prevent future leakage).
+
+AUDIO
+-----
+  - Convert to image: Mel-spectrograms (maps to human perception).
+  - Apply CV models: ResNet/EfficientNet on spectrograms.
+
+RECOMMENDER SYSTEMS
+-------------------
+  - Hybrid models win: Collaborative filtering + content-based filtering.
+  - Deep learning: Embedding layers for users/items (learn latent preferences).
+
+────────────────────────────────────────────────────────────────────────────────
+PART III: ADVANCED TECHNIQUES - FINAL 1-3% BOOST
+────────────────────────────────────────────────────────────────────────────────
+
+ENSEMBLING
+----------
+Principle: Different models = different errors → average cancels errors out.
+  - Diversity matters more than individual scores.
+  - GBDT + NN better than GBDT + GBDT.
+
+Methods:
+  1. Simple blending: Weighted average (weights from CV scores).
+  2. Stacking: Train meta-model on out-of-fold predictions from base models.
+     (More complex, +0.5-1% over blending, requires time budget).
+
+PSEUDO-LABELING
+---------------
+  - Use model predictions on test set as "labels" → retrain on train+test.
+  - Only works if initial model is strong.
+  - Must use CV framework to avoid leakage.
+
+TEST-TIME AUGMENTATION (TTA)
+-----------------------------
+  - CV only: Create multiple augmented versions of test image → average predictions.
+  - +0.5-1% boost, adds ~2x inference time.
+
+RULE-BASED POST-PROCESSING
+---------------------------
+  - Apply domain heuristics to model outputs (e.g., "all instances of same name = same class").
+  - High risk of overfitting to public LB - validate carefully.
+
+────────────────────────────────────────────────────────────────────────────────
+PART IV: COMMON PITFALLS - THESE CAUSE MOST FAILURES
+────────────────────────────────────────────────────────────────────────────────
+
+DATA LEAKAGE (CV=0.99, LB=0.50)
+--------------------------------
+  1. Target leakage: Features contain info not available at prediction time.
+     - Check: ID columns, target-derived features, future information.
+  2. Train-test contamination: Preprocessing on full dataset before split.
+     - Fix: Fit scaler/normalizer ONLY on train fold, transform val fold.
+
+OVERFITTING TO PUBLIC LEADERBOARD
+----------------------------------
+  - Public LB = small subset, often unrepresentative.
+  - Solutions: Trust your CV, validate post-processing carefully, avoid excessive tuning to public LB.
+
+MODEL TOO SLOW FOR TIME BUDGET
+-------------------------------
+  - EfficientNet-B4 + 3 folds + 10 epochs ≈ 50-60 min (exceeds 30-min budget).
+  - Solution: Choose smaller model (B2/B3) or reduce folds/epochs BEFORE training.
+  - Estimate time: (folds × epochs × min_per_epoch) before launch.
+
+────────────────────────────────────────────────────────────────────────────────
+PART V: EFFICIENT TRAINING STRATEGIES (20-30 MINUTE BUDGET)
+────────────────────────────────────────────────────────────────────────────────
+
+This section provides specific, time-efficient model choices designed to maximize
+score within tight time constraints (20±10 min).
+
+IMAGE CLASSIFICATION
+--------------------
+Examples: aerial-cactus-identification, aptos2019-blindness-detection,
+cassava-leaf-disease-classification, histopathologic-cancer-detection
+
+Model: EfficientNet-B0 or ResNet-34 (best speed/accuracy balance)
+
+Strategy:
+  - Use pretrained from timm/torchvision
+  - Resize to 128x128 or 224x224 (upscale if needed like aerial-cactus 32x32)
+  - 3-fold StratifiedKFold CV
+  - Train 3-5 epochs
+  - Basic augmentations: HorizontalFlip, VerticalFlip, RandomRotate90
+  - Strong baseline quickly, often achieves high scores without extensive tuning
+
+IMAGE SEGMENTATION
+------------------
+Examples: google-research-identify-contrails-reduce-global-warming,
+hubmap-kidney-segmentation, tgs-salt-identification-challenge
+
+Model: U-Net with EfficientNet-B0 or ResNet-34 backbone
+
+Strategy:
+  - Train on smaller tiles (256x256 or 512x512) to manage memory/speed
+  - 3-fold CV
+  - Train 5-10 epochs
+  - Basic geometric augmentations (flips, rotations)
+  - For inference: use overlapping tiles, predict center region if edge effects
+
+OBJECT DETECTION
+----------------
+Examples: 3d-object-detection-for-autonomous-vehicles,
+vinbigdata-chest-xray-abnormalities-detection
+
+Model: YOLOv5s or YOLOv8n (state-of-the-art real-time performance)
+       For 3D: PointPillars (fast and effective)
+
+Strategy:
+  - Start with pretrained weights
+  - Fine-tune 5-10 epochs
+  - Smaller image size (512x512) to accelerate
+  - Simple 3-fold CV
+
+TABULAR & TIME SERIES
+---------------------
+Examples: new-york-city-taxi-fare-prediction, ventilator-pressure-prediction,
+tabular-playground-series-may-2022
+
+Model: LightGBM (fastest, most memory-efficient GBDT)
+
+Strategy:
+  - Time series: transform to tabular (lag features, rolling windows)
+  - Minimal feature engineering: date features (day/month), simple interactions
+  - 3-fold CV (TimeSeriesSplit for time-ordered data - MANDATORY)
+  - Default parameters + early stopping (finds optimal trees automatically)
+
+NATURAL LANGUAGE PROCESSING
+----------------------------
+Examples: jigsaw-toxic-comment-classification-challenge,
+tweet-sentiment-extraction, us-patent-phrase-to-phrase-matching
+
+Model: distilbert-base-uncased or small DeBERTa variant
+       For simple text: TF-IDF + LogisticRegression (surprisingly fast/effective)
+
+Strategy:
+  - Pretrained from Hugging Face
+  - Keep max_length small (128 or 256)
+  - Train 1-2 epochs only (diminishing returns after)
+  - 3-fold StratifiedKFold or GroupKFold
+
+AUDIO
+-----
+Examples: freesound-audio-tagging-2019, tensorflow-speech-recognition-challenge
+
+Model: Simple 2D CNN or EfficientNet-B0
+
+Strategy:
+  - Convert audio to 2D mel-spectrograms (transforms to image classification)
+  - Apply Image Classification strategy: lightweight CNN, few epochs, 3-fold CV
+
+────────────────────────────────────────────────────────────────────────────────
+QUICK DECISION TREE - WHAT TO USE
+────────────────────────────────────────────────────────────────────────────────
+
+START HERE:
+  1. What's the domain?
+     - Tabular       → LightGBM + feature engineering
+     - Images        → EfficientNet-B0/B2 (20-30 min) or B3/B4 (40-60 min) + MixUp/CutMix
+     - Text          → distilbert/DeBERTa fine-tuning (1-2 epochs)
+     - Time series   → Transform to tabular + LightGBM
+     - Audio         → Mel-spectrogram + ResNet/EfficientNet
+     - Segmentation  → U-Net + EfficientNet-B0/ResNet-34 backbone
+     - Detection     → YOLOv5s/v8n (images), PointPillars (3D)
+
+  2. What's the CV strategy?
+     - Imbalanced    → StratifiedKFold
+     - Grouped       → GroupKFold
+     - Time-ordered  → TimeSeriesSplit
+     - Default       → KFold (k=3 for speed, k=5 for robustness)
+
+  3. What's the time budget?
+     - 20-30 min     → See Part V: 3 folds, smallest models (B0/B2, ResNet-34), 3-8 epochs
+     - 40-60 min     → 5 folds, larger models (B3/B4), 10 epochs
+     - Estimate first: (folds × epochs × min_per_epoch) BEFORE training
+
+  4. How to ensemble?
+     - Time budget tight    → Simple weighted average (based on CV scores)
+     - Time budget generous → Stacking (meta-model on OOF predictions)
+
+────────────────────────────────────────────────────────────────────────────────
+PART VI: PARALLEL TRAINING STRATEGY (ADVANCED SPEED OPTIMIZATION)
+────────────────────────────────────────────────────────────────────────────────
+
+**Concept:** Train multiple smaller/diverse models simultaneously → ensemble results
+**Speed benefit:** 3 small models in parallel (10-12 min) > 1 large model (25-30 min)
+
+WHEN TO USE PARALLEL TRAINING:
+- Single large model estimated >25 min (too slow for budget)
+- Competition benefits from model diversity (tabular, multi-modal)
+- Hardware can support it (36 CPUs + 24GB GPU)
+- Early exploration phase (trying multiple approaches)
+
+RESOURCE ALLOCATION PATTERN:
+With 36 CPUs + A10 24GB GPU, can run 2-3 models simultaneously:
+  - Model 1 (CPU-only): LightGBM/XGBoost, 12 cores, 0% GPU
+  - Model 2 (GPU): ResNet-34/EfficientNet-B0, 12 cores, batch_size=64, ~8-10GB GPU
+  - Model 3 (GPU): ResNet-34/EfficientNet-B0, 12 cores, batch_size=64, ~8-10GB GPU
+
+GPU sharing: PyTorch automatically shares GPU between processes. Target 40-80% utilization total.
+
+PRACTICAL IMPLEMENTATION:
+
+Example 1 - Image Classification (3 models in parallel):
+```bash
+# Launch in parallel (background=true)
+python train_lgbm_features.py --n_jobs=12        # CPU-only, extracts features first
+python train_resnet34.py --batch_size=64 --num_workers=12      # GPU model 1
+python train_effnet_b0.py --batch_size=64 --num_workers=12     # GPU model 2
+
+# All complete in ~10-12 min
+# Ensemble: weighted average by CV score → +1-3% over single model
+```
+
+Example 2 - Tabular (diverse GBDT ensemble):
+```bash
+# All CPU-only, partition 36 cores → 12 cores each
+python train_lgbm.py --n_jobs=12        # LightGBM
+python train_xgb.py --n_jobs=12         # XGBoost
+python train_catboost.py --n_jobs=12    # CatBoost
+
+# All complete in ~8-10 min
+# Ensemble: simple average or stacking → often beats single GBDT
+```
+
+Example 3 - Mixed (GBDT + Neural):
+```bash
+# Partition: 18 cores CPU, 18 cores + full GPU for neural
+python train_lgbm.py --n_jobs=18                    # CPU model
+python train_tabular_nn.py --batch_size=4096        # GPU model (full 24GB)
+
+# Both complete in ~10 min
+# GBDT+NN hybrid often +0.5-1% over GBDT alone
+```
+
+ENSEMBLE STRATEGY:
+After all models complete:
+1. Load out-of-fold predictions from each model
+2. Calculate weights: `weight_i = cv_score_i / sum(cv_scores)`
+3. Weighted average: `final = w1*pred1 + w2*pred2 + w3*pred3`
+4. Diversity bonus: Different architectures often +1-3% over single model
+
+MONITORING PARALLEL JOBS:
+- GPU: `nvidia-smi` should show 2-3 processes, total 60-90% memory
+- CPU: `top` should show multiple Python processes, total ~36 cores used
+- If OOM: Kill one job, reduce batch_size, relaunch
+- If one finishes early: Launch another model type to utilize free resources
+
+WHEN NOT TO USE PARALLEL:
+- Single model already <20 min (no speed benefit)
+- Task requires very large model (transformers need full 24GB GPU)
+- Limited by I/O not compute (data loading bottleneck)
+- Competition structure penalizes diversity (very task-specific)
+
+KEY PRINCIPLE: Diversity + Speed = Parallel small models often beats sequential large model
+
+────────────────────────────────────────────────────────────────────────────────
+
+FINAL RULE: If CV score seems too good to be true, it is. Find the leak.
+
+────────────────────────────────────────────────────────────────────────────────

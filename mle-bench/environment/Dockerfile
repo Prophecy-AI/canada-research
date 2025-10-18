@@ -1,5 +1,7 @@
 FROM ubuntu:20.04
 
+# Rebuild trigger: 2025-10-17-v2 - Added CUDA Toolkit 11.8 for LightGBM GPU support
+
 # Avoid interactive dialog from apt-get and other packages requiring configuration
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -45,6 +47,9 @@ RUN /opt/conda/bin/conda tos accept --override-channels --channel https://repo.a
 
 COPY environment/requirements.txt ${REQUIREMENTS}
 
+# Remove lightgbm from requirements (will be built from source with CUDA in agent Dockerfile)
+RUN sed -i '/^lightgbm==/d' ${REQUIREMENTS}
+
 # create conda environment and optionally install the requirements to it
 RUN /opt/conda/bin/conda create -n ${CONDA_ENV_NAME} python=${PYTHON_VERSION} -y
 ARG INSTALL_HEAVY_DEPENDENCIES=true
@@ -58,6 +63,17 @@ RUN if [ "$INSTALL_HEAVY_DEPENDENCIES" = "true" ]; then \
     /opt/conda/bin/conda clean -afy ; fi
 
 ENV PATH="/opt/conda/bin:${PATH}"
+
+# Install CUDA Toolkit 11.8 (needed for LightGBM CUDA build in agent Dockerfile)
+# A10 GPU uses Ampere architecture (CUDA 11.x compatible)
+RUN wget https://developer.download.nvidia.com/compute/cuda/11.8.0/local_installers/cuda_11.8.0_520.61.05_linux.run -O /tmp/cuda_installer.run && \
+    sh /tmp/cuda_installer.run --silent --toolkit --no-opengl-libs && \
+    rm /tmp/cuda_installer.run && \
+    echo 'export PATH=/usr/local/cuda-11.8/bin:$PATH' >> /etc/bash.bashrc && \
+    echo 'export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:$LD_LIBRARY_PATH' >> /etc/bash.bashrc
+
+ENV PATH=/usr/local/cuda-11.8/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:${LD_LIBRARY_PATH}
 
 # Installs from here onward go into the conda base env; previous was installed to /usr/bin/python
 
@@ -78,6 +94,8 @@ RUN mkdir /private && chmod 700 /private
 COPY environment/grading_server.py /private/grading_server.py
 COPY environment/instructions.txt /home/instructions.txt
 COPY environment/instructions_obfuscated.txt /home/instructions_obfuscated.txt
+COPY environment/training_hints.txt /home/training_hints.txt
+COPY environment/kaggle_competition_strategy.txt /home/kaggle_competition_strategy.txt
 COPY environment/validate_submission.sh /home/validate_submission.sh
 COPY environment/entrypoint.sh /entrypoint.sh
 

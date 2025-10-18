@@ -54,7 +54,10 @@ async def main():
         f"Your goal: Analyze the data in {data_dir}/, build a machine learning model, "
         f"and create a valid submission file at {submission_dir}/submission.csv\n\n"
         f"Start by reading the competition instructions at {instructions_path} and "
-        f"exploring the data files."
+        f"exploring the data files.\n\n"
+        f"IMPORTANT: Before writing any training script, read /home/training_hints.txt "
+        f"which contains critical tips to avoid common errors (library conflicts, batch size issues, "
+        f"label encoding, data leakage, etc.). This file prevents 90% of training failures."
     )
 
     log("→ Starting agent run")
