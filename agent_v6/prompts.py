@@ -211,13 +211,22 @@ Data: {data_dir}
 - Write summaries/documentation
 - Test imports
 - Create verification scripts
+- Print debug metrics (accuracy, loss) using tensors - convert to float first with .item()
+- Format tensors directly in f-strings - causes TypeError
 
 **DO:**
 1. Check data structure (use Bash: ls, zipinfo, head CSV)
 2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
-3. **Verify imports before using them:**
+3. **🚨 CRITICAL: Add ALL necessary imports at the TOP of train.py:**
+   ```python
+   # ALWAYS include these metric imports at the top:
+   from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
+   import numpy as np
+   # Plus any other imports needed for your strategy
+   ```
    - Only use functions/classes that exist in standard libraries (torch, torchvision, sklearn, xgboost, etc.)
    - Prefer simple, proven implementations over complex custom code
+   - DO NOT import metrics inline - put ALL imports at the top of the file
 4. **Check strategy from spec** (spec['strategy'])
 5. Write train.py based on strategy:
 
@@ -254,38 +263,49 @@ Data: {data_dir}
      * Predict: `test_dl = learn.dls.test_dl(test_files); preds, _ = learn.get_preds(dl=test_dl)`
      * **🚨 CRITICAL: Calculate THE COMPETITION METRIC (from EDA), not training loss:**
        ```python
-       from sklearn.metrics import roc_auc_score, log_loss, accuracy_score
-       import numpy as np
-       
        # Get validation predictions
        val_preds, val_targets = learn.get_preds(dl=learn.dls.valid)
-       val_probs = val_preds.numpy()
-       y_val = val_targets.numpy()
+       val_probs = val_preds.numpy()  # Convert to numpy IMMEDIATELY
+       y_val = val_targets.numpy()  # Convert to numpy IMMEDIATELY
        
        # Calculate competition metric (READ FROM EDA ABOVE):
+       # Metrics already imported at top: roc_auc_score, log_loss, accuracy_score
        if "AUC" in eda_metric:  # e.g., "Evaluation Metric: AUC-ROC (HIGHER is better)"
-           val_metric = roc_auc_score(y_val, val_probs[:, 1])  # binary
+           val_metric = roc_auc_score(y_val, val_probs[:, 1])  # binary - returns float
        elif "Accuracy" in eda_metric:
-           val_metric = accuracy_score(y_val, val_probs.argmax(axis=1))
+           val_metric = accuracy_score(y_val, val_probs.argmax(axis=1))  # returns float
        elif "Log Loss" in eda_metric or "Logloss" in eda_metric:
            val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
-           val_metric = log_loss(y_val, val_probs)
+           val_metric = log_loss(y_val, val_probs)  # returns float
        else:
-           # Fallback: use fastai's metric (but make sure it's the right one!)
-           val_metric = learn.recorder.values[-1][1]
+           # Fallback: use fastai's metric BUT CONVERT TO FLOAT
+           val_metric_tensor = learn.recorder.values[-1][1]
+           val_metric = val_metric_tensor.item() if isinstance(val_metric_tensor, torch.Tensor) else float(val_metric_tensor)
        
-       # Convert to float and print
-       if isinstance(val_metric, torch.Tensor):
-           val_metric = val_metric.item()
+       # val_metric is now a Python float (from sklearn metrics or .item() conversion)
        print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
        
-       # ⚠️ WRONG: learn.recorder.values[-1][0]  # That's LOSS, not metric!
-       # ✅ CORRECT: Calculate actual competition metric (AUC, accuracy, etc.)
+       # ⚠️ WRONG: print(f"{{some_tensor:.6f}}")  # TypeError: can't format tensor!
+       # ⚠️ WRONG: val_metric = learn.recorder.values[-1][0]  # That's LOSS, not metric!
+       # ⚠️ WRONG: print(f"Accuracy: {{accuracy(preds, targs):.6f}}")  # accuracy() returns tensor!
+       # ✅ CORRECT: Use sklearn metrics (return floats) or convert with .item()
        ```
+       **CRITICAL NOTES:**
+       - sklearn metrics (roc_auc_score, accuracy_score, log_loss) return Python floats - safe to print directly
+       - fastai metrics (accuracy, error_rate) return tensors - MUST use .item() before formatting
+       - When in doubt, always convert: `float(value.item() if hasattr(value, 'item') else value)`
+       - **DO NOT print debug metrics** (intermediate accuracy, loss, etc.) - only print VALIDATION_SCORE
+       - If you must print debug info, convert ALL tensors first: `acc.item()` not `acc`
    - Always convert labels to strings to avoid binary/multi-class confusion
    - Normalize with ImageNet stats (fastai does automatically)
    - Save predictions to submission.csv in correct format
    - **DO NOT print training loss as VALIDATION_SCORE - calculate actual competition metric!**
+   - **For debugging: Convert ALL tensors before printing:**
+     ```python
+     # WRONG: print(f"Accuracy: {{acc:.4f}}")  # if acc is tensor → TypeError
+     # RIGHT: print(f"Accuracy: {{acc.item():.4f}}")  # convert first
+     # SAFEST: Only print VALIDATION_SCORE, skip debug prints
+     ```
    - This approach gets 95-100% accuracy in 5-10 minutes consistently
 
 **STRATEGY: "fastai_tabular"** (neural networks for small tabular):
@@ -407,7 +427,8 @@ clf = LogisticRegression(C=C_value, multi_class='multinomial', solver='lbfgs', m
 clf.fit(X_train, y_train)
 
 # Validation - CALCULATE THE COMPETITION METRIC FROM EDA!
-from sklearn.metrics import roc_auc_score, log_loss, accuracy_score
+# Metrics already imported at top of file:
+# from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
 val_probs = clf.predict_proba(X_val)
 val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
 
@@ -461,8 +482,8 @@ print("Models saved!")
      
      **Common competition metrics:**
      ```python
-     from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error
-     import numpy as np
+     # Metrics already imported at top of file!
+     # from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
      
      val_probs = model.predict_proba(X_val)  # for classification
      val_preds = model.predict(X_val)  # for regression
@@ -533,8 +554,8 @@ print("Models saved!")
      
      **Step 2: CALCULATE THAT EXACT METRIC ON VALIDATION SET**
      ```python
-     from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error
-     import numpy as np
+     # Metrics already imported at top of file!
+     # from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error
      
      # Get predictions on validation set
      val_probs = model.predict_proba(X_val)  # or learn.get_preds(dl=val_dl)[0]
