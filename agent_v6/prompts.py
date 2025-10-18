@@ -51,14 +51,16 @@ Best: {best_score}
 → Example: leaf-classification has "192 tabular features" → gradient_boosting, NOT image strategies
 
 **IF EDA says "Image" AND describes actual image files (.jpg/.png) AND NO mention of "pre-extracted features":**
-→ Use "bottleneck_features" (<50K images) or "fine_tuning" (>50K images)
+→ PRIMARY: Use "fastai_vision" (proven gold-medal approach, 5-10 min, 95-100% accuracy)
+→ FALLBACK: Use "bottleneck_features" if need <3 min baseline
 → Load actual image files, use CNN models
 
 **IF EDA says "Text" or "NLP" or "comments/reviews/documents":**
 → Use "transformer_features" (distilbert/roberta) OR "gradient_boosting" with TF-IDF features
 
 **IF EDA says "Audio" or describes .wav/.mp3/.aif files:**
-→ Convert to spectrograms, then use "bottleneck_features" (treat spectrograms as images)
+→ Convert to spectrograms, then use "fastai_vision" (treat spectrograms as images)
+→ FALLBACK: Use "bottleneck_features" if fastai too slow
 
 **IF EDA says "Seq->Seq" or "text normalization" or "translation":**
 → This is advanced - use "transformer_features" or skip if too complex
@@ -68,7 +70,29 @@ Best: {best_score}
 
 **Available Strategies (choose mix based on EDA context above):**
 
-**Strategy 1: "bottleneck_features"** (feature extraction + LogisticRegression)
+**Strategy 1: "fastai_vision"** (RECOMMENDED for images, proven gold-medal approach)
+- **When to try:** Image classification with <50K samples (PRIMARY strategy for images!)
+- **Why it works:** Simple, fast (5-10 min), consistently achieves gold medals
+- **How it works:** Fine-tune pretrained CNN using fastai's fit_one_cycle (automatic LR scheduling + heavy augmentation)
+- **Models:** models.densenet161, models.resnet50, models.efficientnet_b2, models.resnet34
+- **Key advantages:**
+  * fit_one_cycle() automatically finds optimal learning rate and schedule
+  * Heavy augmentation (flip, rotate, zoom, lighting, warp) prevents overfitting
+  * 99/1 train/val split (maximum training data, minimal validation)
+  * Image size 128-224 (smaller = faster training, still excellent accuracy)
+  * Much simpler code than manual PyTorch (less room for bugs)
+- **Performance:** Regularly achieves 95-100% accuracy in 5-10 minutes
+- **Example:** {{"strategy": "fastai_vision", "model": "densenet161", "epochs": 5, "size": 128, "lr": 3e-2, "split_pct": 0.01}}
+
+**Strategy 2: "fastai_tabular"** (neural networks for small tabular datasets)
+- **When to try:** Tabular data with <10K samples and high dimensionality (features > samples per class)
+- **Why it works:** Neural networks with dropout regularization prevent overfitting better than gradient boosting on small data
+- **How it works:** Use fastai TabularLearner with automatic normalization and dropout
+- **Best for:** Small datasets where gradient boosting overfits (e.g., 891 samples, 99 classes, 192 features)
+- **Performance:** Often beats gradient boosting by 50-200% on small tabular data
+- **Example:** {{"strategy": "fastai_tabular", "layers": [200, 100], "epochs": 50, "lr": 1e-3}}
+
+**Strategy 3: "bottleneck_features"** (feature extraction + LogisticRegression, fallback for images)
 - **When to try:** Images + Classification, especially with <50K samples
 - **How it works:** Extract features from pretrained CNN (no training), train LogisticRegression on features
 - **Pros:** Very fast (trains in seconds), often better with limited data, low memory
@@ -85,42 +109,45 @@ Best: {best_score}
   * **Test-time augmentation (TTA):** Predict on original + horizontal flip, average predictions (+10s, +2-5% accuracy)
 - **Example:** {{"strategy": "bottleneck_features", "models": ["EfficientNet-B2", "DenseNet161", "ResNet50"], "classifier": "LogisticRegression", "image_size": 299, "tta": true, "train_split": 0.95}}
 
-**Strategy 2: "fine_tuning"** (standard deep learning)
-- **When to try:** Images + Classification, any dataset size
-- **How it works:** Full CNN training with pretrained weights, train 10-15 epochs
-- **Pros:** Can learn task-specific features, proven approach
-- **Models:** DenseNet161, EfficientNet-B0/B1, ResNet18/50, MobileNet
-- **Example:** {{"strategy": "fine_tuning", "model": "ResNet50", "epochs": 12}}
-
-**Strategy 3: "gradient_boosting"** (for tabular)
+**Strategy 4: "gradient_boosting"** (for medium/large tabular data)
 - **When to try:** Tabular data with numerical/categorical features in CSV format
 - **Models:** LightGBM (fast, handles categoricals), XGBoost (robust, tree_method='hist')
 - **DO NOT use CatBoost** (parameter conflicts, not worth debugging time)
 - **Example:** {{"strategy": "gradient_boosting", "model": "LightGBM", "hyperparameters": {{"n_estimators": 500, "learning_rate": 0.05}}}}
 
-**Strategy 4: "transformer_features"** (for text)
+**Strategy 5: "transformer_features"** (for text)
 - **When to try:** Text data
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
 **Recommendation for Round 1:**
-- **Tabular data (CSV with features):**
+- **Images <50K (raw image files - PRIMARY STRATEGY):** 
+  * **🏆 USE FASTAI FIRST** - proven gold-medal approach, simple, fast
+  * exp_1: fastai_vision (densenet161, epochs=5, size=128, lr=3e-2, split_pct=0.01)
+  * exp_2: fastai_vision (resnet50, epochs=5, size=128, lr=3e-2, split_pct=0.01)
+  * exp_3: fastai_vision (efficientnet_b2, epochs=7, size=160, lr=2e-2, split_pct=0.01)
+  * Each finishes in 5-10 min, explores different architectures
+  * **ONLY use bottleneck_features if fastai fails or for very fast baseline (<3 min)**
+- **Tabular <10K samples (high dimensionality):**
+  * exp_1: fastai_tabular (layers=[200, 100], epochs=50, lr=1e-3)
+  * exp_2: gradient_boosting (LightGBM with regularization)
+  * exp_3: gradient_boosting (XGBoost with different hyperparameters)
+  * Try fastai first - often beats gradient boosting on small data
+- **Tabular >10K samples:**
   * exp_1: LightGBM with feature engineering
-  * exp_2: XGBoost with different hyperparameters  
+  * exp_2: XGBoost with different hyperparameters
   * exp_3: LightGBM with different feature combinations
   * **DO NOT use image/text strategies on tabular data!**
-- **Images <50K (raw image files):** 
-  * **FOCUS ON BOTTLENECK ONLY** - fine-tuning wastes time and gets worse scores
-  * **🏆 FOR GOLD: ALWAYS use 3-model ensembles** (not 2) - proven 2-10x better scores
-  * exp_1: **3-model** (EfficientNet-B2 + DenseNet161 + ResNet50), image_size=299, train_split=0.95, tta=true
-  * exp_2: **3-model** (ResNet50 + InceptionV3 + DenseNet121), image_size=299, train_split=0.95, tta=true
-  * exp_3: **3-model** (Wide_ResNet50_2 + EfficientNet-B2 + DenseNet161), different C values to test
-  * Each finishes in 3-5 min with TTA, explores best ensemble + hyperparameters
-- **Images >50K:** Skip for now (takes too long, bottleneck doesn't work well)
-- **Text data:** Try transformer_features (distilbert, roberta) with class_weight='balanced'
-- **Audio:** Convert to spectrograms, use bottleneck_features with **3-model** ensembles
+- **Text data:** 
+  * exp_1: transformer_features (distilbert)
+  * exp_2: transformer_features (roberta)
+  * exp_3: gradient_boosting with TF-IDF features
+- **Audio:** 
+  * Convert to spectrograms
+  * exp_1: fastai_vision (treat spectrograms as images)
+  * exp_2: bottleneck_features (if fastai too slow)
 
 **Experiment Design Guidelines:**
-- **For images <50K: Use ONLY bottleneck strategies (skip fine-tuning - wastes time and gets worse results)**
+- **For images <50K: PREFER fastai_vision (gold-medal approach), bottleneck_features as fast fallback**
 - **Multi-model selection:** Choose 2-3 complementary backbones with different architectures:
   * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2, EfficientNet-B2 + ResNet50
   * Good triplets: EfficientNet-B2 + DenseNet121 + ResNet50
@@ -191,8 +218,34 @@ Data: {data_dir}
 3. **Verify imports before using them:**
    - Only use functions/classes that exist in standard libraries (torch, torchvision, sklearn, xgboost, etc.)
    - Prefer simple, proven implementations over complex custom code
-4. **Check strategy from spec** (spec['strategy'] or default to 'fine_tuning')
+4. **Check strategy from spec** (spec['strategy'])
 5. Write train.py based on strategy:
+
+**STRATEGY: "fastai_vision"** (RECOMMENDED for images, gold-medal approach):
+   - Use fastai.vision library for simple, fast, accurate image classification
+   - Key patterns from gold solutions:
+     * Load images: `ImageList.from_df()` or `ImageList.from_folder()`
+     * Split: `.split_by_rand_pct(0.01)` for 99/1 train/val (maximum training data!)
+     * Augmentation: `get_transforms(do_flip=True, flip_vert=True, max_rotate=10, max_zoom=1.1, max_lighting=0.2, max_warp=0.2, p_affine=0.75, p_lighting=0.75)`
+     * Image size: Use spec['size'] (default 128-224, smaller = faster)
+     * Create learner: `cnn_learner(data, models.densenet161, metrics=[accuracy])`
+     * Train: `learn.fit_one_cycle(epochs, slice(lr))` where epochs from spec (default 5), lr from spec (default 3e-2)
+     * Predict: `preds, _ = learn.get_preds(ds_type=DatasetType.Test)`
+   - Normalize with ImageNet stats (fastai does automatically)
+   - Save predictions to submission.csv in correct format
+   - Print VALIDATION_SCORE with final validation metric
+   - This approach gets 95-100% accuracy in 5-10 minutes consistently
+
+**STRATEGY: "fastai_tabular"** (neural networks for small tabular):
+   - Use fastai.tabular for small tabular datasets where gradient boosting overfits
+   - Key patterns:
+     * Load: `TabularDataLoaders.from_df(df, y_names='target', cont_names=feature_cols, procs=[Normalize])`
+     * Create learner: `tabular_learner(dls, layers=spec['layers'], metrics=accuracy)` where layers from spec (default [200, 100])
+     * Train: `learn.fit_one_cycle(epochs, lr)` with epochs from spec (default 50), lr from spec (default 1e-3)
+     * Dropout is automatic (prevents overfitting on small data)
+     * Predict on test set, save to submission.csv
+   - Works well when: samples < 10K, features > 100, gradient boosting overfits
+   - Faster convergence than manual neural networks
 
 **STRATEGY: "bottleneck_features"** (extract features, train LogisticRegression):
 
@@ -450,10 +503,25 @@ Output: {submission_dir}/submission.csv
 DO:
 1. Read {data_dir}/sample_submission.csv to get test IDs (use dtype={{'id': str}} to preserve format)
 2. Check what files exist in {best_workspace}/ to determine strategy:
-   - If model.pkl exists: Use **gradient_boosting** approach (tabular data)
-   - Elif backbone_0.pth + classifier.pkl + scaler.pkl exist: Use **bottleneck_features** approach
-   - Elif model.pth exists: Use **fine_tuning** approach
+   - If learner.pkl exists: Use **fastai** approach (vision or tabular)
+   - Elif model.pkl exists: Use **gradient_boosting** approach (tabular data)
+   - Elif backbone_0.pth + classifier.pkl exist: Use **bottleneck_features** approach
+   - Elif model.pth exists: Use **manual pytorch** approach
 3. Write predict.py based on strategy:
+
+**STRATEGY: fastai** (vision or tabular)
+```python
+from fastai.vision.all import *  # or from fastai.tabular.all import *
+
+# Load learner
+learn = load_learner('{best_workspace}/learner.pkl')
+
+# Get predictions on test set
+preds, _ = learn.get_preds(ds_type=DatasetType.Test)
+
+# Convert to numpy and save to submission.csv
+predictions = preds.numpy()
+```
 
 **STRATEGY: bottleneck_features**
 ```python
