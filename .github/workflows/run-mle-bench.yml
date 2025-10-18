@@ -161,6 +161,15 @@ jobs:
           path: ${{ github.workspace }}/mle-bench/runs/
           retention-days: 30
 
+      - name: Upload agent logs
+        if: always() && github.event.inputs.dry_run == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-logs-${{ github.ref_name }}-run${{ github.run_number }}
+          path: ${{ github.workspace }}/mle-bench/runs/*/*/agentic.log
+          retention-days: 90
+          if-no-files-found: warn
+
       - name: Upload grading report
         if: always() && github.event.inputs.dry_run == 'false'
         uses: actions/upload-artifact@v4

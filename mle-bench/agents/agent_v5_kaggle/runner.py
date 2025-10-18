@@ -62,19 +62,43 @@ async def main():
 
     log("→ Starting agent run")
 
-    # Run agent (blocking, stream to console)
+    # Open log file for writing agent output
+    agent_log_path = Path(logs_dir) / "agentic.log"
+
+    # Run agent (blocking, stream to console and log file)
     full_response = []
     try:
-        async for message in agent.run(initial_message):
-            if message.get("type") == "text_delta":
-                text = message["text"]
-                print(text, end="", flush=True)
-                full_response.append(text)
-            elif message.get("type") == "tool_execution":
-                log_tool_call(message)
+        with open(agent_log_path, 'w', buffering=1) as log_file:  # Line buffered
+            log_file.write(f"=== Agent Run Started: {competition_id} ===\n")
+            log_file.write(f"Data: {data_dir}\n")
+            log_file.write(f"Workspace: {code_dir}\n")
+            log_file.write(f"Submission: {submission_dir}\n")
+            log_file.write(f"{'='*60}\n\n")
+
+            async for message in agent.run(initial_message):
+                if message.get("type") == "text_delta":
+                    text = message["text"]
+                    print(text, end="", flush=True)
+                    log_file.write(text)  # Write to log file
+                    full_response.append(text)
+                elif message.get("type") == "tool_execution":
+                    tool_log = f"\n[TOOL] {message.get('tool_name', 'unknown')} - {message.get('status', 'unknown')}\n"
+                    log_file.write(tool_log)  # Log tool executions
+                    log_tool_call(message)
+
+            log_file.write(f"\n\n{'='*60}\n")
+            log_file.write(f"=== Agent Run Complete ===\n")
     except Exception as e:
         log(f"❌ Agent error: {e}", 2)
         print(f"\n\nERROR: {e}\n", flush=True)
+
+        # Write error to log file
+        try:
+            with open(agent_log_path, 'a') as log_file:
+                log_file.write(f"\n\nERROR: {e}\n")
+        except:
+            pass
+
         await agent.cleanup()  # Cleanup on error
         sys.exit(1)
     finally:
