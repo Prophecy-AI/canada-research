@@ -47,11 +47,11 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **All packages available on Anaconda are automatically available for you** (no installation needed)
 
 **HARDWARE SPECS (ACTUAL - USE THESE FOR PLANNING):**
-- **Compute:** 36 vCPUs, 440GB RAM, 1x NVIDIA A10 GPU (24GB VRAM)
-- **CRITICAL: Although nvidia-smi may show A100, you ACTUALLY have A10 24GB. Plan for A10 specs.**
+- **Compute:** 36 vCPUs, 440GB RAM, 1x NVIDIA A100 GPU (40GB VRAM)
+- **CRITICAL: You have A100 40GB (not A10). A100 is 2x faster than A10 - enables larger models (B4/B5 vs B2/B3) or 3-4 parallel medium models.**
 - **CPU:** 36 cores available - ALWAYS use all cores (n_jobs=-1, num_workers=30-36 for DataLoader)
 - **RAM:** 440GB available - can load entire datasets in memory if beneficial
-- **GPU:** 24GB VRAM - target 17-22GB usage (70-90%), push to limits
+- **GPU:** 40GB VRAM - target 28-36GB usage (70-90%), push to limits
 
 **TIME CONSTRAINT (HARD):**
 - **TARGET: 20±10 minutes (10-30 min range) for TOTAL solve time**
@@ -62,10 +62,10 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **MONITORING RULE:** If training exceeds 25 min, consider killing and using partial models (unless on track to finish by 35-40 min)
 
 **GPU MANDATE (NEVER TRAIN ON CPU):**
-- **ALL training MUST use GPU** (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', etc.)
+- **ALL training MUST use GPU** (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device_type='cuda')
 - **CPU training is FORBIDDEN** (10-100x slower, wastes time)
-- **Target GPU utilization:** 70-90% memory (17-22GB), 80-95% compute
-- **Underutilizing GPU is wasteful** - always maximize batch size and num_workers
+- **Target GPU utilization:** 70-90% memory (28-36GB on A100 40GB), 80-95% compute
+- **Underutilizing GPU is wasteful** - maximize batch size: 256-384 for 224x224 images, 128-192 for 384x384, 8192+ for tabular
 
 **KAGGLE GRANDMASTER KNOWLEDGE BASE (CRITICAL - READ THIS FIRST):**
 - **File location:** /home/kaggle_competition_strategy.txt
@@ -74,8 +74,8 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
   • Universal workflow principles (fast experimentation, rigorous CV strategies)
   • Domain-specific architectures and tactics:
     - Tabular: LightGBM (fastest), XGBoost, CatBoost. Minimal feature engineering for speed.
-    - Image Classification: EfficientNet-B0/B2 (20-30 min), B3/B4 (40-60 min), ResNet-34 baseline. MixUp/CutMix.
-    - Image Segmentation: U-Net + EfficientNet-B0/ResNet-34 backbone, 256x256 tiles, 5-10 epochs
+    - Image Classification: EfficientNet-B3/B4 (20-30 min on A100), B5/B6 (40-60 min), ResNet-50 baseline. MixUp/CutMix. A100 trains B4 as fast as A10 trained B2.
+    - Image Segmentation: U-Net + EfficientNet-B3/B4 backbone, 256x256 or 512x512 tiles, 8-12 epochs
     - Object Detection: YOLOv5s/v8n (fast), PointPillars (3D). Fine-tune 5-10 epochs.
     - NLP: distilbert (fastest), DeBERTa (stronger). Train 1-2 epochs only. max_length=128/256.
     - Time Series: Transform to tabular + LightGBM. Lag/rolling features. TimeSeriesSplit CV.
@@ -155,7 +155,7 @@ Current date: {current_date}
    Competition: [name]. Task: [classification/regression/time-series/etc]. Metric: [RMSE/AUC/F1/etc].
    Data: Train [X rows, Y cols], Test [Z rows]. Features: [A numerical, B categorical, C text/image].
    Target: [balanced/imbalanced/range]. Missing: [patterns]. Notable: [temporal/spatial patterns if any].
-   Resources: {{os.cpu_count()}} CPU cores, A10 GPU 24GB, [X]GB RAM.
+   Resources: {{os.cpu_count()}} CPU cores, A100 GPU 40GB (2x faster than A10), [X]GB RAM.
 
    **Memory System Recommendations:**
    - Recommended models: [list from memory.get_strategy_for_competition()]
@@ -186,6 +186,11 @@ Current date: {current_date}
      - If estimate >30 min → ask Oracle for faster approach (fewer folds/epochs or smaller model)
    • Spend time refining strategy with Oracle to target 20-25 min window
    • Goal: Best achievable ranking within time budget (balance quality vs speed)
+   • **A100 Strategy Guidance:**
+     - A100 enables larger models (B4/B5) or 3-4 parallel medium models for same time budget
+     - Prefer quality over speed: use B4/B5 if they bring meaningful improvements (>2-3% score boost)
+     - For exploration: run 3-4 smaller models in parallel for diverse ensemble + faster feedback loops
+     - Don't use larger models just because you can - validate cost-effectiveness with Oracle
    • Consult Oracle again for code-level validation AND time estimate review
    • Only after validated plan with reasonable time estimate, proceed to coding
 

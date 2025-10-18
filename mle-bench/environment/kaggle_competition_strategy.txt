@@ -163,27 +163,29 @@ IMAGE CLASSIFICATION
 Examples: aerial-cactus-identification, aptos2019-blindness-detection,
 cassava-leaf-disease-classification, histopathologic-cancer-detection
 
-Model: EfficientNet-B0 or ResNet-34 (best speed/accuracy balance)
+Model: EfficientNet-B3 or ResNet-50 (A100 40GB can handle larger models in same time)
 
 Strategy:
   - Use pretrained from timm/torchvision
-  - Resize to 128x128 or 224x224 (upscale if needed like aerial-cactus 32x32)
+  - Resize to 224x224 or 256x256 (upscale if needed like aerial-cactus 32x32)
   - 3-fold StratifiedKFold CV
-  - Train 3-5 epochs
+  - Train 6-8 epochs with early stopping
+  - Batch size: 256-384 for 224x224 (A100 can use 2x larger batches than A10)
   - Basic augmentations: HorizontalFlip, VerticalFlip, RandomRotate90
-  - Strong baseline quickly, often achieves high scores without extensive tuning
+  - Note: A100 40GB trains B3 as fast as A10 trained B0, enabling stronger baselines
 
 IMAGE SEGMENTATION
 ------------------
 Examples: google-research-identify-contrails-reduce-global-warming,
 hubmap-kidney-segmentation, tgs-salt-identification-challenge
 
-Model: U-Net with EfficientNet-B0 or ResNet-34 backbone
+Model: U-Net with EfficientNet-B3 or ResNet-50 backbone (A100 enables larger backbones)
 
 Strategy:
-  - Train on smaller tiles (256x256 or 512x512) to manage memory/speed
+  - Train on tiles (256x256 for small datasets, 512x512 for larger datasets)
   - 3-fold CV
-  - Train 5-10 epochs
+  - Train 8-12 epochs with early stopping
+  - Batch size: 32-64 for 256x256 tiles, 16-32 for 512x512 tiles
   - Basic geometric augmentations (flips, rotations)
   - For inference: use overlapping tiles, predict center region if edge effects
 
@@ -281,24 +283,29 @@ WHEN TO USE PARALLEL TRAINING:
 - Early exploration phase (trying multiple approaches)
 
 RESOURCE ALLOCATION PATTERN:
-With 36 CPUs + A10 24GB GPU, can run 2-3 models simultaneously:
+With 36 CPUs + A100 40GB GPU, can run 3-4 models simultaneously:
   - Model 1 (CPU-only): LightGBM/XGBoost, 12 cores, 0% GPU
-  - Model 2 (GPU): ResNet-34/EfficientNet-B0, 12 cores, batch_size=64, ~8-10GB GPU
-  - Model 3 (GPU): ResNet-34/EfficientNet-B0, 12 cores, batch_size=64, ~8-10GB GPU
+  - Model 2 (GPU): EfficientNet-B4, 12 cores, batch_size=192, ~18GB GPU
+  - Model 3 (GPU): ResNet-50, 12 cores, batch_size=256, ~16GB GPU
+  OR (for more parallelism):
+  - Model 1 (GPU): EfficientNet-B3, 12 cores, batch_size=256, ~12GB GPU
+  - Model 2 (GPU): EfficientNet-B3, 12 cores, batch_size=256, ~12GB GPU
+  - Model 3 (GPU): EfficientNet-B3, 12 cores, batch_size=256, ~12GB GPU
 
-GPU sharing: PyTorch automatically shares GPU between processes. Target 40-80% utilization total.
+GPU sharing: PyTorch automatically shares GPU between processes. A100 40GB enables 3-4 medium models or 2 large models. Target 70-90% utilization total.
 
 PRACTICAL IMPLEMENTATION:
 
-Example 1 - Image Classification (3 models in parallel):
+Example 1 - Image Classification (3 models in parallel on A100):
 ```bash
 # Launch in parallel (background=true)
-python train_lgbm_features.py --n_jobs=12        # CPU-only, extracts features first
-python train_resnet34.py --batch_size=64 --num_workers=12      # GPU model 1
-python train_effnet_b0.py --batch_size=64 --num_workers=12     # GPU model 2
+python train_lgbm_features.py --n_jobs=12                      # CPU-only, extracts features first
+python train_effnet_b4.py --batch_size=192 --num_workers=12    # GPU model 1 (~18GB)
+python train_resnet50.py --batch_size=256 --num_workers=12     # GPU model 2 (~16GB)
 
-# All complete in ~10-12 min
+# All complete in ~10-12 min on A100 (vs 15-20 min on A10)
 # Ensemble: weighted average by CV score → +1-3% over single model
+# A100 enables B4 models at B2 speed
 ```
 
 Example 2 - Tabular (diverse GBDT ensemble):

@@ -14,24 +14,26 @@ Problem: EfficientNet-B4 + 3 folds takes 50-60 min, exceeds 30-min budget → on
 Real example: Agent chose B4, had to kill after 1 fold, lost ensemble benefit, suboptimal score
 Solution: ESTIMATE FIRST, choose appropriate model size
 
-Model Sizing Guide (Image Classification, 224x224, A10 GPU):
+Model Sizing Guide (Image Classification, 224x224, A100 40GB GPU):
   Time Budget  | Recommended Model          | Folds | Epochs | Expected Time
   -------------|----------------------------|-------|--------|---------------
-  20-30 min    | EfficientNet-B2, B3        | 3     | 6-8    | ~20-25 min
-  30-40 min    | EfficientNet-B3, ResNet50  | 3     | 8-10   | ~30-35 min
-  40-60 min    | EfficientNet-B4, ResNeXt50 | 5     | 10     | ~45-55 min
-  60+ min      | EfficientNet-B5+, ViT      | 5     | 10-15  | ~60-90 min
+  20-30 min    | EfficientNet-B4, B5        | 3     | 8-10   | ~20-25 min
+  30-40 min    | EfficientNet-B5, B6        | 3     | 10-12  | ~30-35 min
+  40-60 min    | EfficientNet-B6, B7        | 5     | 10-15  | ~45-55 min
+  60+ min      | EfficientNet-B7+, ViT-L    | 5     | 15-20  | ~60-90 min
 
-Time Estimation Formula:
+  Note: A100 40GB trains B4 as fast as A10 trained B2 (2x speedup)
+
+Time Estimation Formula (A100 40GB):
   total_time = (num_folds × num_epochs × min_per_epoch) + inference_time
-  - min_per_epoch varies: B2=0.5 min, B3=1 min, B4=2-3 min, B5=4-5 min (depends on dataset size)
+  - min_per_epoch on A100: B3=0.5 min, B4=1 min, B5=2 min, B6=3-4 min (depends on dataset size)
   - inference_time = ~5-8 min (predict.py for test set)
   - Add 20% buffer for overhead (data loading, validation, saving checkpoints)
 
-Example:
+Example on A100:
   EfficientNet-B4, 3 folds, 10 epochs, 1000 samples/epoch
-  Estimate: 3 folds × 10 epochs × 2.5 min/epoch = 75 min → TOO SLOW for 30-min budget
-  Fix: Use B3 (1 min/epoch) → 3 × 10 × 1 = 30 min → fits budget
+  Estimate: 3 folds × 10 epochs × 1 min/epoch = 30 min + 5 min inference = 35 min → Fits 40-min budget
+  For 30-min: Use B4 with 8 epochs → 3 × 8 × 1 = 24 min + 5 = 29 min ✓
 
 Action: ALWAYS estimate before launching training. If estimate >budget, reduce model size OR folds OR epochs.
 
@@ -91,11 +93,13 @@ SECTION 4: BATCH SIZE & DATA LOADING
 
 ⚠️ BATCH SIZE TOO SMALL (WASTED GPU)
 Problem: GPU memory 5-10%, training very slow
-Solution: Increase batch size until GPU memory 70-80%
-  - Images 224x224: batch_size=128+ (A10 24GB can handle 192+)
-  - Images 384x384: batch_size=64+ (increase to 96+ if no OOM)
-  - Tabular: batch_size=4096+
-  - Monitor: torch.cuda.memory_allocated() should be 70-80% of total
+Solution: Increase batch size until GPU memory 70-90%
+  - Images 224x224: batch_size=256-384 (A100 40GB can handle much larger batches)
+  - Images 384x384: batch_size=128-192 (2x larger than A10)
+  - Images 512x512: batch_size=64-96
+  - Tabular: batch_size=8192+
+  - Target: 28-36GB of 40GB (70-90%)
+  - Monitor: torch.cuda.memory_allocated() should be 70-90% of 40GB
 
 ⚠️ MIXUP/CUTMIX REQUIRES EVEN BATCH SIZE
 Problem: AssertionError: Batch size should be even when using this
@@ -247,11 +251,11 @@ import torch
 from torch.cuda.amp import autocast, GradScaler
 from sklearn.model_selection import StratifiedKFold
 
-# Config (adjust based on time budget)
-BATCH_SIZE = 128  # For images 224x224 on A10 24GB
+# Config (adjust based on time budget and A100 40GB)
+BATCH_SIZE = 256  # For images 224x224 on A100 40GB (2x larger than A10)
 NUM_WORKERS = 10
 N_FOLDS = 3       # Use 3 for 20-30 min budget, 5 for 40+ min
-EPOCHS = 8        # Use 6-8 for 20-30 min, 10 for 40+ min
+EPOCHS = 8        # Use 8-10 for 20-30 min on A100, 12-15 for 40+ min
 LR = 1e-3
 
 scaler = GradScaler()
@@ -288,11 +292,12 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
             scaler.update()
             optimizer.zero_grad()
 
-            # GPU validation (first batch only)
+            # GPU validation (first batch only) - A100 40GB
             if epoch == 0 and i == 0:
                 mem = torch.cuda.memory_allocated() / 1024**3
                 total = torch.cuda.get_device_properties(0).total_memory / 1024**3
                 print(f"GPU: {mem:.1f} GB / {total:.1f} GB ({mem/total*100:.1f}%)")
+                print(f"Expected on A100 40GB: 28-36GB (70-90%)")
                 if mem/total < 0.10:
                     print("⚠️  CRITICAL: GPU <10% - likely training on CPU!")
                     raise RuntimeError("GPU not being used - check data.cuda() calls")

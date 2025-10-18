@@ -44,43 +44,46 @@ class CompetitionMemory:
         return {
             "image_classification": {
                 "small_dataset": {  # <10K samples
-                    "best_models": ["EfficientNet-B0", "ResNet-34", "MobileNet-V2"],
+                    "best_models": ["EfficientNet-B3", "ResNet-50", "EfficientNet-B2"],
                     "best_strategies": [
                         "3-fold StratifiedKFold CV",
-                        "3-5 epochs with early stopping (patience=3)",
+                        "6-8 epochs with early stopping (patience=3)",
                         "224x224 images (upscale if needed)",
+                        "Batch size: 256-384 for 224x224 (A100 40GB)",
                         "Basic augmentation: HorizontalFlip, VerticalFlip, RandomRotate90",
-                        "Transfer learning from pretrained (timm/torchvision)",
-                        "Consider bottleneck features approach (fast)"
+                        "Transfer learning from pretrained (timm/torchvision)"
                     ],
-                    "avoid": ["EfficientNet-B4+", "5-fold CV", ">8 epochs", "training from scratch"],
+                    "avoid": ["EfficientNet-B6+", "5-fold CV", ">10 epochs", "training from scratch"],
                     "advanced_techniques": ["Simple ensemble (2-3 models)", "TTA (+0.5-1%)"],
-                    "typical_time_min": "8-12",
+                    "typical_time_min": "6-10",
                     "cv_strategy": "StratifiedKFold (k=3)",
                     "common_pitfalls": ["Overfitting due to small data", "Not using pretrained weights"],
-                    "expected_medal": "bronze-silver"
+                    "expected_medal": "bronze-silver",
+                    "note": "A100 40GB trains B3 as fast as A10 trained B0 (2x speedup)"
                 },
                 "medium_dataset": {  # 10K-100K samples
-                    "best_models": ["EfficientNet-B2", "EfficientNet-B3", "ResNet-50", "DenseNet121"],
+                    "best_models": ["EfficientNet-B4", "EfficientNet-B5", "ResNet-50", "DenseNet121"],
                     "best_strategies": [
                         "3-fold StratifiedKFold CV",
-                        "6-8 epochs with early stopping",
+                        "8-10 epochs with early stopping",
                         "224x224 or 256x256 images",
+                        "Batch size: 256-384 for 224x224, 128-192 for 256x256 (A100 40GB)",
                         "Advanced augmentation: MixUp/CutMix (+1-2% accuracy)",
                         "Fine-tuning pretrained models",
-                        "Multi-architecture ensemble for diversity"
+                        "Multi-architecture ensemble or parallel training (3-4 models)"
                     ],
-                    "avoid": ["EfficientNet-B4+ (too slow for 30 min)", ">10 epochs", "5-fold CV unless <20K samples"],
+                    "avoid": ["EfficientNet-B7+ (too slow)", ">12 epochs", "5-fold CV unless <20K samples"],
                     "advanced_techniques": [
                         "MixUp/CutMix augmentation",
                         "Weighted ensemble (based on CV scores)",
                         "TTA with multiple augmentations",
-                        "Progressive unfreezing (if time allows)"
+                        "Parallel training: 3x B3 or 2x B4 simultaneously on A100"
                     ],
-                    "typical_time_min": "15-25",
+                    "typical_time_min": "12-18",
                     "cv_strategy": "StratifiedKFold (k=3)",
                     "common_pitfalls": ["Augmenting validation set", "Overfitting to public LB"],
-                    "expected_medal": "silver-gold"
+                    "expected_medal": "silver-gold",
+                    "note": "A100 40GB enables B4/B5 at same speed as A10 trained B2/B3"
                 },
                 "large_dataset": {  # >100K samples
                     "best_models": ["EfficientNet-B3", "EfficientNet-B4 (40-60 min budget)", "ResNeXt50"],
