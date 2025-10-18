@@ -52,10 +52,11 @@ Best: {best_score}
     → SECONDARY: Use "gradient_boosting" for comparison
     → Example: leaf-classification (891 samples, 192 features, 99 classes = 9 per class, ratio 192/9=21) → fastai_tabular PRIMARY
   * **If >=10K samples:**
-    → Use "gradient_boosting" only
+    → PRIMARY: Use "gradient_boosting" for comparison
 → DO NOT use bottleneck_features/fine_tuning (those are for raw images!)
 
 **IF EDA says "Image" AND describes actual image files (.jpg/.png) AND NO mention of "pre-extracted features":**
+→ CRITICAL: ALWAYS TRY Keras Neural Network first. KNNs are the novel solution for any image classification.
 → PRIMARY: Use "fastai_vision" (proven gold-medal approach, 5-10 min, 95-100% accuracy)
 → FALLBACK: Use "bottleneck_features" if need <3 min baseline
 → Load actual image files, use CNN models
@@ -119,13 +120,40 @@ Best: {best_score}
   * **Test-time augmentation (TTA):** Predict on original + horizontal flip, average predictions (+10s, +2-5% accuracy)
 - **Example:** {{"strategy": "bottleneck_features", "models": ["EfficientNet-B2", "DenseNet161", "ResNet50"], "classifier": "LogisticRegression", "image_size": 299, "tta": true, "train_split": 0.95}}
 
-**Strategy 4: "gradient_boosting"** (for medium/large tabular data)
+**Strategy 4: "keras_neural_network"** (general-purpose deep learning)
+- **When to try:** 
+  * Tabular data where neural networks might outperform trees (complex patterns, high dimensionality)
+  * Custom architectures for specialized tasks
+  * When you need fine control over architecture/training
+- **Why it works:** Flexible, can model complex non-linear relationships, dropout prevents overfitting
+- **Architecture guidelines:**
+  * Small data (<5K): [512, 256] with Dropout(0.3-0.5), batch_size=32-64
+  * Medium data (5K-50K): [1024, 512, 256] with Dropout(0.2-0.3), batch_size=64-128
+  * Large data (>50K): [2048, 1024, 512] with Dropout(0.1-0.2), batch_size=128-256
+  * Very high dim features: Go wider [1500, 1500] or [2048, 1024]
+- **Training best practices:**
+  * Activation: 'relu' for hidden layers, 'softmax'/'sigmoid' for output
+  * Optimizer: 'adam' (lr=1e-3 to 1e-4) or 'rmsprop' (lr=1e-3)
+  * Loss: 'categorical_crossentropy' (multiclass), 'binary_crossentropy' (binary), 'mse' (regression)
+  * Regularization: Dropout + EarlyStopping(patience=20-100, restore_best_weights=True)
+  * Batch normalization: Add after Dense layers for large networks (optional)
+- **Data preprocessing:**
+  * Features: StandardScaler or MinMaxScaler (REQUIRED)
+  * Target: LabelEncoder → to_categorical for classification
+  * Missing values: SimpleImputer (mean/median for numeric, most_frequent for categorical)
+- **Hyperparameters:**
+  * epochs: 100-500 (let EarlyStopping decide)
+  * batch_size: 64-256 depending on data size
+  * validation_split: 0.1-0.2
+- **Example:** {{"strategy": "keras_neural_network", "architecture": [1024, 512, 256], "dropout": 0.2, "epochs": 300, "batch_size": 128, "lr": 1e-3, "optimizer": "adam"}}
+
+**Strategy 5: "gradient_boosting"** (for medium/large tabular data)
 - **When to try:** Tabular data with numerical/categorical features in CSV format
 - **Models:** LightGBM (fast, handles categoricals), XGBoost (robust, tree_method='hist')
 - **DO NOT use CatBoost** (parameter conflicts, not worth debugging time)
 - **Example:** {{"strategy": "gradient_boosting", "model": "LightGBM", "hyperparameters": {{"n_estimators": 500, "learning_rate": 0.05}}}}
 
-**Strategy 5: "transformer_features"** (for text)
+**Strategy 6: "transformer_features"** (for text)
 - **When to try:** Text data
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
@@ -269,6 +297,151 @@ Data: {data_dir}
    - Large networks work better on small data (counterintuitive but proven)
    - Print VALIDATION_SCORE with best validation metric (from history or callbacks)
    - Works when gradient boosting overfits: samples <10K, high features/sample ratio
+
+**STRATEGY: "keras_neural_network"** (general-purpose deep learning):
+   - **Complete implementation pattern:**
+     ```python
+     import pandas as pd
+     import numpy as np
+     from tensorflow import keras
+     from tensorflow.keras import layers, callbacks
+     from sklearn.model_selection import train_test_split
+     from sklearn.preprocessing import StandardScaler, LabelEncoder
+     from sklearn.impute import SimpleImputer
+     from sklearn.metrics import log_loss, accuracy_score, mean_squared_error
+     
+     # 1. Load and preprocess data
+     train_df = pd.read_csv(f'{data_dir}/train.csv')
+     test_df = pd.read_csv(f'{data_dir}/test.csv')
+     
+     # Identify target (column in train but not in test)
+     target_col = [col for col in train_df.columns if col not in test_df.columns and col.lower() not in ['id']][0]
+     
+     # Separate features and target
+     X = train_df.drop([target_col] + id_cols, axis=1)
+     y = train_df[target_col]
+     X_test = test_df.drop(id_cols, axis=1)
+     
+     # 2. Handle missing values
+     num_cols = X.select_dtypes(include=['float64', 'int64']).columns
+     cat_cols = X.select_dtypes(include=['object']).columns
+     
+     num_imputer = SimpleImputer(strategy='median')
+     X[num_cols] = num_imputer.fit_transform(X[num_cols])
+     X_test[num_cols] = num_imputer.transform(X_test[num_cols])
+     
+     # 3. Encode categorical features
+     for col in cat_cols:
+         le = LabelEncoder()
+         X[col] = le.fit_transform(X[col].astype(str))
+         X_test[col] = le.transform(X_test[col].astype(str))
+     
+     # 4. Scale features (REQUIRED for neural networks)
+     scaler = StandardScaler()
+     X_scaled = scaler.fit_transform(X)
+     X_test_scaled = scaler.transform(X_test)
+     
+     # 5. Prepare target
+     is_classification = len(np.unique(y)) < 50
+     if is_classification:
+         le_target = LabelEncoder()
+         y_encoded = le_target.fit_transform(y)
+         num_classes = len(le_target.classes_)
+         if num_classes > 2:
+             y_cat = keras.utils.to_categorical(y_encoded, num_classes)
+             loss = 'categorical_crossentropy'
+             output_activation = 'softmax'
+         else:
+             y_cat = y_encoded
+             loss = 'binary_crossentropy'
+             output_activation = 'sigmoid'
+     else:
+         y_cat = y.values
+         num_classes = 1
+         loss = 'mse'
+         output_activation = 'linear'
+     
+     # 6. Train/val split
+     X_train, X_val, y_train, y_val = train_test_split(
+         X_scaled, y_cat, test_size=0.15, random_state=42, 
+         stratify=y_encoded if is_classification else None
+     )
+     
+     # 7. Build model from spec
+     architecture = spec.get('architecture', [1024, 512, 256])
+     dropout_rate = spec.get('dropout', 0.2)
+     
+     model = keras.Sequential()
+     model.add(layers.Input(shape=(X_train.shape[1],)))
+     
+     for units in architecture:
+         model.add(layers.Dense(units, activation='relu'))
+         model.add(layers.Dropout(dropout_rate))
+     
+     if num_classes > 2:
+         model.add(layers.Dense(num_classes, activation=output_activation))
+     else:
+         model.add(layers.Dense(1 if num_classes == 1 else num_classes, activation=output_activation))
+     
+     # 8. Compile
+     lr = spec.get('lr', 1e-3)
+     optimizer_name = spec.get('optimizer', 'adam')
+     if optimizer_name == 'adam':
+         optimizer = keras.optimizers.Adam(learning_rate=lr)
+     elif optimizer_name == 'rmsprop':
+         optimizer = keras.optimizers.RMSprop(learning_rate=lr)
+     else:
+         optimizer = 'adam'
+     
+     model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
+     
+     # 9. Setup callbacks
+     patience = spec.get('patience', 50)
+     early_stop = callbacks.EarlyStopping(
+         monitor='val_loss', patience=patience, 
+         restore_best_weights=True, verbose=1
+     )
+     
+     # 10. Train
+     batch_size = spec.get('batch_size', 128)
+     epochs = spec.get('epochs', 300)
+     
+     history = model.fit(
+         X_train, y_train,
+         validation_data=(X_val, y_val),
+         batch_size=batch_size,
+         epochs=epochs,
+         callbacks=[early_stop],
+         verbose=1
+     )
+     
+     # 11. Evaluate
+     val_preds = model.predict(X_val)
+     if is_classification:
+         if num_classes > 2:
+             val_probs = np.clip(val_preds, 1e-7, 1 - 1e-7)
+             val_score = log_loss(y_val, val_probs)
+         else:
+             val_probs = np.clip(val_preds.flatten(), 1e-7, 1 - 1e-7)
+             val_score = log_loss(y_val, val_probs)
+     else:
+         val_score = mean_squared_error(y_val, val_preds, squared=False)
+     
+     print(f"VALIDATION_SCORE: {{val_score:.6f}}")
+     
+     # 12. Save model
+     model.save('model.h5')
+     import joblib
+     joblib.dump(scaler, 'scaler.pkl')
+     if is_classification:
+         joblib.dump(le_target, 'label_encoder.pkl')
+     ```
+   - **Key points:**
+     * ALWAYS use StandardScaler before training
+     * Use architecture from spec, fallback to [1024, 512, 256]
+     * EarlyStopping with patience from spec (default 50)
+     * Print best validation score (from history or after training)
+     * Save model.h5 + scaler.pkl + label_encoder.pkl
 
 **STRATEGY: "bottleneck_features"** (extract features, train LogisticRegression):
 
@@ -548,21 +721,41 @@ preds, _ = learn.get_preds(ds_type=DatasetType.Test)
 # Save to submission.csv in correct format
 ```
 
-**STRATEGY: keras/tensorflow** (fastai_tabular)
+**STRATEGY: keras/tensorflow** (fastai_tabular or keras_neural_network)
 ```python
 from tensorflow import keras
 import pandas as pd
 import numpy as np
-from sklearn.preprocessing import StandardScaler, LabelEncoder
+import joblib
 
-# Load model
+# Load model and preprocessors
 model = keras.models.load_model('{best_workspace}/model.h5')
+scaler = joblib.load('{best_workspace}/scaler.pkl')
 
-# Load test data and preprocess (same as training)
+# Load test data
 test_df = pd.read_csv(f'{{data_dir}}/test.csv')
-# Drop ID columns, apply StandardScaler
+sample_sub = pd.read_csv(f'{{data_dir}}/sample_submission.csv')
+
+# Preprocess test data (same as training)
+# 1. Drop ID columns
+# 2. Handle missing values (same imputer as training)
+# 3. Encode categoricals (same encoders as training)
+# 4. Scale features
+X_test_scaled = scaler.transform(X_test)
+
 # Predict probabilities
-predictions = model.predict(X_test)
+predictions = model.predict(X_test_scaled)
+
+# Format submission
+if predictions.shape[1] > 1:
+    # Multiclass: use probability columns
+    for i in range(predictions.shape[1]):
+        sample_sub[f'class_{{i}}'] = predictions[:, i]
+else:
+    # Binary or regression: single column
+    sample_sub['target'] = predictions.flatten()
+
+sample_sub.to_csv(f'{{submission_dir}}/submission.csv', index=False)
 ```
 
 **STRATEGY: bottleneck_features**
