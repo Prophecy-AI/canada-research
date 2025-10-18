@@ -276,7 +276,7 @@ import numpy as np
        os.system('ls -la')
        exit(1)
    
-   print(f"Images location: {image_prefix if image_prefix else 'current directory'}")
+   print(f"Images location: {{image_prefix if image_prefix else 'current directory'}}")
    ```
    
    **Then follow spec hyperparameters:**
