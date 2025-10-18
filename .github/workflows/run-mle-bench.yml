@@ -45,7 +45,7 @@ on:
         description: 'Rebuild Docker image from Dockerfile'
         required: false
         type: boolean
-        default: true
+        default: false
 
 jobs:
   run-agent:
