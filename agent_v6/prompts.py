@@ -288,13 +288,13 @@ Data: {data_dir}
       - Get val predictions: `val_preds, val_targets = learn.get_preds(dl=learn.dls.valid)`
       - Convert to numpy: `val_probs = val_preds.numpy()`, `y_val = val_targets.numpy()`
       - Calculate metric from EDA (AUC/Accuracy/LogLoss): Use sklearn functions
-      - Print: `print(f"VALIDATION_SCORE: {val_metric:.6f}")`
+      - Print: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
    
    **What train.py should do:**
    - Extract data, load with fastai using spec parameters
    - Train model: `learn.fit_one_cycle(spec['epochs'], spec['lr'])`
    - Calculate validation metric using sklearn (roc_auc_score/accuracy_score/log_loss based on EDA)
-   - Print ONLY: `print(f"VALIDATION_SCORE: {val_metric:.6f}")`
+   - Print ONLY: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
    - Exit (DO NOT save model, DO NOT generate test predictions)
    
    **What train.py should NOT do:**
@@ -452,8 +452,8 @@ print("Models saved!")
    6. Calculate **competition metric** from EDA context:
       - Read EDA for "Evaluation Metric: XXX"
       - Use sklearn: `roc_auc_score`, `log_loss`, `accuracy_score`, `mean_squared_error`
-      - Print: `print(f"VALIDATION_SCORE: {val_metric:.6f}")`
-   7. Save: `joblib.dump(model, 'model.pkl')`
+      - Print: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
+   7. Exit (DO NOT save model - submission phase handles that)
    
    **Critical rules:**
    - ✅ Use ALL hyperparameters from spec (n_estimators, learning_rate, max_depth, etc.)
