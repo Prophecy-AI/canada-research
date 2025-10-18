@@ -221,104 +221,62 @@ Data: {data_dir}
 - Use lambda functions or other unpicklable objects
 
 **DO:**
-1. **🚨 STEP 1: INSPECT ZIP STRUCTURE FIRST:**
-   ```bash
-   # DON'T blindly extract! Check what's in the zip:
-   zipinfo /home/data/train.zip | head -20
+1. **Check data structure first** (adapt based on data type):
    
-   # Common patterns:
-   # Pattern A: train/image1.jpg, train/image2.jpg  → Unzip creates train/ folder
-   # Pattern B: image1.jpg, image2.jpg  → Unzip puts files directly in current dir
-   ```
+   **For IMAGE data** (if strategy is fastai_vision, bottleneck_features, fine_tuning):
+   - Check zip structure: `zipinfo /home/data/train.zip | head -20`
+   - Extract: `subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'])`
+   - Detect structure: Check if images in `train/` subdirectory or directly in `.`
+   - Adapt filepath prefix accordingly
+   
+   **For TABULAR data** (if strategy is gradient_boosting, fastai_tabular):
+   - Data is usually already in CSV format at `/home/data/train.csv`
+   - No extraction needed unless data is zipped
+   - Load directly: `pd.read_csv('/home/data/train.csv')`
+   
+   **For TEXT data** (if strategy is transformer_features):
+   - Text is usually in CSV columns
+   - Load CSV: `train_df = pd.read_csv('/home/data/train.csv')`
+   - Identify text column(s) from EDA context
+   
+   **For AUDIO data**:
+   - Extract zip files if needed
+   - Convert audio to spectrograms
+   - Treat as images (use fastai_vision or bottleneck_features)
 
-2. **🚨 STEP 2: EXTRACT AND VERIFY:**
-   ```python
-   import os
-   import subprocess
-   
-   # Extract to current directory
-   result = subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'], 
-                          capture_output=True, text=True)
-   if result.returncode != 0:
-       print(f"ERROR extracting train.zip: {{result.stderr}}")
-       exit(1)
-   
-   # VERIFY extraction worked - check what was created:
-   print("After extraction, current directory contains:")
-   os.system('ls -la')
-   
-   # Adapt based on what you see:
-   # If you see train/ folder → images are in ./train/*.jpg
-   # If you see *.jpg files → images are in ./*.jpg
-   # If neither → extraction failed, debug!
-   
-   # CRITICAL: Don't proceed if files not found!
-   if not os.path.exists('train'):
-       print("ERROR: train/ directory not found after extraction!")
-       # Check if images were extracted to different location
-       os.system('find . -name "*.jpg" | head -10')
-       exit(1)
-   ```
-   
-2. **🚨 Path handling in code - AVOID DOUBLE PATHS:**
-   ```python
-   # ❌ WRONG: path='/home/data', fn_col adds /home/ → /home/home/data/image.jpg
-   # ✅ RIGHT: Use relative paths after extraction
-   
-   train_df = pd.read_csv('/home/data/train.csv')
-   # If CSV has just filenames like "abc.jpg":
-   train_df['filepath'] = 'train/' + train_df['id'] + '.jpg'  # Relative path
-   
-   # Load with fastai:
-   dls = ImageDataLoaders.from_df(
-       train_df, 
-       path='.',              # Current directory (where you extracted)
-       fn_col='filepath',     # Already has train/ prefix
-       label_col='label',
-       valid_pct=0.15
-   )
-   # This creates correct paths: ./train/abc.jpg (NOT /home/home/...)
-   ```
+2. **🚨 ALWAYS include metric imports at TOP of train.py:**
+```python
+from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
+import numpy as np
+# Plus strategy-specific imports (fastai, torch, lightgbm, etc.)
+```
 
-3. **🚨 CRITICAL: Add ALL necessary imports at the TOP of train.py:**
-   ```python
-   # ALWAYS include these metric imports at the top:
-   from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
-   import numpy as np
-   # Plus any other imports needed for your strategy
-   ```
-   - Only use functions/classes that exist in standard libraries (torch, torchvision, sklearn, xgboost, etc.)
-   - Prefer simple, proven implementations over complex custom code
-   - DO NOT import metrics inline - put ALL imports at the top of the file
-4. **Check strategy from spec** (spec['strategy'])
-5. Write train.py based on strategy:
+**Write train.py based on strategy:**
 
 **STRATEGY: "fastai_vision"** (for images):
    
-   **CRITICAL: Check zip structure BEFORE extracting!**
+   **Step 1: Extract and detect structure**
    ```python
    import os, subprocess
    
-   # STEP 1: Check what's in the zip
-   result = subprocess.run(['zipinfo', '/home/data/train.zip'], 
-                          capture_output=True, text=True)
-   print(result.stdout[:500])  # Show first 500 chars
+   # Extract training images
+   subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'], check=True)
    
-   # STEP 2: Extract with error checking
-   result = subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'], 
-                          capture_output=True, text=True)
-   if result.returncode != 0:
-       print(f"EXTRACTION FAILED: {{result.stderr}}")
+   # Detect where images were extracted (ADAPT!):
+   has_subfolder = os.path.exists('train') or os.path.exists('images')
+   has_images_direct = any(f.endswith('.jpg') or f.endswith('.png') for f in os.listdir('.'))
+   
+   if has_subfolder:
+       folder_name = 'train' if os.path.exists('train') else 'images'
+       image_prefix = folder_name + '/'
+   elif has_images_direct:
+       image_prefix = ''  # Images directly in current directory
+   else:
+       print("ERROR: No images found!")
+       os.system('ls -la')
        exit(1)
    
-   # STEP 3: VERIFY files exist (CRITICAL!)
-   os.system('ls -la')  # Show what was created
-   if not (os.path.exists('train') or os.path.exists('train.csv') or len(os.listdir('.')) > 3):
-       print("ERROR: No files extracted!")
-       os.system('find . -name \"*.jpg\" | head -10')
-       exit(1)
-   
-   print("✓ Data extracted successfully")
+   print(f"Images location: {image_prefix if image_prefix else 'current directory'}")
    ```
    
    **Then follow spec hyperparameters:**
@@ -480,25 +438,31 @@ print("Models saved!")
 - Ensure StandardScaler is applied to all feature sets (train/val/test)
 
 **STRATEGY: "gradient_boosting"** (for tabular):
-   
-   **Step-by-step:**
    1. Load CSV: `train_df = pd.read_csv('/home/data/train.csv')`
-   2. Identify target (column in train but not test), separate X and y
-   3. Encode categoricals if needed (LabelEncoder)
-   4. Train/val split: Use 15-20% validation (stratified for classification)
-   5. Train model using **spec['model']** and **spec['hyperparameters']**:
-      - LightGBM: `LGBMClassifier(**spec['hyperparameters'])`
-      - XGBoost: `XGBClassifier(tree_method='hist', **spec['hyperparameters'])`
-   6. Calculate **competition metric** from EDA context:
-      - Read EDA for "Evaluation Metric: XXX"
-      - Use sklearn: `roc_auc_score`, `log_loss`, `accuracy_score`, `mean_squared_error`
-      - Print: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
-   7. Exit (DO NOT save model - submission phase handles that)
-   
-   **Critical rules:**
-   - ✅ Use ALL hyperparameters from spec (n_estimators, learning_rate, max_depth, etc.)
-   - ✅ Calculate competition metric (not just any metric)
-   - ❌ DON'T hardcode hyperparameters - read from spec
+   2. Identify target, separate X and y
+   3. Encode categoricals if needed
+   4. Train/val split: 15-20% validation
+   5. Train using **spec['model']** and **spec['hyperparameters']**: `LGBMClassifier(**spec['hyperparameters'])`
+   6. Calculate competition metric from EDA, print VALIDATION_SCORE
+   7. Exit (don't save model)
+
+**STRATEGY: "transformer_features"** (for text):
+   1. Load text data from CSV
+   2. Load tokenizer and model from **spec['model']** (e.g., 'distilbert-base-uncased', 'roberta-base')
+   3. Tokenize text: `tokenizer(texts, padding=True, truncation=True, max_length=128, return_tensors='pt')`
+   4. Extract embeddings (CLS token or mean pooling)
+   5. Train/val split: 15-20% validation
+   6. Train LogisticRegression on embeddings using **spec hyperparameters**
+   7. Calculate competition metric from EDA (AUC/Accuracy for classification)
+   8. Print VALIDATION_SCORE
+   9. Exit (don't save model)
+
+**STRATEGY: "fine_tuning"** (for images):
+   - Similar to fastai_vision but uses manual PyTorch training loop
+   - Extract data, adapt to zip structure (same as fastai_vision)
+   - Use **spec hyperparameters** (epochs, lr, batch_size)
+   - Calculate competition metric
+   - Exit (don't save model)
 
 **STRATEGY: "fine_tuning"** (standard CNN training):
    - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format
