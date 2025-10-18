@@ -72,16 +72,13 @@ class Worker:
                 print(f"    ❌ Syntax error: {e}")
                 return False
             
-            # Check 2: Must print VALIDATION_SCORE
+            # Check 2: Must print VALIDATION_SCORE (required by orchestrator)
             if 'VALIDATION_SCORE' not in code:
                 print(f"    ❌ Missing VALIDATION_SCORE output")
                 return False
             
-            # Check 3: Basic imports should be present
-            has_pandas_or_numpy = 'import pandas' in code or 'import numpy' in code or 'import polars' in code
-            if not has_pandas_or_numpy:
-                print(f"    ⚠️  Warning: No pandas/numpy/polars import found")
-            
+            # That's it - don't check imports or anything else
+            # Let the agent decide what libraries to use
             return True
             
         except Exception as e:

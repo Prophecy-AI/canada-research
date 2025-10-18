@@ -151,9 +151,6 @@ class Orchestrator:
         
         if self.best_experiment:
             context += f"\n\n**Current best:** {self.best_experiment['model']} scored {self.best_score}"
-            # SOTA: Suggest refinement of best approach
-            if self.round_num > 1:
-                context += f"\n💡 Consider refining the best approach with hyperparameter tuning or ensemble"
         
         prompt = format_planning_prompt(
             competition_id=self.competition_id,
