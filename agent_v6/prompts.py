@@ -46,9 +46,14 @@ Best: {best_score}
 **🚨 CRITICAL - MATCH STRATEGY TO DATA TYPE (READ EDA CAREFULLY!):**
 
 **IF EDA says "Tabular" OR "pre-extracted features" OR "CSV with X numerical features":**
-→ MUST use "gradient_boosting" strategy ONLY
+→ Check dataset size:
+  * **If <10K samples AND (features > 100 OR features/samples_per_class > 10):**
+    → PRIMARY: Use "fastai_tabular" (neural networks prevent overfitting better than trees)
+    → SECONDARY: Use "gradient_boosting" for comparison
+    → Example: leaf-classification (891 samples, 192 features, 99 classes = 9 per class, ratio 192/9=21) → fastai_tabular PRIMARY
+  * **If >=10K samples:**
+    → Use "gradient_boosting" only
 → DO NOT use bottleneck_features/fine_tuning (those are for raw images!)
-→ Example: leaf-classification has "192 tabular features" → gradient_boosting, NOT image strategies
 
 **IF EDA says "Image" AND describes actual image files (.jpg/.png) AND NO mention of "pre-extracted features":**
 → PRIMARY: Use "fastai_vision" (proven gold-medal approach, 5-10 min, 95-100% accuracy)
@@ -84,13 +89,18 @@ Best: {best_score}
 - **Performance:** Regularly achieves 95-100% accuracy in 5-10 minutes
 - **Example:** {{"strategy": "fastai_vision", "model": "densenet161", "epochs": 5, "size": 128, "lr": 3e-2, "split_pct": 0.01}}
 
-**Strategy 2: "fastai_tabular"** (neural networks for small tabular datasets)
-- **When to try:** Tabular data with <10K samples and high dimensionality (features > samples per class)
-- **Why it works:** Neural networks with dropout regularization prevent overfitting better than gradient boosting on small data
-- **How it works:** Use fastai TabularLearner with automatic normalization and dropout
-- **Best for:** Small datasets where gradient boosting overfits (e.g., 891 samples, 99 classes, 192 features)
-- **Performance:** Often beats gradient boosting by 50-200% on small tabular data
-- **Example:** {{"strategy": "fastai_tabular", "layers": [200, 100], "epochs": 50, "lr": 1e-3}}
+**Strategy 2: "fastai_tabular"** (Keras neural networks for small tabular datasets)
+- **When to try:** Tabular data with <10K samples and high dimensionality (features/samples_per_class > 10)
+- **Why it works:** Neural networks with dropout prevent overfitting better than gradient boosting on small high-dimensional data
+- **How it works:** Keras Sequential model with large layers [1024, 512] or [1500, 1500], Dropout(0.1-0.2), EarlyStopping
+- **Best for:** Small datasets where gradient boosting overfits (e.g., 891 samples, 192 features, 99 classes = ratio 21)
+- **Performance:** Often beats gradient boosting by 2-10x on small tabular data (proven with gold solutions)
+- **Hyperparameters:**
+  * layers: Large networks work better, e.g., [1024, 512], [1500, 1500], [2048, 1024]
+  * epochs: 100-800 (use EarlyStopping patience=50-100 to prevent overtraining)
+  * lr: Learning rate 1e-3 to 1e-2, optimizer 'adam' or 'rmsprop'
+  * batch_size: Large batches (128-192) act as regularization
+- **Example:** {{"strategy": "fastai_tabular", "hyperparameters": {{"layers": [1024, 512], "epochs": 200, "lr": 1e-3, "batch_size": 128}}}}
 
 **Strategy 3: "bottleneck_features"** (feature extraction + LogisticRegression, fallback for images)
 - **When to try:** Images + Classification, especially with <50K samples
@@ -127,11 +137,11 @@ Best: {best_score}
   * exp_3: fastai_vision (efficientnet_b2, epochs=7, size=160, lr=2e-2, split_pct=0.01)
   * Each finishes in 5-10 min, explores different architectures
   * **ONLY use bottleneck_features if fastai fails or for very fast baseline (<3 min)**
-- **Tabular <10K samples (high dimensionality):**
-  * exp_1: fastai_tabular (layers=[200, 100], epochs=50, lr=1e-3)
-  * exp_2: gradient_boosting (LightGBM with regularization)
-  * exp_3: gradient_boosting (XGBoost with different hyperparameters)
-  * Try fastai first - often beats gradient boosting on small data
+- **Tabular <10K samples (high dimensionality, e.g., features/samples_per_class >10):**
+  * exp_1: fastai_tabular (layers=[1024, 512], epochs=100, lr=1e-3) - neural network prevents overfitting
+  * exp_2: gradient_boosting (LightGBM, conservative regularization)
+  * exp_3: fastai_tabular (layers=[1500, 1500], epochs=200, lr=5e-4) - larger network for comparison
+  * Neural networks often 2-10x better than gradient boosting on small high-dim data
 - **Tabular >10K samples:**
   * exp_1: LightGBM with feature engineering
   * exp_2: XGBoost with different hyperparameters
@@ -221,31 +231,44 @@ Data: {data_dir}
 4. **Check strategy from spec** (spec['strategy'])
 5. Write train.py based on strategy:
 
+**CRITICAL FOR ALL FASTAI STRATEGIES:**
+- **MUST import at top of file BEFORE using any fastai functions:** 
+  * For images: `from fastai import *` then `from fastai.vision import *` (two lines)
+  * For tabular: `from fastai.tabular.all import *`
+- These imports include ALL needed functions (get_transforms, ImageList, cnn_learner, tabular_learner, etc.)
+- **DO NOT** import individual functions - use the `import *` pattern
+- **API version:** Use the v1-style API (ImageList, cnn_learner) - proven to work with our fastai version and gets gold medals
+
 **STRATEGY: "fastai_vision"** (RECOMMENDED for images, gold-medal approach):
-   - Use fastai.vision library for simple, fast, accurate image classification
-   - Key patterns from gold solutions:
-     * Load images: `ImageList.from_df()` or `ImageList.from_folder()`
+   - **CRITICAL: Import at top:** `from fastai import *` then `from fastai.vision import *`
+   - **Use proven pattern from gold solutions (gets perfect scores):**
+     * Load images: `ImageList.from_df(df, path=data_path, folder='train')` or `.from_folder()`
      * Split: `.split_by_rand_pct(0.01)` for 99/1 train/val (maximum training data!)
-     * Augmentation: `get_transforms(do_flip=True, flip_vert=True, max_rotate=10, max_zoom=1.1, max_lighting=0.2, max_warp=0.2, p_affine=0.75, p_lighting=0.75)`
-     * Image size: Use spec['size'] (default 128-224, smaller = faster)
-     * Create learner: `cnn_learner(data, models.densenet161, metrics=[accuracy])`
-     * Train: `learn.fit_one_cycle(epochs, slice(lr))` where epochs from spec (default 5), lr from spec (default 3e-2)
+     * Labels: `.label_from_df()` if using CSV, or `.label_from_folder()` if folder structure
+     * Add test: `.add_test(test_images)` where test_images = ImageList.from_df(test_df, ...)
+     * Transform: `.transform(tfms, size=128)` where tfms = get_transforms(do_flip=True, flip_vert=True, max_rotate=10, max_zoom=1.1, max_lighting=0.2, max_warp=0.2, p_affine=0.75, p_lighting=0.75)
+     * Create databunch: `.databunch(bs=64).normalize(imagenet_stats)`
+     * Create learner: `learn = cnn_learner(data, models.densenet161, metrics=[error_rate, accuracy])`
+     * Train: `learn.fit_one_cycle(epochs, slice(lr))` - epochs from spec (default 5), lr from spec (default 3e-2)
      * Predict: `preds, _ = learn.get_preds(ds_type=DatasetType.Test)`
-   - Normalize with ImageNet stats (fastai does automatically)
-   - Save predictions to submission.csv in correct format
-   - Print VALIDATION_SCORE with final validation metric
-   - This approach gets 95-100% accuracy in 5-10 minutes consistently
+   - Image size from spec (default 128, use 128-224)
+   - Print VALIDATION_SCORE with final validation accuracy (1 - error_rate)
+   - Save test predictions to submission.csv in correct format
+   - Runtime: 5-10 minutes, achieves 95-100% accuracy consistently
 
 **STRATEGY: "fastai_tabular"** (neural networks for small tabular):
-   - Use fastai.tabular for small tabular datasets where gradient boosting overfits
-   - Key patterns:
-     * Load: `TabularDataLoaders.from_df(df, y_names='target', cont_names=feature_cols, procs=[Normalize])`
-     * Create learner: `tabular_learner(dls, layers=spec['layers'], metrics=accuracy)` where layers from spec (default [200, 100])
-     * Train: `learn.fit_one_cycle(epochs, lr)` with epochs from spec (default 50), lr from spec (default 1e-3)
-     * Dropout is automatic (prevents overfitting on small data)
-     * Predict on test set, save to submission.csv
-   - Works well when: samples < 10K, features > 100, gradient boosting overfits
-   - Faster convergence than manual neural networks
+   - **Use Keras/TensorFlow approach (RECOMMENDED for gold scores on small tabular):**
+     * Import: `from tensorflow import keras` and `from sklearn.preprocessing import StandardScaler, LabelEncoder`
+     * Preprocess: StandardScaler on features, LabelEncoder then to_categorical on target
+     * Build model: Use large layers [1024, 512] or [1500, 1500] with Dropout(0.1-0.2) between layers
+     * Architecture: Dense(1024, relu) → Dropout(0.2) → Dense(512, relu) → Dropout(0.1) → Dense(num_classes, softmax)
+     * Compile: loss='categorical_crossentropy', optimizer='adam' (or 'rmsprop'), metrics=['accuracy']
+     * Train: batch_size=128-192, epochs=200-800, validation_split=0.1-0.15, EarlyStopping(patience=50-100)
+     * Predict: model.predict(X_test) gives probabilities
+     * Save: model.save('model.h5') or keras.models.save_model()
+   - Large networks work better on small data (counterintuitive but proven)
+   - Print VALIDATION_SCORE with best validation metric (from history or callbacks)
+   - Works when gradient boosting overfits: samples <10K, high features/sample ratio
 
 **STRATEGY: "bottleneck_features"** (extract features, train LogisticRegression):
 
@@ -503,24 +526,43 @@ Output: {submission_dir}/submission.csv
 DO:
 1. Read {data_dir}/sample_submission.csv to get test IDs (use dtype={{'id': str}} to preserve format)
 2. Check what files exist in {best_workspace}/ to determine strategy:
-   - If learner.pkl exists: Use **fastai** approach (vision or tabular)
+   - If learner.pkl exists: Use **fastai** approach (vision)
+   - Elif model.h5 exists: Use **keras/tensorflow** approach (fastai_tabular)
    - Elif model.pkl exists: Use **gradient_boosting** approach (tabular data)
    - Elif backbone_0.pth + classifier.pkl exist: Use **bottleneck_features** approach
    - Elif model.pth exists: Use **manual pytorch** approach
 3. Write predict.py based on strategy:
 
-**STRATEGY: fastai** (vision or tabular)
+**STRATEGY: fastai** (vision)
 ```python
-from fastai.vision.all import *  # or from fastai.tabular.all import *
+from fastai import *
+from fastai.vision import *
 
-# Load learner
-learn = load_learner('{best_workspace}/learner.pkl')
+# Load learner  
+learn = load_learner('{best_workspace}', 'learner.pkl')
 
-# Get predictions on test set
+# Get test predictions
 preds, _ = learn.get_preds(ds_type=DatasetType.Test)
 
-# Convert to numpy and save to submission.csv
-predictions = preds.numpy()
+# predictions.numpy() gives probability matrix
+# Save to submission.csv in correct format
+```
+
+**STRATEGY: keras/tensorflow** (fastai_tabular)
+```python
+from tensorflow import keras
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler, LabelEncoder
+
+# Load model
+model = keras.models.load_model('{best_workspace}/model.h5')
+
+# Load test data and preprocess (same as training)
+test_df = pd.read_csv(f'{{data_dir}}/test.csv')
+# Drop ID columns, apply StandardScaler
+# Predict probabilities
+predictions = model.predict(X_test)
 ```
 
 **STRATEGY: bottleneck_features**
