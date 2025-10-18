@@ -224,16 +224,45 @@ Data: {data_dir}
 **STRATEGY: "fastai_vision"** (RECOMMENDED for images, gold-medal approach):
    - Use fastai.vision library for simple, fast, accurate image classification (v2 API)
    - Key patterns from gold solutions:
-     * Load images: `ImageDataLoaders.from_df(df, path='.', valid_pct=0.01, seed=42, item_tfms=Resize(size), batch_tfms=aug_transforms())`
-     * Or use DataBlock: `dls = DataBlock(blocks=(ImageBlock, CategoryBlock), get_items=get_image_files, splitter=RandomSplitter(valid_pct=0.01, seed=42), get_y=parent_label, item_tfms=Resize(size), batch_tfms=aug_transforms()).dataloaders(path)`
-     * Augmentation: `aug_transforms(do_flip=True, flip_vert=True, max_rotate=10, max_zoom=1.1, max_lighting=0.2, max_warp=0.2, p_affine=0.75, p_lighting=0.75)`
+     * CRITICAL: For binary classification (2 classes or 0/1 labels), convert labels to strings first: `df['label'] = df['label'].astype(str)`
+     * Load images using DataBlock (most reliable):
+       ```python
+       dls = DataBlock(
+           blocks=(ImageBlock, CategoryBlock),
+           get_items=get_image_files,
+           get_y=parent_label,
+           splitter=RandomSplitter(valid_pct=0.01, seed=42),
+           item_tfms=Resize(size),
+           batch_tfms=aug_transforms(size=size, min_scale=0.75)
+       ).dataloaders(path, bs=64)
+       ```
+     * Or from dataframe:
+       ```python
+       dls = ImageDataLoaders.from_df(
+           df, path='.', 
+           fn_col='filename', label_col='label',
+           valid_pct=0.01, seed=42,
+           item_tfms=Resize(size),
+           batch_tfms=aug_transforms(size=size, min_scale=0.75),
+           bs=64
+       )
+       ```
+     * Augmentation: `aug_transforms(size=size, min_scale=0.75, do_flip=True, flip_vert=True, max_rotate=10, max_lighting=0.2, max_warp=0.2)`
      * Image size: Use spec['size'] (default 128-224, smaller = faster)
-     * Create learner: `vision_learner(dls, resnet34, metrics=accuracy)` or `cnn_learner(dls, resnet34, metrics=accuracy)`
+     * Create learner: `learn = vision_learner(dls, resnet34, metrics=accuracy)`
      * Train: `learn.fit_one_cycle(epochs, lr)` where epochs from spec (default 5), lr from spec (default 3e-2)
-     * Predict: `test_dl = learn.dls.test_dl(test_items); preds, _ = learn.get_preds(dl=test_dl)`
+     * Predict: `test_dl = learn.dls.test_dl(test_files); preds, _ = learn.get_preds(dl=test_dl)`
+     * Get validation metric: After training, fastai metrics are tensors - convert to float:
+       ```python
+       val_metric = learn.recorder.values[-1][1]
+       if isinstance(val_metric, torch.Tensor):
+           val_metric = val_metric.item()
+       print(f"VALIDATION_SCORE: {val_metric:.6f}")
+       ```
+   - Always convert labels to strings to avoid binary/multi-class confusion
    - Normalize with ImageNet stats (fastai does automatically)
    - Save predictions to submission.csv in correct format
-   - Print VALIDATION_SCORE with final validation metric
+   - Convert tensor metrics to Python floats using .item() before printing
    - This approach gets 95-100% accuracy in 5-10 minutes consistently
 
 **STRATEGY: "fastai_tabular"** (neural networks for small tabular):
@@ -294,7 +323,7 @@ if 'models' in spec and isinstance(spec['models'], list):
 else:
     model_names = [spec['model']]
 
-print(f"Using {{len(model_names)}} backbone(s): {{model_names}}")
+print(f"Using {len(model_names)} backbone(s): {model_names}")
 
 # Load all backbones
 backbones = []
@@ -308,7 +337,7 @@ for model_name in model_names:
         backbone.head = nn.Identity()
     backbone.eval().to(device)
     backbones.append(backbone)
-    print(f"Loaded {{model_name}}")
+    print(f"Loaded {model_name}")
 
 # Extract features from all backbones
 def extract_features(loader, backbones, device):
@@ -330,11 +359,11 @@ def extract_features(loader, backbones, device):
 
 print("Extracting training features...")
 X_train, y_train = extract_features(train_loader, backbones, device)
-print(f"Training features shape: {{X_train.shape}}")
+print(f"Training features shape: {X_train.shape}")
 
 print("Extracting validation features...")
 X_val, y_val = extract_features(val_loader, backbones, device)
-print(f"Validation features shape: {{X_val.shape}}")
+print(f"Validation features shape: {X_val.shape}")
 
 # Standardize features (CRITICAL for LogReg performance)
 scaler = StandardScaler()
@@ -351,12 +380,12 @@ clf.fit(X_train, y_train)
 val_probs = clf.predict_proba(X_val)
 val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)  # Prevent log(0)
 val_metric = log_loss(y_val, val_probs)
-print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
+print(f"VALIDATION_SCORE: {val_metric:.6f}")
 
 # Save models
 for i, backbone in enumerate(backbones):
-    torch.save(backbone.state_dict(), f'backbone_{{i}}.pth')
-joblib.dump({{'model_names': model_names}}, 'model_config.pkl')
+    torch.save(backbone.state_dict(), f'backbone_{i}.pth')
+joblib.dump({'model_names': model_names}, 'model_config.pkl')
 joblib.dump(clf, 'classifier.pkl')
 joblib.dump(scaler, 'scaler.pkl')
 print("Models saved!")
@@ -423,8 +452,11 @@ print("Models saved!")
    - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
    - **CRITICAL: Print validation score in EXACT format (orchestrator parses this):**
      ```python
-     print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
+     if isinstance(val_metric, torch.Tensor):
+         val_metric = val_metric.item()
+     print(f"VALIDATION_SCORE: {val_metric:.6f}")
      ```
+     * ALWAYS convert tensors to Python floats using `.item()` before formatting
      * Use the EXACT competition metric from EDA context (e.g., logloss, AUC, accuracy, etc.)
      * Format must be exactly "VALIDATION_SCORE: " followed by the number
      * Example: "VALIDATION_SCORE: 0.623456" or "VALIDATION_SCORE: 0.954321"
@@ -531,13 +563,13 @@ import numpy as np
 # Load model config to check if single or multi-model
 config = joblib.load('{best_workspace}/model_config.pkl')
 model_names = config['model_names']
-print(f"Loading {{len(model_names)}} backbone(s): {{model_names}}")
+print(f"Loading {len(model_names)} backbone(s): {model_names}")
 
 # Load all backbones
 backbones = []
 for i, model_name in enumerate(model_names):
     backbone = getattr(torchvision.models, model_name.lower().replace('-', '_'))(pretrained=True)
-    backbone.load_state_dict(torch.load(f'{best_workspace}/backbone_{{i}}.pth'))
+    backbone.load_state_dict(torch.load(f'{best_workspace}/backbone_{i}.pth'))
     if hasattr(backbone, 'fc'): backbone.fc = nn.Identity()
     elif hasattr(backbone, 'classifier'): backbone.classifier = nn.Identity()
     elif hasattr(backbone, 'head'): backbone.head = nn.Identity()
