@@ -39,7 +39,16 @@ class Worker:
             
             train_py = self.workspace_dir / "train.py"
             if train_py.exists():
-                print(f"  ✓ {exp_id}: train.py created ({train_py.stat().st_size} bytes)")
+                # SOTA: Basic code verification before execution
+                if not self._verify_code(train_py):
+                    print(f"  ⚠️  {exp_id}: Code verification failed - attempting fix...")
+                    # Try to fix common issues
+                    output = await self.agent.run("Fix the issues in train.py (syntax, imports, VALIDATION_SCORE print)")
+                    if not train_py.exists() or not self._verify_code(train_py):
+                        print(f"  ❌ {exp_id}: Code verification still failing")
+                        return False
+                
+                print(f"  ✓ {exp_id}: train.py created and verified ({train_py.stat().st_size} bytes)")
                 return True
             else:
                 print(f"  ❌ {exp_id}: train.py not created")
@@ -49,4 +58,32 @@ class Worker:
             print(f"  ❌ {exp_id}: Error writing script - {str(e)}")
             import traceback
             traceback.print_exc()
+            return False
+    
+    def _verify_code(self, train_py: Path) -> bool:
+        """SOTA: Verify generated code has basic requirements"""
+        try:
+            code = train_py.read_text()
+            
+            # Check 1: Syntax check
+            try:
+                compile(code, str(train_py), 'exec')
+            except SyntaxError as e:
+                print(f"    ❌ Syntax error: {e}")
+                return False
+            
+            # Check 2: Must print VALIDATION_SCORE
+            if 'VALIDATION_SCORE' not in code:
+                print(f"    ❌ Missing VALIDATION_SCORE output")
+                return False
+            
+            # Check 3: Basic imports should be present
+            has_pandas_or_numpy = 'import pandas' in code or 'import numpy' in code or 'import polars' in code
+            if not has_pandas_or_numpy:
+                print(f"    ⚠️  Warning: No pandas/numpy/polars import found")
+            
+            return True
+            
+        except Exception as e:
+            print(f"    ❌ Verification error: {e}")
             return False

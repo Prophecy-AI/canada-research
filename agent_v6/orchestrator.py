@@ -39,6 +39,12 @@ class Orchestrator:
         self.round_elapsed_time = 0
         self.total_start_time = None
         
+        # SOTA improvements: Memory & Learning
+        self.successful_strategies = []  # Track what works
+        self.failed_strategies = []  # Track what doesn't
+        self.validation_scores = {}  # Track validation scores
+        self.improvement_deltas = []  # Track improvement rates
+        
         Path(workspace_dir).mkdir(parents=True, exist_ok=True)
         Path(submission_dir).mkdir(parents=True, exist_ok=True)
 
@@ -123,13 +129,31 @@ class Orchestrator:
         tools = ToolRegistry(str(plan_workspace))
         
         context = f"{self.eda_summary}"
+        
+        # SOTA: Add memory-based learning feedback
+        if self.successful_strategies:
+            context += f"\n\n**✅ SUCCESSFUL STRATEGIES (build on these):**"
+            for strategy in self.successful_strategies[-3:]:  # Last 3 successes
+                context += f"\n- {strategy['model']} ({strategy['strategy']}) → {strategy['score']:.4f}"
+                if 'key_insight' in strategy:
+                    context += f" | {strategy['key_insight']}"
+        
+        if self.failed_strategies:
+            context += f"\n\n**❌ FAILED STRATEGIES (avoid these):**"
+            for strategy in self.failed_strategies[-3:]:  # Last 3 failures
+                context += f"\n- {strategy['model']} ({strategy['strategy']}) → Failed: {strategy.get('reason', 'unknown')}"
+        
         if self.round_history:
             context += f"\n\n**PREVIOUS EXPERIMENTS (DO NOT REPEAT):**"
             for round_data in self.round_history:
                 for exp in round_data['experiments']:
                     context += f"\n- {exp['model']} (score: {exp.get('score', 'N/A')}): {exp.get('hypothesis', '')}"
+        
         if self.best_experiment:
             context += f"\n\n**Current best:** {self.best_experiment['model']} scored {self.best_score}"
+            # SOTA: Suggest refinement of best approach
+            if self.round_num > 1:
+                context += f"\n💡 Consider refining the best approach with hyperparameter tuning or ensemble"
         
         prompt = format_planning_prompt(
             competition_id=self.competition_id,
@@ -215,6 +239,7 @@ class Orchestrator:
                     is_better = (result['score'] < self.best_score if self.lower_is_better 
                                 else result['score'] > self.best_score)
                     if is_better:
+                        prev_best = self.best_score
                         self.best_score = result['score']
                         exp_workspace = Path(self.workspace_dir) / "experiments" / result['id']
                         self.best_experiment = {
@@ -223,6 +248,11 @@ class Orchestrator:
                             "workspace": str(exp_workspace)
                         }
                         print(f"    🏆 New best score!")
+                        
+                        # SOTA: Track improvement delta
+                        if prev_best is not None and prev_best != float('inf') and prev_best != 0.0:
+                            delta = abs(result['score'] - prev_best) / abs(prev_best)
+                            self.improvement_deltas.append(delta)
             elif isinstance(training_results[i], Exception):
                 print(f"\n  ❌ {exp['id']}: Task raised exception: {training_results[i]}")
                 import traceback
@@ -245,6 +275,9 @@ class Orchestrator:
                     "hypothesis": exp.get('hypothesis')
                 })
                 print(f"  ❌ {exp['id']}: ERROR")
+        
+        # SOTA: Learn from results
+        self._update_memory(experiments, formatted_results)
         
         return formatted_results
     
@@ -383,6 +416,56 @@ class Orchestrator:
                 "model": exp.get('model'),
                 "hypothesis": exp.get('hypothesis')
             }
+
+    def _update_memory(self, experiments: List[Dict], results: List[Dict]):
+        """SOTA: Update memory based on experiment outcomes"""
+        for exp, result in zip(experiments, results):
+            strategy_info = {
+                'model': exp.get('model', 'unknown'),
+                'strategy': exp.get('strategy', 'unknown'),
+                'id': exp.get('id'),
+            }
+            
+            if result.get('status') == 'success' and result.get('score') is not None:
+                # Success: add to successful strategies
+                strategy_info['score'] = result['score']
+                
+                # Check if it improved
+                is_better = (result['score'] < self.best_score if self.lower_is_better 
+                            else result['score'] > self.best_score)
+                
+                if is_better:
+                    strategy_info['key_insight'] = '✨ NEW BEST - Build on this!'
+                    self.successful_strategies.append(strategy_info)
+                elif result['score'] is not None:
+                    strategy_info['key_insight'] = 'Worked but not best'
+                    self.successful_strategies.append(strategy_info)
+                    
+            else:
+                # Failure: add to failed strategies
+                if result.get('status') == 'error':
+                    # Extract failure reason from output
+                    output = result.get('output', '')
+                    if 'MemoryError' in output or 'OOM' in output:
+                        strategy_info['reason'] = 'Out of memory'
+                    elif 'ImportError' in output or 'ModuleNotFoundError' in output:
+                        strategy_info['reason'] = 'Missing dependency'
+                    elif 'timeout' in output.lower():
+                        strategy_info['reason'] = 'Timeout - too slow'
+                    elif 'ValueError' in output or 'TypeError' in output:
+                        strategy_info['reason'] = 'Code error'
+                    else:
+                        strategy_info['reason'] = 'Execution failed'
+                elif result.get('status') == 'no_score':
+                    strategy_info['reason'] = 'No validation score found'
+                else:
+                    strategy_info['reason'] = 'Unknown failure'
+                    
+                self.failed_strategies.append(strategy_info)
+        
+        # Keep only last 5 of each
+        self.successful_strategies = self.successful_strategies[-5:]
+        self.failed_strategies = self.failed_strategies[-5:]
 
     async def _run_analysis(self, results: List[Dict]) -> str:
         self.round_history.append({
