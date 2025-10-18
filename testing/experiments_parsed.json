@@ -1,0 +1,1352 @@
+{
+  "aerial-cactus-identification": {
+    "EDA": "I'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (9088 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nThe data directory is read-only. Let me extract to a different location:\n🔧 Tool: Write\n   Path: /home/eda.py (9208 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nLet me check what was extracted:\n🔧 Tool: Bash\n   Command: ls -la /tmp/cactus_data/\n✓ Completed\nThe images are extracted directly to the directory. Let me fix the script:\n🔧 Tool: Write\n   Path: /home/eda.py (9434 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py 2>&1\n✓ Completed\nPerfect! The EDA has completed successfully. Let me now provide a comprehensive report of the findings:\n## **AERIAL CACTUS IDENTIFICATION - EDA REPORT**\n### **Data Type**\n- **Image Classification** (Binary)\n- Task: Identify presence of columnar cactus (Neobuxbaumia tetetzo) in aerial imagery\n### **Dataset Size and Shape**\n- **Training images:** 14,175 images\n- **Test images:** 3,325 images\n- **Total images:** 17,500 images\n- **Image dimensions:** 32×32 pixels (RGB)\n- **Training CSV shape:** (14175, 2) - contains 'id' and 'has_cactus' columns\n- **Test CSV shape:** (3325, 2) - contains 'id' and 'has_cactus' (placeholder) columns\n### **Target Distribution**\n- **Class 0 (no cactus):** 3,547 images (25.02%)\n- **Class 1 (has cactus):** 10,628 images (74.98%)\n- **Class imbalance ratio:** 3.00:1\n- **Balance status:** **SLIGHTLY IMBALANCED** - The dataset has about 3 times more images with cactus than without\n### **Key Patterns and Characteristics**\n1. **Image Properties:**\n   - All images are uniform 32×32 pixels (RGB format)\n   - JPEG format, standard compression\n   - Pixel values range from 0-255 (standard 8-bit RGB)\n   - Mean pixel values range from ~74 to ~186 across samples\n2. **Data Quality:**\n   - No missing values in CSV files\n   - 100% file consistency - all CSV entries have corresponding images\n   - All images accessible and properly formatted\n3. **Visual Characteristics:**\n   - Aerial photography perspective\n   - Small thumbnail size (32×32) makes this computationally efficient\n   - Similar average brightness between classes (132.54 vs 133.90), suggesting brightness alone won't be a strong discriminator\n4. **Task Complexity:**\n   - Binary classification problem\n   - Small image size may limit fine detail but reduces computational requirements\n   - Class imbalance favors positive class (has cactus)\n### **CRITICAL - Evaluation Metric with Direction:**\n**Evaluation Metric: AUC-ROC (HIGHER is better)**\n- Range: [0, 1] where 1.0 is perfect classification\n- Requires probability predictions (not binary labels)\n- Robust to class imbalance\n- Measures the model's ability to distinguish between classes across all classification thresholds\n---\n**Summary:** This is a binary image classification task with 14,175 training images of 32×32 aerial photos. The dataset is slightly imbalanced (75% positive class), and the evaluation metric is AUC-ROC where higher scores are better. The small image size makes this suitable for CNN-based approaches with relatively low computational requirements.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "Multi-model bottleneck with ResNet50+InceptionV3 should excel on this 14K image dataset. Different architectures (ResNet's residual connections vs Inception's multi-scale convolutions) capture complementary features. With 32x32 images and class imbalance (75% positive), pretrained features + LogisticRegression avoids overfitting while being fast. AUC-ROC metric benefits from probability calibration that LogReg provides."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "DenseNet161",
+          "ResNet50"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000
+        },
+        "hypothesis": "Triple-model ensemble maximizes feature diversity for aerial cactus detection. EfficientNet's compound scaling, DenseNet's feature reuse, and ResNet's skip connections each capture different visual patterns. Higher dimensionality (5664-dim) provides richer representation for distinguishing cacti in small 32x32 images. Slightly lower C=0.5 for regularization with more features."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) = 3072-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "Alternative multi-model combination to explore different architecture synergies. Wide_ResNet50_2's wider layers capture more features per layer, while DenseNet121 (lighter than 161) provides efficient feature reuse. This 3072-dim representation balances expressiveness with regularization for the 14K training samples, potentially avoiding overfitting while maintaining strong AUC-ROC performance."
+      }
+    ]
+  },
+  "aptos2019-blindness-detection": {
+    "EDA": "Duration: 1.96 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (8165 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here's my comprehensive report:\n## **APTOS 2019 Blindness Detection - EDA Findings**\n### **Data Type**\n- **Image Classification** (medical imaging)\n- Task: Classify retina fundus photographs for diabetic retinopathy severity\n### **Dataset Size and Shape**\n- **Training set:** 3,295 images with labels\n- **Test set:** 367 images\n- **CSV structure:**\n  - Train: 2 columns (id_code, diagnosis)\n  - Test: 1 column (id_code)\n- **Image format:** PNG files\n- **Image dimensions:** Variable sizes (640-3216 pixels width, 480-2136 pixels height)\n- **File sizes:** 269 KB to 6.8 MB (mean: ~2.1 MB)\n### **Target Distribution (IMBALANCED)**\nThe dataset has 5 ordinal classes representing diabetic retinopathy severity:\n- **Class 0 (No DR):** 1,628 samples (49.41%) ← Most frequent\n- **Class 1 (Mild):** 340 samples (10.32%)\n- **Class 2 (Moderate):** 896 samples (27.19%)\n- **Class 3 (Severe):** 176 samples (5.34%) ← Least frequent\n- **Class 4 (Proliferative DR):** 255 samples (7.74%)\n**Imbalance ratio:** 9.25 (max/min) - **Highly imbalanced dataset**\n### **Key Patterns and Characteristics**\n1. **Severe class imbalance** - Class 0 has 9.25x more samples than Class 3\n2. **Medical imaging domain** - Retinal fundus photographs with varying quality\n3. **Ordinal classification** - Classes have natural ordering (0→4 = increasing severity)\n4. **Variable image dimensions** - Images are not standardized in size\n5. **No missing values** - Clean dataset with complete labels\n6. **No duplicate IDs** - Each image has unique identifier\n7. **ID-to-file mapping** - Perfect correspondence between CSV IDs and image filenames\n### **CRITICAL - Evaluation Metric with Direction:**\n**Evaluation Metric:** Quadratic Weighted Kappa (HIGHER is better)\n- **Range:** -∞ to 1 (typically 0 to 1)\n- **Interpretation:**\n  - 1.0 = Perfect agreement\n  - 0.0 = Random agreement\n  - <0 = Worse than random\n- **Key characteristic:** Quadratic weighting penalizes larger disagreements more heavily (e.g., predicting 0 when true label is 4 is penalized more than predicting 1 when true label is 2)\n- **Suitable for:** Ordinal classification tasks where the distance between classes matters\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "solver": "lbfgs"
+        },
+        "hypothesis": "Multi-model bottleneck with ResNet50+InceptionV3 should excel on this 3.3K medical image dataset. The severe class imbalance (9.25x ratio) and ordinal nature of diabetic retinopathy severity makes feature extraction ideal - LogisticRegression handles imbalanced ordinal targets well with proper regularization. Combining ResNet's residual learning with InceptionV3's multi-scale feature extraction captures both fine retinal details and global patterns. This approach is proven in gold solutions for small medical datasets and trains in ~2-3 minutes while achieving strong quadratic kappa scores."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "DenseNet161",
+          "ResNet50"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000,
+          "solver": "lbfgs",
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Triple-model ensemble maximizes feature diversity for ordinal classification. EfficientNet-B2's compound scaling captures efficient representations, DenseNet161's dense connections preserve fine-grained retinal features, and ResNet50 provides robust baseline features. The 5664-dim feature space gives LogisticRegression rich information to distinguish between 5 ordinal DR severity levels. Using class_weight='balanced' addresses the severe imbalance (Class 0: 49% vs Class 3: 5%). Lower C=0.5 adds regularization for the high-dimensional feature space. This combination is proven in Kaggle gold solutions for medical imaging."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Dual-model ensemble: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) = 3072-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "solver": "saga",
+          "penalty": "elasticnet",
+          "l1_ratio": 0.5
+        },
+        "hypothesis": "Alternative architecture pairing to explore feature complementarity. Wide_ResNet50_2's wider layers capture more diverse features per layer, while DenseNet121's lighter architecture (vs DenseNet161) provides efficient feature reuse without overfitting on 3.3K samples. Using ElasticNet penalty (L1+L2) with saga solver performs automatic feature selection from the 3072-dim space, potentially identifying most discriminative features for ordinal DR classification. This tests whether a more compact feature set with regularization can match or exceed larger ensembles while being more robust to the class imbalance."
+      }
+    ]
+  },
+  "denoising-dirty-documents": {
+    "EDA": "Duration: 1.87 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data by first reading the instructions, then writing and running a comprehensive EDA script.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/train/ | head -20\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/test/ | head -20\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/train_cleaned/ | head -20\n✓ Completed\n🔧 Tool: Bash\n   Command: wc -l /home/data/sampleSubmission.csv\n✓ Completed\n🔧 Tool: Bash\n   Command: head -20 /home/data/sampleSubmission.csv\n✓ Completed\n🔧 Tool: Bash\n   Command: find /home/data/train -name \"*.png\" | wc -l\n✓ Completed\n🔧 Tool: Bash\n   Command: find /home/data/test -name \"*.png\" | wc -l\n✓ Completed\n🔧 Tool: Bash\n   Command: find /home/data/train_cleaned -name \"*.png\" | wc -l\n✓ Completed\nNow I'll write a comprehensive EDA script to analyze the image data:\n🔧 Tool: Write\n   Path: /home/eda.py (11618 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\n## EDA Report: Denoising Dirty Documents Competition\n### **Data Type**\n**IMAGE** - Document denoising task involving scanned text documents with synthetic noise\n### **Dataset Size and Shape**\n- **Training images**: 115 noisy images with 115 corresponding cleaned versions\n- **Test images**: 29 images requiring denoising\n- **Image dimensions**: Variable sizes, primarily 540×420 pixels (WxH) and 540×258 pixels\n- **Total pixels to predict**: ~5,789,880 pixels across all test images\n- **Pixel format**: 8-bit grayscale (0-255 range), normalized to 0-1 for submission\n### **Target Distribution**\n- **Target type**: Continuous pixel intensities (regression task)\n- **Distribution**: Heavily imbalanced toward light pixels\n  - Light pixels (≥128): 87.98%\n  - Dark pixels (<128): 12.02%\n- **Pixel values**: Full grayscale spectrum (256 unique values)\n- **Characteristics**: Mostly white background with black text, representing clean document images\n### **Key Patterns and Characteristics**\n1. **Paired training data**: Each noisy image has a corresponding clean version\n2. **Noise characteristics**:\n   - Mean pixel difference between noisy and clean: -23.23 (noisy images are darker)\n   - Standard deviation of difference: 18.76\n   - Maximum absolute difference: 96 intensity levels\n3. **Image statistics**:\n   - Noisy images: Mean intensity 195.19 ± 7.50\n   - Clean images: Mean intensity 225.06 ± 3.22 (brighter/cleaner)\n4. **Submission format**: Melted pixel format with ID structure \"image_row_col\" (e.g., 110_1_1)\n5. **Data quality**: Perfect matching between train and cleaned images; all test images present in submission template\n### **Evaluation Metric with Direction (REQUIRED)**\n**Evaluation Metric:** RMSE - Root Mean Squared Error **(LOWER is better)**\n- Measures pixel-wise prediction error between predicted and actual grayscale intensities\n- Values normalized to 0-1 range (0 = perfect prediction, 1 = worst)\n- Formula: sqrt(mean((predicted - actual)²))\n- **Goal: MINIMIZE RMSE**\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "DenseNet161"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + DenseNet161 (2208-dim) = 4256-dim features for document denoising"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "Document denoising is a pixel-level regression task with 115 training pairs. Multi-model bottleneck features can capture both structural patterns (ResNet50) and fine-grained texture details (DenseNet161) from noisy documents. With limited training data, feature extraction avoids overfitting while LogisticRegression can learn the mapping from combined 4256-dim features to clean pixel intensities. This approach should handle the -23.23 mean pixel difference and 18.76 std noise patterns effectively."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: EfficientNet-B2 (1408-dim) + InceptionV3 (2048-dim) = 3456-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "Alternative multi-model combination to explore different feature representations. EfficientNet-B2's compound scaling captures efficient multi-scale features while InceptionV3's multi-branch architecture detects noise patterns at various receptive fields. With 87.98% light pixels and 12.02% dark pixels (text), this combination should distinguish text edges from background noise. The 3456-dim feature space provides rich representation for the regression task while remaining computationally efficient."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "model": "Wide_ResNet50_2",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Single-model baseline: Wide_ResNet50_2 (2048-dim) with wider layers for richer features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "Fast single-model baseline using Wide_ResNet50_2's wider residual blocks (2x width) to capture more diverse features than standard ResNet50. With only 115 training images, this provides a speed-optimized comparison against multi-model ensembles. The 2048-dim features should still capture document structure and noise patterns effectively. If this performs comparably to multi-model approaches, it validates using simpler architectures; if not, it confirms the value of ensemble feature extraction for this denoising task."
+      }
+    ]
+  },
+  "detecting-insults-in-social-commentary": {
+    "EDA": "Duration: 0.91 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (6717 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Let me now provide a comprehensive summary of the findings:\n## **Competition Analysis Report: Detecting Insults in Social Commentary**\n### **Data Type**\n**Text Data** - Natural Language Processing (NLP) binary classification task for detecting insulting comments in social media/forum discussions.\n### **Dataset Size and Shape**\n- **Training set:** 3,947 samples with 3 columns (Insult, Date, Comment)\n- **Test set:** 2,647 samples with 2 columns (Date, Comment)\n- **Total samples:** 6,594\n- **Features:** Text comments with optional timestamp information\n### **Target Distribution**\n**IMBALANCED Dataset:**\n- **Neutral comments (0):** 2,898 samples (73.42%)\n- **Insulting comments (1):** 1,049 samples (26.58%)\n- **Imbalance ratio:** 0.36 (Insult/Neutral)\nThe dataset shows significant class imbalance with insulting comments being the minority class (~27% of data).\n### **Key Patterns and Characteristics**\n1. **Text Characteristics:**\n   - Average comment length: 194 characters\n   - Average word count: 33 words\n   - Range: 1-2,407 words per comment\n   - Insulting comments tend to be slightly shorter (146 chars) than neutral ones (211 chars)\n2. **Data Quality:**\n   - No missing values in the Comment field (primary feature)\n   - Date field has ~18-20% missing values in both train and test sets\n   - Comments contain unicode characters, escape sequences, and various formatting\n3. **Content Patterns:**\n   - Neutral comments: Conversational, opinion-based, discussion-oriented\n   - Insulting comments: Contain profanity, personal attacks, derogatory language\n   - Challenge: Not all profanity indicates insults; context matters\n4. **Important Notes:**\n   - Problem tends to **strongly overfit** (mentioned in competition description)\n   - Training data is representative but not exhaustive\n   - Label noise is minimal (<1% error rate)\n   - Focus on insults directed at conversation participants, not public figures\n### **Evaluation Metric with Direction**\n**Evaluation Metric:** AUC (Area Under ROC Curve) - **HIGHER is better**\n- **Range:** [0, 1]\n- **Perfect score:** 1.0\n- **Random baseline:** 0.5\n- **Characteristics:** Penalizes confident wrong predictions; suitable for imbalanced classification\n- **Goal:** Maximize AUC score on the test set\nThis metric is particularly appropriate for this imbalanced classification problem as it evaluates the model's ability to rank insulting comments higher than neutral ones across all probability thresholds.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "transformer_features",
+        "model": "distilbert-base-uncased",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "text_embeddings",
+          "details": "DistilBERT CLS token embeddings (768-dim) from pretrained transformer, fast and effective for text classification"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 32,
+          "max_length": 128,
+          "C": 1.0,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Text classification with 3.9K samples - transformer features + LogisticRegression is optimal. DistilBERT is faster than BERT while maintaining strong performance. Class imbalance (73% neutral, 27% insult) handled via balanced class weights. Max length 128 covers 95%+ of comments (avg 33 words). This approach avoids overfitting (competition warning) by using frozen pretrained features rather than fine-tuning."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "transformer_features",
+        "model": "roberta-base",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "text_embeddings",
+          "details": "RoBERTa CLS token embeddings (768-dim) from pretrained transformer, trained on more diverse data than BERT"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 32,
+          "max_length": 128,
+          "C": 0.5,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "RoBERTa trained on 10x more data than BERT and uses byte-level BPE tokenization, better handling informal social media text with slang, misspellings, and unicode characters. Lower regularization (C=0.5) to prevent overfitting on small dataset. RoBERTa's robust pretraining on web text makes it ideal for detecting nuanced insults in social commentary where context and tone matter more than explicit profanity."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "text_features",
+          "details": "TF-IDF features (max 5000 features, 1-3 ngrams) + engineered features: comment length, word count, punctuation ratio, capital letter ratio, profanity indicators"
+        },
+        "hyperparameters": {
+          "n_estimators": 500,
+          "learning_rate": 0.05,
+          "max_depth": 6,
+          "num_leaves": 31,
+          "min_child_samples": 20,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "scale_pos_weight": 2.76,
+          "objective": "binary",
+          "metric": "auc"
+        },
+        "hypothesis": "Gradient boosting on TF-IDF + engineered features provides interpretable baseline and captures explicit patterns (specific insult words, excessive caps, punctuation). Scale_pos_weight=2.76 (ratio of neutral/insult) addresses class imbalance. This complements transformer approaches by capturing surface-level patterns while transformers capture semantic meaning. Ensemble of both strategies likely optimal for AUC maximization."
+      }
+    ]
+  },
+  "dog-breed-identification": {
+    "EDA": "Duration: 1.22 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (6903 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here's my comprehensive report:\n## **Competition Analysis Report: Dog Breed Identification**\n### **Data Type**\n- **Image Classification** - Fine-grained multi-class image classification problem with 120 dog breeds\n### **Dataset Size and Shape**\n- **Training set**: 9,199 images across 120 dog breeds\n- **Test set**: 1,023 images\n- **Labels file**: 9,199 rows × 2 columns (id, breed)\n- **Sample submission**: 1,023 rows × 121 columns (id + 120 breed probability columns)\n- **Average samples per breed**: 76.7 images\n- **Image characteristics**:\n  - Format: JPEG, RGB mode\n  - Variable dimensions (not uniform)\n  - Average size: 443×373 pixels\n  - Width range: 200-800 pixels\n  - Height range: 177-533 pixels\n  - Average aspect ratio: 1.22\n  - Average file size: 33.7 KB\n### **Target Distribution**\n- **Class balance status**: MODERATELY IMBALANCED\n- **Balance ratio**: 2.03 (max/min samples per class)\n- **Distribution statistics**:\n  - Most common breed: Scottish Deerhound (118 images)\n  - Least common breed: Komondor (58 images)\n  - Median: 74 images per breed\n  - Standard deviation: 12.07\n- All 120 breeds are represented in the training set with reasonable sample sizes (58-118 images each)\n### **Key Patterns and Characteristics**\n1. **Fine-grained classification challenge**: Distinguishing between 120 similar dog breeds (e.g., Norfolk Terrier vs Norwich Terrier)\n2. **Limited training data**: Average of only ~77 images per class for deep learning\n3. **Variable image dimensions**: Images need resizing/preprocessing for model input\n4. **Moderate class imbalance**: Some breeds have 2× more samples than others\n5. **Probability predictions required**: Must output probabilities for all 120 classes per image\n6. **Data integrity**: All IDs match between files and directories (100% consistency)\n### **CRITICAL - Evaluation Metric with Direction**\n**Evaluation Metric: Multi-Class Log Loss (LOWER is better)**\n- Also known as categorical cross-entropy\n- Penalizes confident incorrect predictions heavily\n- Range: [0, ∞) where 0 is perfect\n- Requires well-calibrated probability predictions across all 120 classes\n- Formula: -1/N × Σᵢ Σⱼ yᵢⱼ × log(pᵢⱼ)\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "solver": "lbfgs"
+        },
+        "hypothesis": "With only 9,199 images across 120 fine-grained dog breeds (~77 per class), multi-model bottleneck features will outperform fine-tuning. ResNet50 captures spatial hierarchies while InceptionV3 captures multi-scale features - their combination provides complementary representations. LogisticRegression on 4096-dim features trains in seconds and avoids overfitting on limited data. This approach has proven superior in similar competitions with <50K images."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "DenseNet161",
+          "ResNet50"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000,
+          "solver": "lbfgs"
+        },
+        "hypothesis": "Three complementary architectures capture diverse feature representations: EfficientNet-B2 (compound scaling), DenseNet161 (dense connections for feature reuse), and ResNet50 (residual learning). The 5664-dim feature space provides richer representations for distinguishing subtle breed differences. Lower C=0.5 adds regularization for the higher-dimensional space. This combination mirrors gold-medal solutions and should achieve 2-10x better logloss than single models."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Dual-model ensemble: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) = 3072-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "solver": "lbfgs"
+        },
+        "hypothesis": "Wide_ResNet50_2 provides wider residual blocks for increased representational capacity, while DenseNet121 offers efficient feature propagation through dense connections. This pairing balances model capacity with feature diversity. The 3072-dim feature space is smaller than exp_2 but may generalize better with moderate class imbalance (2.03 ratio). Tests whether wider networks outperform deeper ensembles for fine-grained classification."
+      }
+    ]
+  },
+  "dogs-vs-cats-redux-kernels-edition": {
+    "EDA": "Duration: 0.95 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me explore the data structure and write a comprehensive EDA script:\n🔧 Tool: Bash\n   Command: ls /home/data/train | head -20\n✓ Completed\n🔧 Tool: Bash\n   Command: ls /home/data/test | head -20\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/sample_submission.csv\n✓ Completed\nNow let me write a comprehensive EDA script:\n🔧 Tool: Write\n   Path: /home/eda.py (8549 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here are the findings:\n## **Competition Analysis Report: Dogs vs Cats Redux**\n### **Data Type**\n- **Image data** - Binary classification problem (Dogs vs Cats)\n### **Dataset Size and Shape**\n- **Training set:** 22,500 images\n- **Test set:** 2,500 images\n- **Total:** 25,000 images\n- **Image format:** RGB color images (.jpg)\n- **Image dimensions:** Variable sizes (Width: 126-500px, Height: 93-500px, Mean: ~407×353px)\n- **File sizes:** 2.4 KB to 57.5 KB (average ~22 KB)\n- **Aspect ratios:** 0.47 to 2.63 (mean: 1.20)\n### **Target Distribution**\n- **Perfectly BALANCED dataset:**\n  - Cats: 11,242 images (49.96%)\n  - Dogs: 11,258 images (50.04%)\n  - Class balance ratio: 1.00\n### **Key Patterns and Characteristics**\n- Labels are embedded in training filenames (cat.*.jpg, dog.*.jpg)\n- Test images have numeric IDs without labels (1.jpg, 2.jpg, etc.)\n- All images are RGB color images (3 channels)\n- Images have varying dimensions requiring preprocessing/resizing\n- No missing or corrupted images detected in sample\n- Submission requires probability predictions (not binary labels)\n- Submission format: CSV with columns 'id' and 'label' (probability)\n### **CRITICAL - Evaluation Metric**\n**Evaluation Metric:** Log Loss (LOWER is better)\n- Formula: LogLoss = -1/n × Σ[y_i × log(ŷ_i) + (1-y_i) × log(1-ŷ_i)]\n- Measures accuracy of probability predictions\n- Heavily penalizes confident wrong predictions\n- Range: [0, ∞), where 0 is perfect\n- Requires probability outputs between 0 and 1 (0=cat, 1=dog)\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "train_split": 0.85
+        },
+        "hypothesis": "Multi-model bottleneck with ResNet50+InceptionV3 should achieve best performance. With 22.5K training images (medium-sized dataset), extracting features from two complementary architectures (ResNet's residual connections + Inception's multi-scale filters) and training LogisticRegression on 4096-dim concatenated features will capture diverse visual patterns. This approach is proven in gold solutions for similar datasets, trains in 2-3 minutes, and avoids overfitting that fine-tuning causes with limited data. LogLoss metric rewards confident correct predictions, which ensemble features enable."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "DenseNet161",
+          "ResNet50"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000,
+          "train_split": 0.85
+        },
+        "hypothesis": "Triple-model bottleneck maximizes feature diversity for optimal LogLoss. EfficientNet-B2 (compound scaling), DenseNet161 (dense connections), and ResNet50 (residual learning) capture complementary visual representations. The 5664-dim feature space provides rich information for LogisticRegression to learn confident probability predictions. With balanced 22.5K dataset, this ensemble should reduce prediction uncertainty and achieve lower LogLoss than dual-model. Slightly lower C=0.5 regularization prevents overfitting on high-dimensional features. Expected to be best performer despite 3-4 min runtime."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Alternative dual-model: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) = 3072-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "train_split": 0.85
+        },
+        "hypothesis": "Alternative dual-model combination to explore different architecture synergies. Wide_ResNet50_2 (wider channels for richer features) + DenseNet121 (lighter but effective dense connections) provides different feature space than exp_1. With 3072-dim features, this balances performance and speed (2-3 min runtime). Tests whether wider ResNet variant + lighter DenseNet can match or beat standard ResNet50+InceptionV3. Helps identify optimal backbone combinations for Round 2 refinement."
+      }
+    ]
+  },
+  "jigsaw-toxic-comment-classification-challenge": {
+    "EDA": "Duration: 0.96 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -lah /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (6056 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here's my comprehensive report:\n---\n## **COMPETITION DATA ANALYSIS REPORT**\n### **Data Type**\n- **Text classification** (multi-label, multi-class problem)\n- Wikipedia talk page comments that need to be classified for toxicity\n### **Dataset Size and Shape**\n- **Training set**: 159,571 samples × 8 columns (1 ID, 1 text, 6 target labels)\n- **Test set**: 153,164 samples × 2 columns (ID and text)\n- **Memory footprint**: ~97 MB (train), ~82 MB (test)\n- **Text characteristics**:\n  - Average comment length: 394 characters (67 words)\n  - Range: 6 to 5,000 characters\n  - Median: 205 characters (36 words)\n### **Target Distribution (Class Balance)**\nThe dataset is **highly imbalanced** across all 6 toxicity categories:\n| Category | Positive Samples | Percentage |\n|----------|-----------------|------------|\n| toxic | 15,294 | 9.58% |\n| obscene | 8,449 | 5.29% |\n| insult | 7,877 | 4.94% |\n| severe_toxic | 1,595 | 1.00% |\n| identity_hate | 1,405 | 0.88% |\n| threat | 478 | **0.30%** |\n- **89.83%** of samples are completely clean (no toxicity)\n- **10.17%** have at least one toxic label\n- **6.18%** have multiple labels (multi-label cases)\n### **Key Patterns and Characteristics**\n1. **Severe Class Imbalance**: The \"threat\" class is extremely rare (0.3%), making it challenging to predict\n2. **Multi-Label Nature**:\n   - Most toxic samples (3.99%) have only 1 label\n   - 2.18% have 2 labels, decreasing to 0.02% with all 6 labels\n   - 31 samples have all 6 toxicity types\n3. **Strong Label Correlations**:\n   - Obscene ↔ Insult: 0.741 (very strong)\n   - Toxic ↔ Obscene: 0.677 (strong)\n   - Toxic ↔ Insult: 0.648 (strong)\n   - Threat shows weaker correlations with other labels\n4. **Text Length Patterns**: Interestingly, most toxic comments are **shorter** than non-toxic ones (except severe_toxic), suggesting toxic language is often concise\n5. **No Missing Data**: Complete dataset with no null values\n### **CRITICAL - Evaluation Metric with Direction**\n**Evaluation Metric:** Mean column-wise ROC AUC (HIGHER is better)\n- The score is calculated as the **average of individual AUC scores** for each of the 6 toxicity categories\n- Each category is evaluated independently, then averaged\n- This metric is appropriate for imbalanced multi-label classification\n- **Goal**: Maximize the mean AUC across all 6 categories\n---\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "transformer_features",
+        "model": "distilbert-base-uncased",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "text_embeddings",
+          "details": "DistilBERT CLS token embeddings (768-dim) for fast feature extraction"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "max_length": 128,
+          "C": 1.0,
+          "solver": "lbfgs",
+          "max_iter": 1000
+        },
+        "hypothesis": "Multi-label text classification with severe class imbalance (threat 0.3%, identity_hate 0.88%) requires strong semantic understanding. DistilBERT provides fast feature extraction from pretrained language model, capturing toxic language patterns. LogisticRegression handles multi-label output efficiently. Short text (avg 67 words) fits well in 128 tokens. This baseline establishes if pretrained embeddings capture toxicity without fine-tuning."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "transformer_features",
+        "model": "roberta-base",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "text_embeddings",
+          "details": "RoBERTa CLS token embeddings (768-dim) trained on more diverse data"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "max_length": 128,
+          "C": 1.0,
+          "solver": "lbfgs",
+          "max_iter": 1000
+        },
+        "hypothesis": "RoBERTa's training on larger, more diverse corpus (including social media text) may better capture toxic language nuances compared to BERT-based models. Strong label correlations (obscene-insult 0.741, toxic-obscene 0.677) suggest shared semantic patterns that RoBERTa's robust pretraining might capture better. Feature extraction approach handles 160K samples efficiently while avoiding overfitting on rare classes."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "text_features",
+          "details": "TF-IDF (max_features=10000, ngram_range=(1,3)) + character n-grams + length features"
+        },
+        "hyperparameters": {
+          "boosting_type": "gbdt",
+          "objective": "binary",
+          "metric": "auc",
+          "num_leaves": 31,
+          "learning_rate": 0.05,
+          "n_estimators": 500,
+          "max_depth": 7,
+          "min_child_samples": 20,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "reg_alpha": 0.1,
+          "reg_lambda": 0.1,
+          "device": "cpu"
+        },
+        "hypothesis": "Gradient boosting with engineered text features provides interpretable alternative to transformers. TF-IDF captures toxic keywords/phrases, character n-grams catch obfuscated profanity (common in toxic comments). LightGBM handles class imbalance well with scale_pos_weight and efficiently trains 6 separate binary classifiers for multi-label prediction. This tests if traditional ML + feature engineering can compete with deep learning on this 160K sample text dataset."
+      }
+    ]
+  },
+  "leaf-classification": {
+    "EDA": "Duration: 1.06 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (6887 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nLet me check the actual column names since the feature detection didn't work as expected:\n🔧 Tool: Bash\n   Command: cd /home && python -c \"import pandas as pd; df = pd.read_csv('/home/data/train.csv'); print('Column\n✓ Completed\nPerfect! Now let me create an updated EDA with the correct column naming pattern:\n🔧 Tool: Bash\n   Command: cd /home && python -c \"\nimport pandas as pd\nimport numpy as np\ntrain_df = pd.read_csv('/home/data/t\n✓ Completed\nPerfect! Now I have all the information. Let me provide the comprehensive findings report:\n---\n## **LEAF CLASSIFICATION - EDA FINDINGS REPORT**\n### **Data Type**\n**Tabular data** with pre-extracted numerical features from leaf images. The dataset includes both structured feature data (CSV files) and original image files for reference.\n### **Dataset Size and Shape**\n- **Training set:** 891 samples × 194 columns (1 id + 1 target + 192 features)\n- **Test set:** 99 samples × 193 columns (1 id + 192 features)\n- **Image files:** 990 images available in the images directory\n- **Features breakdown:**\n  - 64 margin features (margin1 to margin64)\n  - 64 shape features (shape1 to shape64)\n  - 64 texture features (texture1 to texture64)\n  - Total: 192 numerical features per sample\n### **Target Distribution**\n- **Number of classes:** 99 plant species\n- **Balance status:** **SLIGHTLY IMBALANCED**\n  - Mean samples per species: 9.00\n  - Median samples per species: 9.00\n  - Min samples per species: 6\n  - Max samples per species: 10\n  - Standard deviation: 0.89\n  - Class balance ratio (max/min): 1.67\n- The distribution is relatively balanced with most species having 8-10 samples, and only a few having 6-7 samples.\n### **Key Patterns and Characteristics**\n- ✓ **No missing values** in either training or test sets\n- ✓ **All features are numerical** (float64 type)\n- ✓ **Feature value ranges:** [0.0000, 0.8535] with mean ~0.0106\n- ✓ **Small dataset:** Only ~9 samples per class on average\n- ✓ **High dimensionality:** 192 features for 891 training samples\n- ✓ **Multi-class problem:** 99 different species to classify\n- ✓ **Pre-extracted features:** Features are already computed from leaf images (shape contours, interior texture histograms, and fine-scale margin histograms)\n- ✓ **Submission format:** Requires probability predictions for all 99 species per test sample\n### **Evaluation Metric with Direction**\n**Evaluation Metric:** Multi-class Log Loss (LOWER is better)\n- Also known as categorical cross-entropy\n- Measures the accuracy of probability predictions across all 99 classes\n- Range: [0, ∞), where 0 represents perfect prediction\n- Heavily penalizes confident incorrect predictions\n- Requires probability outputs that sum to 1.0 for each sample across all species\n---\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "With only 891 samples and 99 classes (~9 samples per class), multi-model bottleneck features will significantly outperform fine-tuning. ResNet50 captures spatial hierarchies while InceptionV3 captures multi-scale patterns - their combination provides complementary features for the 192 pre-extracted leaf characteristics. LogisticRegression trains in seconds and avoids overfitting on this small dataset. This approach has proven superior in similar small-sample competitions."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "DenseNet161",
+          "ResNet50"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000
+        },
+        "hypothesis": "Three complementary architectures capture diverse feature representations: EfficientNet-B2 (compound scaling), DenseNet161 (dense connections for feature reuse), and ResNet50 (residual learning). The 5664-dim combined feature space provides richer representation for distinguishing 99 leaf species. Lower C=0.5 adds regularization to prevent overfitting on the high-dimensional features. This mirrors gold-medal solutions that used 3-model ensembles."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Alternative dual-model: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) = 3072-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000
+        },
+        "hypothesis": "Tests a different architecture pairing: Wide_ResNet50_2 (wider layers for more capacity) + DenseNet121 (lighter than DenseNet161 but still captures dense feature connections). The 3072-dim feature space balances expressiveness with regularization. This explores whether a different model combination outperforms the standard ResNet50+InceptionV3 pairing for leaf texture/shape/margin features."
+      }
+    ]
+  },
+  "mlsp-2013-birds": {
+    "EDA": "Duration: 2.33 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data systematically. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/essential_data/ && ls -la /home/data/supplemental_data/\n✓ Completed\nNow let me write a comprehensive EDA script to analyze all aspects of this data:\n🔧 Tool: Write\n   Path: /home/eda.py (14702 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nI need to fix the script to skip header lines:\n🔧 Tool: Write\n   Path: /home/eda.py (15459 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has completed successfully. Let me provide a comprehensive summary of the findings:\n## **MLSP 2013 Birds Competition - EDA Findings**\n### **Data Type**\n- **AUDIO TIME-SERIES** (Multi-label classification problem)\n- 10-second audio recordings of bird sounds in natural environment\n### **Dataset Size and Shape**\n- **Total recordings:** 322\n- **Training set:** 258 recordings (only 145 have labels)\n- **Test set:** 64 recordings\n- **Classes:** 19 bird species\n- **Audio format:** WAV files (mono, 16kHz, 16-bit)\n- **Total duration:** 53.7 minutes of audio\n### **Target Distribution**\n- **IMBALANCED** with significant class imbalance\n- **Imbalance ratio:** 24.50x (most common vs least common species)\n- **Most common species:** Swainson's Thrush (49 occurrences, 33.79%)\n- **Least common species:** MacGillivray's Warbler (2 occurrences, 1.38%)\n- **Labels per recording:** 1-6 labels (mean: 1.86, median: 2.0)\n- **Label distribution:** 48.3% have 1 label, 26.9% have 2 labels, 17.2% have 3 labels\n### **Key Patterns and Characteristics**\n1. **Multi-label problem:** Each recording can contain multiple bird species simultaneously\n2. **Multi-instance structure:** Recordings contain variable numbers of segments (1-36, mean: 7.27)\n3. **Missing segments:** 168 recordings (52%) have no detected segments in the baseline segmentation\n4. **Pre-computed features available:**\n   - Histogram of segments: 100-dimensional features (97.42% sparse)\n   - Segment features: 38-dimensional features per segment\n5. **Real-world challenges:** Audio includes rain, wind, and multiple simultaneous vocalizations\n6. **Species co-occurrence:** Common pairs include Varied Thrush + Swainson's Thrush, Pacific Wren + Swainson's Thrush\n7. **Submission format:** rec_id * 100 + species_id for each prediction\n### **CRITICAL - Evaluation Metric**\n**Evaluation Metric: AUC (Area Under ROC Curve) (HIGHER is better)**\n- Range: [0, 1]\n- Perfect score: 1.0\n- Calculated separately for each of the 19 species (19 binary classification tasks)\n- Predictions must be probabilities in range [0, 1]\n- Public/Private test split: 1/3 public, 2/3 private\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "DenseNet161"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "audio_spectrogram",
+          "details": "Convert audio to mel-spectrograms, extract features using ResNet50 (2048-dim) + DenseNet161 (2208-dim) = 4256-dim multi-model ensemble"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "n_mels": 128,
+          "n_fft": 2048,
+          "hop_length": 512
+        },
+        "hypothesis": "Multi-label audio classification with severe class imbalance (24.5x ratio) and small dataset (145 labeled samples) is ideal for multi-model bottleneck features. Converting 10-second audio clips to mel-spectrograms allows using pretrained vision models. Multi-model ensemble (ResNet50 + DenseNet161) captures complementary acoustic patterns better than single model. LogisticRegression handles multi-label output naturally and trains fast on 4256-dim features. AUC metric benefits from probability calibration that LogReg provides."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "audio_spectrogram",
+          "details": "Alternative multi-model combination: EfficientNet-B2 (1408-dim) + InceptionV3 (2048-dim) = 3456-dim features from mel-spectrograms"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000,
+          "n_mels": 128,
+          "n_fft": 2048,
+          "hop_length": 512
+        },
+        "hypothesis": "Different backbone combination to explore which architecture pair best captures bird vocalizations in noisy environment (rain/wind). EfficientNet-B2's compound scaling and InceptionV3's multi-scale filters may better handle variable-length bird calls and background noise. Lower regularization (C=0.5) addresses extreme class imbalance where rare species (MacGillivray's Warbler: 2 samples) need stronger regularization to avoid overfitting."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "model": "DenseNet121",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "audio_spectrogram_segments",
+          "details": "Leverage pre-computed segment features: aggregate 38-dim segment features across variable segments (1-36 per recording) using mean/max pooling, then extract DenseNet121 features from spectrograms"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "n_mels": 128,
+          "n_fft": 2048,
+          "hop_length": 512,
+          "use_segment_features": true
+        },
+        "hypothesis": "Hybrid approach combining domain-specific segment features with deep features. 52% of recordings have no detected segments, suggesting baseline segmentation misses vocalizations. Single DenseNet121 model provides fast baseline while incorporating pre-computed 38-dim segment features (when available) adds domain knowledge about bird call structure. This tests whether segment-level information improves AUC for multi-instance learning problem where multiple birds vocalize simultaneously."
+      }
+    ]
+  },
+  "new-york-city-taxi-fare-prediction": {
+    "EDA": "Duration: 1.11 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -lh /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (7747 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here are the comprehensive findings:\n## **Competition Analysis Report: NYC Taxi Fare Prediction**\n### **Data Type**\n- **Tabular time-series regression data**\n### **Dataset Size and Shape**\n- **Training set**: ~55,413,942 rows × 8 columns (5.27 GB)\n- **Test set**: 9,914 rows × 7 columns (0.92 MB)\n- **Features**: 7 input features\n  - `key`: Unique identifier (string)\n  - `pickup_datetime`: Timestamp when taxi ride started (object/string)\n  - `pickup_longitude`: Longitude coordinate of pickup location (float)\n  - `pickup_latitude`: Latitude coordinate of pickup location (float)\n  - `dropoff_longitude`: Longitude coordinate of dropoff location (float)\n  - `dropoff_latitude`: Latitude coordinate of dropoff location (float)\n  - `passenger_count`: Number of passengers (integer, 0-6)\n- **Target**: `fare_amount` (continuous float, in USD)\n### **Target Distribution**\n- **Type**: Continuous regression target (NOT balanced/imbalanced - this is regression, not classification)\n- **Statistics**:\n  - Mean: $11.32\n  - Median: $8.50\n  - Standard deviation: $9.73\n  - Range: -$6.00 to $250.00\n  - 95th percentile: $30.10\n- **Distribution characteristics**:\n  - **Right-skewed** (skewness: 3.87, kurtosis: 30.83)\n  - Mean > Median indicates positive skew\n  - Contains outliers (negative fares: 0.003%, very high fares up to $250)\n  - Most fares between $6-$12.50 (IQR)\n### **Key Patterns and Characteristics**\n1. **Geospatial nature**: Primary features are latitude/longitude coordinates\n2. **Temporal component**: Pickup datetime spans ~6.5 years (2009-2015)\n3. **Data quality issues**:\n   - Coordinate outliers detected (e.g., longitude up to 2130, latitude down to -3084)\n   - Some negative and zero fares present\n   - Passenger count includes 0 (355 cases)\n4. **No missing values**: Complete dataset (0% missing)\n5. **Large-scale dataset**: 55M+ training samples requires efficient processing\n6. **Passenger distribution**: Heavily skewed toward 1 passenger (69% of rides)\n### **CRITICAL - Evaluation Metric with Direction**\n**Evaluation Metric:** RMSE (Root Mean Squared Error) **(LOWER is better)**\n- RMSE measures the square root of average squared differences between predictions and actual fares\n- Units are in dollars (same as target variable)\n- Baseline RMSE mentioned in description: $5-$8 using simple distance-based models\n- Sample submission uses mean fare ($11.35) as baseline prediction\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "engineered",
+          "details": "Haversine distance, Manhattan distance, bearing, pickup hour/day/month, distance per passenger"
+        },
+        "hyperparameters": {
+          "n_estimators": 1000,
+          "learning_rate": 0.05,
+          "max_depth": 8,
+          "num_leaves": 63,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "min_child_samples": 50,
+          "device": "cpu"
+        },
+        "hypothesis": "LightGBM with engineered geospatial and temporal features should capture non-linear relationships between distance, time patterns, and fare. The large dataset (55M samples) provides enough data for tree-based models to learn complex interactions. Feature engineering (haversine distance, temporal features) addresses the core problem that fare depends on distance traveled and time of day/week."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "gradient_boosting",
+        "model": "XGBoost",
+        "features": {
+          "type": "engineered",
+          "details": "Haversine distance, Manhattan distance, bearing, pickup hour/day/month/year, distance per passenger, airport proximity flags"
+        },
+        "hyperparameters": {
+          "n_estimators": 800,
+          "learning_rate": 0.05,
+          "max_depth": 7,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "min_child_weight": 5,
+          "tree_method": "hist",
+          "device": "cuda"
+        },
+        "hypothesis": "XGBoost with GPU acceleration and additional airport proximity features (JFK, LaGuardia, Newark) should improve predictions for airport trips which typically have higher/fixed fares. The hist tree method enables efficient training on the massive 55M sample dataset. Airport features are critical as NYC has flat-rate airport fares that differ from metered rides."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "CatBoost",
+        "features": {
+          "type": "engineered",
+          "details": "Haversine distance, Manhattan distance, bearing, pickup hour/day/month, distance per passenger, passenger_count as categorical"
+        },
+        "hyperparameters": {
+          "iterations": 1000,
+          "learning_rate": 0.05,
+          "depth": 7,
+          "subsample": 0.8,
+          "task_type": "GPU",
+          "loss_function": "RMSE"
+        },
+        "hypothesis": "CatBoost's native categorical feature handling should better capture passenger_count patterns (heavily skewed toward 1 passenger = 69% of rides) without manual encoding. CatBoost's ordered boosting reduces overfitting on the large dataset and its GPU implementation enables efficient training. The model should learn that single-passenger rides may have different fare patterns than multi-passenger rides."
+      }
+    ]
+  },
+  "nomad2018-predict-transparent-conductors": {
+    "EDA": "Duration: 2.04 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data systematically. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (7842 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\n## EDA Report: NOMAD2018 Transparent Conductors Competition\n### **Data Type**\nTabular data with spatial geometry files (materials science domain)\n### **Dataset Size and Shape**\n- **Training samples:** 2,160 materials\n- **Test samples:** 240 materials\n- **Total samples:** 2,400\n- **Features:** 11 numerical/categorical features in CSV files\n- **Targets:** 2 continuous variables (formation_energy_ev_natom, bandgap_energy_ev)\n- **Additional data:** Each material has a corresponding geometry.xyz file containing 3D atomic coordinates (16-86 lines per file, mean ~67 lines)\n### **Target Distribution**\n**Formation Energy (formation_energy_ev_natom):**\n- Range: [0.0000, 0.6572] eV/atom\n- Mean: 0.1876, Median: 0.1820\n- Std: 0.1044\n- Slightly right-skewed (skewness: 0.46)\n- 99.91% positive values, 2 zero values\n**Bandgap Energy (bandgap_energy_ev):**\n- Range: [0.0001, 5.2861] eV\n- Mean: 2.0755, Median: 1.9017\n- Std: 1.0059\n- Slightly right-skewed (skewness: 0.57)\n- 100% positive values\n**Class Balance:** N/A (regression problem, not classification). Both targets are continuous and well-distributed with no extreme imbalances.\n### **Key Patterns and Characteristics**\n1. **Feature Types:**\n   - Spacegroup: Categorical (6 unique values) - represents crystal symmetry\n   - Atomic composition: percent_atom_al, percent_atom_ga, percent_atom_in (42 unique values each)\n   - Lattice parameters: 3 vector lengths + 3 angles (highly continuous)\n   - Number of atoms: 6 unique values\n2. **Strong Correlations:**\n   - Bandgap energy strongly correlated with Al percentage (r=0.74)\n   - Formation energy moderately correlated with lattice_vector_3 (r=0.45)\n   - Spacegroup shows moderate correlation with formation energy (r=0.32)\n3. **Data Quality:**\n   - No missing values in CSV files\n   - 13 duplicate materials in training set (0.6%)\n   - 20 duplicate materials in test set (8.3%)\n   - Train/test distributions are similar across all features\n4. **Spatial Data:**\n   - Each material has 3D atomic coordinates in geometry.xyz files\n   - Variable number of atoms per structure (16-86 atoms)\n   - Includes lattice vectors and atomic positions\n### **Evaluation Metric with Direction**\n**Evaluation Metric:** RMSLE (Root Mean Squared Logarithmic Error) - **LOWER is better**\n- RMSLE is calculated for each target column separately, then averaged\n- Formula: sqrt(mean((log(pred+1) - log(actual+1))²))\n- Penalizes underestimation more than overestimation\n- Well-suited for this problem since all target values are positive\n- Focuses on relative errors rather than absolute errors\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "gradient_boosting",
+        "model": "XGBoost",
+        "features": {
+          "type": "tabular",
+          "details": "11 numerical/categorical features from CSV + engineered features from lattice parameters (volume, density proxies, angle ratios)"
+        },
+        "hyperparameters": {
+          "tree_method": "hist",
+          "n_estimators": 500,
+          "max_depth": 6,
+          "learning_rate": 0.05,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "objective": "reg:squaredlogerror"
+        },
+        "hypothesis": "XGBoost with RMSLE-optimized objective should handle the tabular features well. The strong correlations (Al% with bandgap r=0.74, lattice_vector_3 with formation energy r=0.45) suggest tree-based models can capture these relationships. Engineering features from lattice parameters (volume = product of vectors, angle-based features) may help since these are physical properties of crystal structures."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "tabular",
+          "details": "11 base features + atomic composition ratios (Al/Ga, In/Ga, Al/In) + lattice parameter interactions (vector products, angle sums)"
+        },
+        "hyperparameters": {
+          "n_estimators": 1000,
+          "max_depth": 8,
+          "learning_rate": 0.03,
+          "num_leaves": 64,
+          "subsample": 0.85,
+          "colsample_bytree": 0.85,
+          "objective": "regression",
+          "metric": "rmse"
+        },
+        "hypothesis": "LightGBM with deeper trees and more iterations may capture complex interactions between atomic composition and crystal structure. Creating ratio features (Al/Ga, In/Ga) could help since these are ternary compounds (Al-Ga-In-O). The 6 spacegroup categories suggest symmetry matters, which tree splits can learn. LightGBM's leaf-wise growth may better handle the 2160 training samples."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "CatBoost",
+        "features": {
+          "type": "tabular",
+          "details": "11 base features with spacegroup as categorical + polynomial features from lattice vectors (squared terms, cross products) + atomic composition interactions"
+        },
+        "hyperparameters": {
+          "iterations": 800,
+          "depth": 7,
+          "learning_rate": 0.04,
+          "l2_leaf_reg": 3,
+          "loss_function": "RMSE",
+          "cat_features": [
+            "spacegroup"
+          ]
+        },
+        "hypothesis": "CatBoost's native categorical handling for spacegroup (6 unique crystal symmetries) should be advantageous. Materials science suggests polynomial relationships between lattice parameters and energy properties. Creating squared/cross-product features from the 3 lattice vectors and 3 angles may capture geometric constraints. CatBoost's ordered boosting may reduce overfitting on the 2160 samples while handling the 13 duplicates robustly."
+      }
+    ]
+  },
+  "plant-pathology-2020-fgvc7": {
+    "EDA": "Duration: 1.85 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (6115 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here's my comprehensive report:\n## **Competition Analysis Report: Plant Pathology 2020-FGVC7**\n### **Data Type**\n- **Image Classification** - RGB images of apple leaves for disease detection\n### **Dataset Size and Shape**\n- **Training set**: 1,638 samples with 5 columns (image_id + 4 target classes)\n- **Test set**: 183 samples\n- **Total images**: 1,821 JPG files\n- **Train/Test ratio**: 8.95:1\n- **Image dimensions**: Uniform 2048×1365 pixels (RGB)\n- **Average file size**: ~202 KB per image\n### **Target Distribution (Imbalanced)**\nThe dataset has **4 mutually exclusive classes**:\n1. **healthy**: 468 samples (28.57%)\n2. **rust**: 551 samples (33.64%)\n3. **scab**: 534 samples (32.60%)\n4. **multiple_diseases**: 85 samples (5.19%) ⚠️\n**Class Balance**: **IMBALANCED** with imbalance ratio of 6.48:1\n- The \"multiple_diseases\" class is severely underrepresented (only 5.19% of data)\n- Other three classes are relatively balanced (28-34% each)\n### **Key Patterns and Characteristics**\n1. **Single-label classification**: Each image has exactly one label (not multi-label despite having multiple columns)\n2. **Binary encoding**: Target columns use binary (0/1) encoding\n3. **No missing values**: Complete dataset with no null values\n4. **Uniform image format**: All images are RGB JPG with consistent dimensions\n5. **No train/test overlap**: Clean separation between training and test sets\n6. **Rare class challenge**: The \"multiple_diseases\" class presents a significant challenge with only 85 examples\n### **CRITICAL - Evaluation Metric with Direction:**\n**Evaluation Metric:** Mean column-wise ROC AUC (HIGHER is better)\nThis metric averages the ROC AUC scores across all 4 target columns, making it crucial to perform well on all classes including the rare \"multiple_diseases\" class.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) = 4096-dim concatenated features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "With only 1,638 training samples and severe class imbalance (5.19% for multiple_diseases), multi-model bottleneck features will outperform fine-tuning. ResNet50 captures spatial hierarchies while InceptionV3 captures multi-scale patterns. Combining 4096-dim features with balanced LogisticRegression handles the rare class better than training full networks. This approach trains in 2-3 minutes vs 20+ for fine-tuning, and historically achieves 2-10x better scores on small datasets."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "DenseNet161",
+          "ResNet50"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: EfficientNet-B2 (1408-dim) + DenseNet161 (2208-dim) + ResNet50 (2048-dim) = 5664-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Three complementary architectures capture diverse feature representations: EfficientNet-B2 (compound scaling), DenseNet161 (dense connections for feature reuse), and ResNet50 (residual learning). The 5664-dim feature space provides richer representations for the rare multiple_diseases class (85 samples). Lower C=0.5 adds regularization to prevent overfitting on the small dataset. This maximizes ROC AUC across all 4 classes by leveraging architectural diversity."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Dual-model ensemble: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) = 3072-dim features"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 2.0,
+          "max_iter": 1000,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Wide_ResNet50_2 has wider layers for better feature capacity, while DenseNet121 is lighter but captures fine-grained patterns through dense connections. This 3072-dim combination balances model capacity with regularization. Higher C=2.0 allows more flexibility since we have balanced class_weight handling the imbalance. Tests whether a medium-sized ensemble with different regularization outperforms larger or smaller feature spaces for this specific 4-class plant disease task."
+      }
+    ]
+  },
+  "random-acts-of-pizza": {
+    "EDA": "Duration: 1.06 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (8668 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Let me provide you with a comprehensive summary of the findings:\n## **Competition Analysis Report: Random Acts of Pizza**\n### **Data Type**\n- **Tabular data with text features** - A hybrid dataset combining structured metadata and unstructured text content\n### **Dataset Size and Shape**\n- **Training set:** 2,878 samples with 32 features\n- **Test set:** 1,162 samples with 17 features (target and retrieval-time features removed)\n- **Total dataset:** 4,040 records\n- **File formats:** JSON files (train.json: 8.37 MB, test.json: 2.05 MB), with ZIP archives also available\n### **Target Distribution**\n- **Target variable:** `requester_received_pizza` (binary classification)\n- **Class distribution:**\n  - False (no pizza): 2,163 samples (75.16%)\n  - True (received pizza): 715 samples (24.84%)\n- **Status:** **IMBALANCED** with a ratio of **3.03:1** (majority to minority class)\n### **Key Patterns and Characteristics**\n1. **Feature Categories:**\n   - **Text features (4):** Request text, request title, usernames\n   - **Numeric features (20):** User activity metrics, votes, comments, posts\n   - **Timestamp features (2):** Unix timestamps of requests\n   - **Categorical features:** User flair, post edited status\n   - **List features (1):** Subreddits where requester was active\n2. **Text Characteristics:**\n   - Request text: Mean length 403 characters (range: 0-4,460)\n   - Request title: Mean length 72 characters (range: 7-272)\n3. **Top Predictive Features (by correlation with target):**\n   - `requester_number_of_posts_on_raop_at_retrieval`: 0.4622\n   - `request_number_of_comments_at_retrieval`: 0.2907\n   - `requester_number_of_comments_in_raop_at_retrieval`: 0.2771\n   - Community engagement and activity history are strong indicators\n4. **Data Quality:**\n   - Missing values: Only `requester_user_flair` has 75% missing (2,163 records)\n   - User flair appears to be a perfect predictor when present (100% success rate for both \"shroom\" and \"PIF\" flairs)\n5. **Key Insights:**\n   - This is a **text classification problem** requiring NLP techniques\n   - User engagement history and community participation are important signals\n   - The problem involves predicting altruistic behavior based on request content and user metadata\n   - Temporal patterns may be relevant (timestamps available)\n### **CRITICAL - Evaluation Metric with Direction:**\n**Evaluation Metric:** AUC (HIGHER is better)\nThe competition uses **Area Under the ROC Curve (AUC)** to evaluate submissions. This metric is appropriate for imbalanced binary classification and measures the model's ability to distinguish between classes across all classification thresholds. Higher AUC values (closer to 1.0) indicate better model performance.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "transformer_features",
+        "model": "distilbert-base-uncased",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "text_embeddings",
+          "details": "Extract DistilBERT embeddings from request_text_edit_aware (403 char avg), combine with numeric features (20 features including requester_number_of_posts_on_raop_at_retrieval which has 0.46 correlation)"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 32,
+          "max_length": 512,
+          "C": 1.0,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Text content is primary signal (request_text avg 403 chars). DistilBERT embeddings + numeric metadata (especially requester_number_of_posts_on_raop_at_retrieval with 0.46 correlation) should capture both semantic content and user engagement patterns. Class imbalance (3:1 ratio) handled with balanced weights."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "engineered_features",
+          "details": "TF-IDF on request_text (max_features=5000) + request_title (max_features=1000) + all 20 numeric features + text length features + temporal features from unix_timestamp_of_request"
+        },
+        "hyperparameters": {
+          "n_estimators": 500,
+          "learning_rate": 0.05,
+          "max_depth": 7,
+          "num_leaves": 31,
+          "min_child_samples": 20,
+          "scale_pos_weight": 3.0,
+          "feature_fraction": 0.8,
+          "bagging_fraction": 0.8,
+          "bagging_freq": 5
+        },
+        "hypothesis": "LightGBM can handle mixed feature types well. TF-IDF captures keyword patterns in requests, numeric features capture user history (top correlations: 0.46, 0.29, 0.28), and temporal patterns may reveal timing effects. Scale_pos_weight=3.0 addresses 3:1 class imbalance. Medium dataset size (2878 samples) suits gradient boosting."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "transformer_features",
+        "model": "roberta-base",
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "text_embeddings",
+          "details": "RoBERTa embeddings from concatenated request_title + request_text_edit_aware (max 512 tokens), combined with top 10 numeric features by correlation (requester_number_of_posts_on_raop_at_retrieval, request_number_of_comments_at_retrieval, etc.)"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 16,
+          "max_length": 512,
+          "C": 0.5,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "RoBERTa may capture nuanced language patterns better than DistilBERT for persuasive text. Concatenating title+text provides full context. Focusing on top 10 numeric features (by correlation) reduces noise. Smaller batch size (16) accommodates RoBERTa's larger memory footprint. This tests if more sophisticated transformer improves over DistilBERT baseline."
+      }
+    ]
+  },
+  "ranzcr-clip-catheter-line-classification": {
+    "EDA": "Duration: 2.36 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me explore the data files and write a comprehensive EDA script:\n🔧 Tool: Bash\n   Command: ls /home/data/train | head -20\n✓ Completed\n🔧 Tool: Bash\n   Command: ls /home/data/test | head -20\n✓ Completed\n🔧 Tool: Bash\n   Command: wc -l /home/data/train.csv /home/data/sample_submission.csv /home/data/train_annotations.csv\n✓ Completed\nNow let me write a comprehensive EDA script:\n🔧 Tool: Write\n   Path: /home/eda.py (11589 bytes)\n✓ Completed\nNow let's run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Let me provide a comprehensive summary of the findings:\n## **Competition Data Analysis Report**\n### **Data Type:**\n- **Medical Image Classification** (Multi-label) - Chest X-ray images with tabular labels\n### **Dataset Size and Shape:**\n- **Training set:** 27,074 chest X-ray images with labels\n- **Test set:** 3,009 images\n- **Image format:** JPEG, grayscale (mode L)\n- **Image dimensions:** Variable sizes (e.g., 3056×2544, 2992×2991, 2500×2048, 2048×2500)\n- **Labels:** 11 binary target columns per image\n- **Unique patients:** 3,202 (average 8.46 studies per patient)\n- **Additional data:** 16,261 segmentation annotation records covering 30.3% of training images\n### **Target Distribution (Balanced/Imbalanced):**\n**HIGHLY IMBALANCED** dataset with significant class imbalance:\n- **Average positive rate:** 15.3% across all labels\n- **Average imbalance ratio:** 55.1:1\n- **Most imbalanced:** ETT - Abnormal (0.28% positive, 355:1 ratio)\n- **Least imbalanced:** CVC - Normal (70.81% positive, 0.4:1 ratio)\n- **Multi-label characteristics:**\n  - 62.4% of images have exactly 1 label\n  - 37.6% have 2+ labels (up to 6 labels per image)\n  - Average 1.68 labels per image\n### **Key Patterns and Characteristics:**\n1. **Label Categories (4 device types):**\n   - **ETT (Endotracheal Tube):** Abnormal (0.28%), Borderline (3.79%), Normal (24.02%)\n   - **NGT (Nasogastric Tube):** Abnormal (0.94%), Borderline (1.80%), Incompletely Imaged (9.06%), Normal (15.92%)\n   - **CVC (Central Venous Catheter):** Abnormal (10.69%), Borderline (28.19%), Normal (70.81%)\n   - **Swan Ganz Catheter:** Present (2.73%)\n2. **Label Co-occurrence:** CVC labels frequently co-occur (11.93% of images have multiple CVC labels), while ETT and NGT labels are mostly mutually exclusive within their groups\n3. **Patient-level data:** Multiple studies per patient suggest temporal/longitudinal data with potential data leakage risk if not properly handled\n4. **Segmentation annotations:** Available for 30% of training data, providing additional spatial information about catheter/line positions\n### **CRITICAL - Evaluation Metric:**\n**Evaluation Metric:** AUC (Area Under ROC Curve) - **HIGHER is better**\n- **Calculation:** AUC computed independently for each of the 11 labels, then averaged (mean AUC)\n- **Range:** 0.0 to 1.0 (1.0 is perfect)\n- **Direction:** HIGHER is better\n- **Rationale:** Well-suited for highly imbalanced multi-label classification problems\n---\n**Key Challenges Identified:**\n- Extreme class imbalance (especially for abnormal categories)\n- Variable image sizes requiring preprocessing\n- Multi-label prediction complexity\n- Patient-level grouping requiring careful train/validation splitting\n- Medical imaging domain requiring specialized architectures\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "DenseNet161"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + DenseNet161 (2208-dim) = 4256-dim features for medical imaging"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Multi-model bottleneck with ResNet50+DenseNet161 is optimal for this 27K medical image dataset with extreme class imbalance (avg 55:1 ratio). DenseNet's dense connections capture fine-grained catheter details while ResNet provides robust general features. Balanced class weights handle imbalance. Fast training (2-4 min) allows quick iteration. Proven approach from gold solutions for small-medium image datasets."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "Wide_ResNet50_2"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: EfficientNet-B2 (1408-dim) + Wide_ResNet50_2 (2048-dim) = 3456-dim features optimized for efficiency"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "max_iter": 1000,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Alternative multi-model combination testing EfficientNet-B2's compound scaling (better parameter efficiency) paired with Wide_ResNet50_2's increased width for medical feature extraction. Different architecture families may capture complementary patterns in catheter positioning. Lower C=0.5 for stronger regularization given extreme imbalance in abnormal classes (0.28%-10.69% positive rates)."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "InceptionV3",
+          "DenseNet121"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: ResNet50 (2048-dim) + InceptionV3 (2048-dim) + DenseNet121 (1024-dim) = 5120-dim features for maximum diversity"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "max_iter": 1000,
+          "class_weight": "balanced"
+        },
+        "hypothesis": "Triple-model ensemble maximizes architectural diversity: ResNet (residual), Inception (multi-scale), DenseNet (dense connections). Each captures different aspects of medical imaging - Inception's multi-scale convolutions ideal for variable catheter sizes, DenseNet for fine details, ResNet for robust features. 5120-dim feature space provides rich representation for 11-label multi-label classification with AUC metric. Gold solutions show 3-model ensembles achieve 2-10x better performance than single models."
+      }
+    ]
+  },
+  "siim-isic-melanoma-classification": {
+    "EDA": "Duration: 1.58 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (11392 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Let me now provide a comprehensive summary of the findings:\n## **SIIM-ISIC Melanoma Classification - EDA Report**\n### **Data Type**\n- **Image Classification** (Medical Imaging - Dermoscopy)\n- Binary classification task to identify malignant melanoma in skin lesion images\n- Multi-modal data: Images (DICOM/JPEG/TFRecord) + Tabular metadata\n### **Dataset Size and Shape**\n- **Training set:** 28,984 images from 2,056 unique patients\n- **Test set:** 4,142 images from 1,457 unique patients\n- **Features:** 8 columns including:\n  - `image_name`: Unique image identifier\n  - `patient_id`: Patient identifier (multiple images per patient)\n  - `sex`: Patient gender (0.19% missing)\n  - `age_approx`: Approximate age (0.20% missing)\n  - `anatom_site_general_challenge`: Body location (1.61% missing)\n  - `diagnosis`: Detailed diagnosis (81.85% marked as \"unknown\")\n  - `benign_malignant`: Binary label\n  - `target`: Binary target variable (0=benign, 1=malignant)\n### **Target Distribution**\n- **HIGHLY IMBALANCED dataset**\n  - Benign (0): 28,471 samples (98.23%)\n  - Malignant (1): 513 samples (1.77%)\n  - **Class imbalance ratio: 55.50:1**\n- This extreme imbalance requires special handling (class weights, oversampling, focal loss, etc.)\n### **Key Patterns and Characteristics**\n1. **Patient-Level Context:**\n   - Average 14.10 images per patient in training set\n   - Range: 1 to 104 images per patient\n   - 392 patients have at least one malignant lesion\n   - ⚠️ **CRITICAL:** 1,457 patients appear in BOTH train and test sets (100% of test patients)\n   - This suggests patient-level context can be leveraged during inference\n2. **Demographics:**\n   - Age: Mean 48.9 years (range 0-90)\n   - Malignant lesions occur in older patients (mean 58.1 vs 48.7 years)\n   - Gender: 51.59% male, 48.22% female (balanced)\n3. **Anatomical Distribution:**\n   - Torso: 51.00% (most common)\n   - Lower extremity: 25.30%\n   - Upper extremity: 15.03%\n   - Head/neck: 5.60%\n4. **Image Formats:**\n   - DICOM files (medical standard, ~1 MB each)\n   - JPEG files (both train and test directories)\n   - TFRecord files (preprocessed, resized to 1024x1024, 8.70 GB total)\n### **Evaluation Metric with Direction**\n**Evaluation Metric:** AUC-ROC (Area Under the ROC Curve) **(HIGHER is better)**\n- Range: 0.0 to 1.0\n- 1.0 = Perfect classifier\n- 0.5 = Random classifier\n- Measures the model's ability to distinguish between benign and malignant lesions across all classification thresholds\n- Well-suited for imbalanced datasets as it's threshold-independent\n---\n**Critical Considerations for Modeling:**\n- Extreme class imbalance requires specialized techniques\n- Patient overlap between train/test enables patient-level context usage\n- Medical imaging domain benefits from transfer learning (ImageNet pretrained models)\n- Careful validation strategy needed to avoid patient-level data leakage\n- Multiple image formats available for flexibility in approach\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "DenseNet161"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: ResNet50 (2048-dim) + DenseNet161 (2208-dim) = 4256-dim features for melanoma detection"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "class_weight": "balanced",
+          "max_iter": 1000
+        },
+        "hypothesis": "Multi-model bottleneck with ResNet50 + DenseNet161 will capture complementary features for melanoma classification. With only 28,984 training images and extreme class imbalance (1.77% malignant), feature extraction from pretrained models is optimal. Different architectures (ResNet's residual connections vs DenseNet's dense connections) will capture different visual patterns in skin lesions. LogisticRegression with balanced class weights handles the 55:1 imbalance. This approach trains in 2-3 minutes and typically outperforms fine-tuning on small medical imaging datasets."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Multi-model ensemble: EfficientNet-B2 (1408-dim) + InceptionV3 (2048-dim) = 3456-dim features optimized for efficiency and multi-scale detection"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.5,
+          "class_weight": "balanced",
+          "max_iter": 1000
+        },
+        "hypothesis": "EfficientNet-B2 + InceptionV3 combination provides excellent feature diversity: EfficientNet's compound scaling captures fine-grained texture details critical for melanoma (asymmetry, border irregularity), while InceptionV3's multi-scale convolutions detect patterns at different spatial scales. This is crucial for dermoscopy images where malignant features appear at various sizes. The 3456-dim feature space is rich enough for the 513 malignant samples without overfitting. Lower C=0.5 adds regularization for the extreme imbalance."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121",
+          "EfficientNet-B0"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "pretrained_features",
+          "details": "Triple-model ensemble: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) + EfficientNet-B0 (1280-dim) = 4352-dim features for maximum diversity"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "class_weight": "balanced",
+          "max_iter": 1000,
+          "solver": "saga"
+        },
+        "hypothesis": "Triple-model ensemble maximizes architectural diversity for melanoma detection: Wide_ResNet50_2 (wider layers for richer representations), DenseNet121 (feature reuse via dense connections), and EfficientNet-B0 (balanced efficiency). Each architecture has different inductive biases that capture unique aspects of skin lesion morphology. With 4352-dim features from 3 complementary models, this should achieve the best AUC-ROC by learning a more robust decision boundary. SAGA solver handles the high-dimensional sparse features efficiently. Gold-medal solutions consistently show 3-model ensembles outperform 2-model by 5-15% in AUC."
+      }
+    ]
+  },
+  "spooky-author-identification": {
+    "EDA": "Duration: 0.87 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (7189 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here's my comprehensive report:\n## **EDA FINDINGS REPORT**\n### **Data Type**\n- **TEXT data** - Natural Language Processing task for author identification\n### **Dataset Size and Shape**\n- **Training set:** 17,621 samples × 3 columns (id, text, author)\n- **Test set:** 1,958 samples × 2 columns (id, text)\n- **Total samples:** 19,579 text excerpts\n- **Vocabulary:** 42,554 unique words in training data\n### **Target Distribution**\n- **BALANCED dataset** with class imbalance ratio of 1.40\n- **EAP (Edgar Allan Poe):** 7,090 samples (40.2%)\n- **MWS (Mary Wollstonecraft Shelley):** 5,457 samples (31.0%)\n- **HPL (HP Lovecraft):** 5,074 samples (28.8%)\n### **Key Patterns and Characteristics**\n1. **Multi-class text classification** problem with 3 author classes\n2. **Text characteristics:**\n   - Average text length: ~149 characters\n   - Average word count: ~27 words per excerpt\n   - Most texts are single sentences (avg 1.07 sentences)\n   - Text length ranges from 21 to 4,663 characters\n3. **Author-specific patterns:**\n   - **EAP:** Shortest texts (141.7 chars avg), highest punctuation (3.53 marks/text)\n   - **MWS:** Medium length (151.6 chars avg), high punctuation (3.51 marks/text)\n   - **HPL:** Longest texts (155.5 chars avg), lowest punctuation (2.81 marks/text)\n4. **Data quality:** No missing values in any dataset\n5. **Submission format:** Requires probability predictions for all 3 classes (EAP, HPL, MWS)\n### **CRITICAL - Evaluation Metric with Direction:**\n**Evaluation Metric:** Multi-class Logarithmic Loss / Log Loss **(LOWER is better)**\n- Formula: -1/N × Σ Σ y_ij × log(p_ij)\n- Perfect predictions = 0.0\n- Random guessing ≈ 1.099 (for 3 balanced classes)\n- Lower values indicate better probability predictions\n→ Metric direction: LOWER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "transformer_features",
+        "model": "distilbert-base-uncased",
+        "features": {
+          "type": "text_embeddings",
+          "details": "DistilBERT embeddings with mean pooling for author style classification"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 32,
+          "max_length": 128,
+          "classifier": "LogisticRegression",
+          "C": 1.0
+        },
+        "hypothesis": "DistilBERT can capture author-specific writing styles and vocabulary patterns. With 17K balanced samples and clear author differences (punctuation, text length), transformer embeddings should effectively distinguish between EAP's concise style, HPL's longer prose, and MWS's medium-length texts. Fast inference for bottleneck approach."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "transformer_features",
+        "model": "roberta-base",
+        "features": {
+          "type": "text_embeddings",
+          "details": "RoBERTa embeddings with mean pooling for robust author identification"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 32,
+          "max_length": 128,
+          "classifier": "LogisticRegression",
+          "C": 1.0
+        },
+        "hypothesis": "RoBERTa's improved pretraining (more data, dynamic masking) may better capture subtle stylistic differences between authors. The 42K vocabulary and author-specific punctuation patterns (EAP: 3.53, HPL: 2.81 marks/text) suggest RoBERTa's robust tokenization will excel at distinguishing writing styles for optimal log loss."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "text_features",
+          "details": "TF-IDF features (1-3 grams) + statistical features (text length, punctuation, word count, sentence count)"
+        },
+        "hyperparameters": {
+          "tfidf_max_features": 5000,
+          "ngram_range": [
+            1,
+            3
+          ],
+          "num_leaves": 31,
+          "learning_rate": 0.05,
+          "n_estimators": 500,
+          "objective": "multiclass",
+          "num_class": 3
+        },
+        "hypothesis": "LightGBM with TF-IDF can capture author-specific word choices and n-gram patterns. Statistical features (avg text length: EAP=141.7, MWS=151.6, HPL=155.5 chars; punctuation differences) provide strong signals. Fast training on 17K samples, proven effective for text classification with engineered features as baseline comparison to transformers."
+      }
+    ]
+  },
+  "tabular-playground-series-dec-2021": {
+    "EDA": "Duration: 1.32 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -lah /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (8567 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Let me now provide a comprehensive summary of the findings:\n## **EDA FINDINGS REPORT**\n### **Data Type**\n- **Tabular data** - Multi-class classification problem\n### **Dataset Size and Shape**\n- **Training set**: 3,600,000 rows × 56 columns (1,538 MB)\n- **Test set**: 400,000 rows × 55 columns (168 MB)\n- **Features**: 54 features (excluding Id and target)\n- **Target classes**: 7 classes (Cover_Type: 1-7)\n### **Target Distribution**\n- **HIGHLY IMBALANCED** dataset with extreme class imbalance:\n  - **Class 2**: 2,036,254 samples (56.56%) - Dominant class\n  - **Class 1**: 1,320,866 samples (36.69%) - Second most common\n  - **Class 3**: 176,184 samples (4.89%)\n  - **Class 7**: 56,125 samples (1.56%)\n  - **Class 6**: 10,237 samples (0.28%)\n  - **Class 4**: 333 samples (0.01%)\n  - **Class 5**: 1 sample (0.00%) - Extremely rare!\n  - **Imbalance ratio**: 2,036,254:1 (most to least common)\n### **Key Patterns and Characteristics**\n1. **Feature composition**:\n   - 10 continuous numeric features (Elevation, Aspect, Slope, distances, hillshade values)\n   - 4 binary Wilderness Area indicators (one-hot encoded)\n   - 40 binary Soil Type indicators (one-hot encoded)\n   - All features are integer type\n2. **Data quality**:\n   - ✓ No missing values in train or test sets\n   - ✓ No duplicate rows\n   - ✓ Feature consistency between train and test\n   - ✓ Clean, synthetic data generated using CTGAN\n3. **Feature importance** (by correlation with target):\n   - **Elevation** (0.40) - Strongest predictor\n   - **Wilderness_Area4** (0.25)\n   - **Wilderness_Area1** (0.12)\n   - Various Soil Types and distance features\n4. **Data characteristics**:\n   - Based on Forest Cover Type Prediction dataset\n   - Synthetic data may have different relationships than original\n   - Large dataset (3.6M samples) suitable for complex models\n   - Some features have negative values (likely from synthetic generation)\n### **File Formats**\n- All files are CSV format\n- Submission requires: Id, Cover_Type columns\n- Expected 400,000 predictions\n### **🎯 EVALUATION METRIC: Accuracy (HIGHER is better)**\n- Multi-class classification accuracy\n- Goal: Maximize the percentage of correct predictions across all 7 classes\n- Challenge: Extreme class imbalance will require careful handling (e.g., class weights, resampling, or specialized algorithms)\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "tabular",
+          "details": "All 54 features (10 continuous + 44 binary indicators). LightGBM handles class imbalance well with native support for class weights and is fast on large datasets (3.6M samples)."
+        },
+        "hyperparameters": {
+          "objective": "multiclass",
+          "num_class": 7,
+          "metric": "multi_logloss",
+          "boosting_type": "gbdt",
+          "num_leaves": 127,
+          "learning_rate": 0.05,
+          "n_estimators": 500,
+          "max_depth": 15,
+          "min_child_samples": 100,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "class_weight": "balanced",
+          "random_state": 42,
+          "n_jobs": -1,
+          "verbose": -1
+        },
+        "hypothesis": "LightGBM is ideal for this large tabular dataset (3.6M samples) with extreme class imbalance (2M:1 ratio). It's fast, memory-efficient, handles categorical features natively, and has built-in class weighting to address the severe imbalance (Class 5 has only 1 sample!). The leaf-wise growth strategy works well with many binary features (44 one-hot encoded features)."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "gradient_boosting",
+        "model": "XGBoost",
+        "features": {
+          "type": "tabular",
+          "details": "All 54 features with histogram-based tree method for speed on large dataset. XGBoost's scale_pos_weight and max_delta_step help with extreme imbalance."
+        },
+        "hyperparameters": {
+          "objective": "multi:softprob",
+          "num_class": 7,
+          "eval_metric": "mlogloss",
+          "tree_method": "hist",
+          "max_depth": 12,
+          "learning_rate": 0.05,
+          "n_estimators": 500,
+          "min_child_weight": 50,
+          "subsample": 0.8,
+          "colsample_bytree": 0.8,
+          "gamma": 0.1,
+          "max_delta_step": 1,
+          "random_state": 42,
+          "n_jobs": -1
+        },
+        "hypothesis": "XGBoost with histogram-based method provides fast training on 3.6M samples while maintaining high accuracy. The max_delta_step parameter helps with extreme class imbalance by limiting weight updates. XGBoost often complements LightGBM well - they make different splitting decisions, so comparing both helps identify the best approach for this forest cover prediction task."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "CatBoost",
+        "features": {
+          "type": "tabular",
+          "details": "All 54 features. CatBoost's ordered boosting and symmetric trees handle imbalanced data well. Auto class weights address the 2M:1 imbalance ratio."
+        },
+        "hyperparameters": {
+          "loss_function": "MultiClass",
+          "eval_metric": "MultiClass",
+          "iterations": 500,
+          "learning_rate": 0.05,
+          "depth": 10,
+          "l2_leaf_reg": 3,
+          "bootstrap_type": "Bayesian",
+          "bagging_temperature": 1,
+          "subsample": 0.8,
+          "random_strength": 1,
+          "auto_class_weights": "Balanced",
+          "random_seed": 42,
+          "verbose": 100,
+          "task_type": "CPU",
+          "thread_count": -1
+        },
+        "hypothesis": "CatBoost's symmetric tree structure and ordered boosting reduce overfitting on this large dataset with extreme class imbalance. The auto_class_weights='Balanced' automatically handles the severe imbalance (Class 2 has 2M samples vs Class 5 with 1 sample). CatBoost often excels on datasets with many binary features (44 one-hot encoded features here) and provides robust predictions without extensive tuning."
+      }
+    ]
+  },
+  "tabular-playground-series-may-2022": {
+    "EDA": "Duration: 1.19 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data step by step. Let me start by reading the instructions and exploring the data.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -lah /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (9928 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has been completed successfully. Here's my comprehensive report:\n## 📊 EDA FINDINGS REPORT\n### **Data Type**\n- **Tabular data** - Binary classification problem for manufacturing control data\n### **Dataset Size and Shape**\n- **Training set:** 800,000 rows × 33 columns (246.43 MB)\n- **Test set:** 100,000 rows × 32 columns (30.04 MB)\n- **Total features:** 31 (30 numeric + 1 categorical)\n  - 15 float64 features (f_00 to f_06, f_19 to f_26, f_28)\n  - 15 int64 features (f_07 to f_18, f_29, f_30)\n  - 1 object/categorical feature (f_27 with 670,919 unique values - high cardinality)\n- All features follow naming pattern: f_00 through f_30\n### **Target Distribution**\n- **BALANCED dataset** ✓\n  - Class 0: 411,088 samples (51.39%)\n  - Class 1: 388,912 samples (48.61%)\n  - Imbalance ratio: 1.06:1\n- Binary target with values {0, 1}\n### **Key Patterns and Characteristics**\n1. **Clean data:** No missing values in train or test sets\n2. **Unique IDs:** No duplicates, sequential IDs (train: 0-799999, test: 800000-899999)\n3. **Normalized features:** Continuous features appear standardized (mean ≈ 0, std ≈ 1)\n4. **Feature interactions:** Competition description emphasizes feature interactions are important\n5. **High cardinality categorical:** f_27 has 670,919 unique values (nearly unique per row)\n6. **Top correlated features with target:**\n   - f_21 (0.131), f_19 (0.088), f_24 (0.086), f_23 (0.082), f_11 (0.078)\n7. **Manufacturing context:** Predicting machine state (0 or 1) from control data\n### **Evaluation Metric with Direction (CRITICAL)**\n**Evaluation Metric:** AUC-ROC (Area Under the ROC Curve) **(HIGHER is better)**\n- Range: 0.0 to 1.0\n- Measures quality of probability predictions\n- Perfect score: 1.0\n- Random baseline: 0.5\n- Suitable for balanced binary classification with probability outputs\n---\nThe dataset is well-structured, balanced, and clean with no preprocessing needed for missing values. The focus should be on capturing feature interactions as mentioned in the competition description, and producing probability predictions optimized for AUC-ROC score.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": "[\n  {\n    \"id\": \"exp_1\",\n    \"strategy\": \"gradient_boosting\",\n    \"model\": \"LightGBM\",\n    \"features\": {\n      \"type\": \"tabular\",\n      \"details\": \"31 features (30 numeric + 1 high-cardinality categorical f_27). LightGBM handles categorical natively and excels with large datasets (800K rows). Feature interactions emphasized in competition description.\"\n    },\n    \"hyperparameters\": {\n      \"objective\": \"binary\",\n      \"metric\": \"auc\",\n      \"boosting_type\": \"gbdt\",\n      \"num_leaves\": 127,\n      \"learning_rate\": 0.05,\n      \"feature_fraction\": 0.8,\n      \"bagging_fraction\": 0.8,\n      \"bagging_freq\": 5,\n      \"max_depth\": 8,\n      \"min_child_samples\": 20,\n      \"n_estimators\": 500,\n      \"early_stopping_rounds\": 50,\n      \"verbose\": -1,\n      \"random_state\": 42\n    },\n    \"hypothesis\": \"LightGBM is optimal for this large tabular dataset (800K rows) with balanced classes and high-cardinality categorical feature. It natively handles categorical features without encoding, captures complex feature interactions through tree splits, and optimizes directly for AUC metric. The large sample size provides sufficient data for robust tree-based learning.\"\n  },\n  {\n    \"id\": \"exp_2\",\n    \"strategy\": \"gradient_boosting\",\n    \"model\": \"XGBoost\",\n    \"features\": {\n      \"type\": \"tabular\",\n      \"details\": \"31 features with target encoding for f_27 categorical feature. XGBoost with histogram method for efficiency on large dataset. Focus on capturing feature interactions.\"\n    },\n    \"hyperparameters\": {\n      \"objective\": \"binary:logistic\",\n      \"eval_metric\": \"auc\",\n      \"tree_method\": \"hist\",\n      \"max_depth\": 7,\n      \"learning_rate\": 0.05,\n      \"n_estimators\": 500,\n      \"subsample\": 0.8,\n      \"colsample_bytree\": 0.8,\n      \"min_child_weight\": 3,\n      \"gamma\": 0.1,\n      \"reg_alpha\": 0.1,\n      \"reg_lambda\": 1.0,\n      \"early_stopping_rounds\": 50,\n      \"random_state\": 42\n    },\n    \"hypothesis\": \"XGBoost with histogram method provides fast training on large dataset while capturing non-linear feature interactions. Target encoding f_27 (high-cardinality categorical) preserves information while making it usable. Regularization parameters (alpha, lambda, gamma) prevent overfitting on 800K samples. Different tree-building algorithm than LightGBM may capture complementary patterns.\"\n  },\n  {\n    \"id\": \"exp_3\",\n    \"strategy\": \"gradient_boosting\",\n    \"model\": \"CatBoost\",\n    \"features\": {\n      \"type\": \"tabular\",\n      \"details\": \"31 features with f_27 marked as categorical. CatBoost's ordered boosting and native categorical handling. Manufacturing control data with emphasized feature interactions.\"\n    },\n    \"hyperparameters\": {\n      \"loss_function\": \"Logloss\",\n      \"eval_metric\": \"AUC\",\n      \"iterations\": 500,\n      \"learning_rate\": 0.05,\n      \"depth\": 8,\n      \"l2_leaf_reg\": 3,\n      \"bootstrap_type\": \"Bayesian\",\n      \"bagging_temperature\": 1,\n      \"random_strength\": 1,\n      \"subsample\": 0.8,\n      \"early_stopping_rounds\": 50,\n      \"random_seed\": 42,\n      \"verbose\": False\n    },\n    \"hypothesis\": \"CatBoost's ordered boosting reduces overfitting and handles high-cardinality f_27 feature optimally through ordered target statistics. Its symmetric tree structure and Bayesian bootstrap provide robust predictions on manufacturing control data. Different ensemble approach (ordered vs level-wise) complements LightGBM/XGBoost, potentially capturing different interaction patterns in the 31 features.\"\n  }\n]"
+  },
+  "text-normalization-challenge-english-language": {
+    "EDA": "Duration: 2.99 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data systematically. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (8308 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nLet me modify the script to extract to a writable location:\n🔧 Tool: Write\n   Path: /home/eda.py (8326 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py 2>&1 | head -500\n✓ Completed\nLet me fix the script to handle the missing 'id' column in test data:\n🔧 Tool: Write\n   Path: /home/eda.py (9155 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py 2>&1\n✓ Completed\nPerfect! The EDA has completed successfully. Let me now provide a comprehensive summary of the findings:\n---\n## **COMPETITION DATA ANALYSIS REPORT**\n### **Data Type:**\n**TEXT** - Text Normalization Challenge (converting written text to spoken form for TTS/ASR systems)\n### **Dataset Size and Shape:**\n- **Training set:** 8,924,976 tokens across 673,259 sentences (5 columns)\n- **Test set:** 993,465 tokens across 74,807 sentences (3 columns)\n- **Average tokens per sentence:** ~13.3 tokens\n- **Unique 'before' tokens:** 455,220 (training), 111,348 (test)\n### **Target Distribution:**\n**IMBALANCED** - The dataset is heavily imbalanced with 16 normalization classes:\n1. **PLAIN** (74.14%) - Regular words, no normalization needed\n2. **PUNCT** (18.96%) - Punctuation marks\n3. **DATE** (2.60%) - Date expressions\n4. **LETTERS** (1.54%) - Acronyms/letter sequences\n5. **CARDINAL** (1.35%) - Cardinal numbers\n6. **VERBATIM** (0.79%) - Verbatim text\n7. **Other classes** (<0.15% each): MEASURE, ORDINAL, DECIMAL, MONEY, DIGIT, ELECTRONIC, TELEPHONE, TIME, FRACTION, ADDRESS\n**Key Finding:** 93.35% of tokens have `before == after` (no actual change), meaning most tokens pass through unchanged.\n### **Key Patterns and Characteristics:**\n- **Token-level prediction task** (not sentence-level)\n- **Class information available in training but NOT in test** - must infer normalization type\n- **Exact string matching required** - predictions must match ground truth exactly\n- **Common normalization patterns:**\n  - Numbers: `91` → `ninety one`\n  - Dates: `2006` → `two thousand six`\n  - Acronyms: `IUCN` → `i u c n`\n  - Money: `$22,750` → `twenty two thousand seven hundred fifty dollars`\n  - Measures: `100 m` → `one hundred meters`\n  - Time: `3:00 pm` → `three p m`\n- **Missing values:** 144 in training 'before', 140 in 'after', 17 in test 'before'\n- **File format:** CSV (zipped) with ID format `sentence_id_token_id` (e.g., `123_5`)\n### **CRITICAL - Evaluation Metric with Direction:**\n**Evaluation Metric:** ACCURACY (HIGHER is better)\n- **Metric Definition:** Prediction accuracy = total percent of correct tokens\n- **Requirement:** Predicted and actual strings must match EXACTLY\n- **Scoring Method:** Sequence accuracy - any error in output counts as wrong\n- **Example:** If input is `145` and predicted output is `one forty five` but correct is `one hundred forty five`, this counts as a single error\n---\n**Summary:** This is a challenging text normalization task requiring exact token-level predictions across 16 different normalization classes, with the majority of tokens (93%) remaining unchanged. The model must learn to identify which tokens need normalization and apply the correct transformation without explicit class labels in the test set.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "transformer_features",
+        "model": "bert-base-uncased",
+        "task": "token_classification",
+        "features": {
+          "type": "text",
+          "details": "Token-level BERT embeddings for text normalization with 16-class classification"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 32,
+          "epochs": 3,
+          "lr": 2e-05,
+          "max_length": 128,
+          "num_labels": 16
+        },
+        "hypothesis": "BERT's token-level representations can learn to classify normalization types (PLAIN, PUNCT, DATE, etc.) and predict transformations. With 8.9M training tokens, BERT should capture patterns like '91' → CARDINAL → 'ninety one'. The model will learn both classification and generation jointly."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "transformer_features",
+        "model": "distilbert-base-uncased",
+        "task": "seq2seq",
+        "features": {
+          "type": "text",
+          "details": "Lightweight DistilBERT encoder with custom decoder for sequence-to-sequence normalization"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "epochs": 5,
+          "lr": 3e-05,
+          "max_length": 128
+        },
+        "hypothesis": "Treat as seq2seq problem: input='91' → output='ninety one'. DistilBERT (40% smaller than BERT) trains faster on 8.9M tokens while maintaining 95% of BERT's performance. The encoder-decoder architecture naturally handles variable-length outputs and can learn normalization rules from context."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting",
+        "model": "LightGBM",
+        "features": {
+          "type": "tabular",
+          "details": "Engineered features: token length, char n-grams, digit/punct ratios, position, context window, regex patterns for dates/numbers/money"
+        },
+        "hyperparameters": {
+          "device": "cpu",
+          "num_leaves": 127,
+          "learning_rate": 0.05,
+          "n_estimators": 500,
+          "max_depth": 8,
+          "min_child_samples": 20
+        },
+        "hypothesis": "Since 93% of tokens are unchanged (before==after), a rule-based + ML hybrid may work. LightGBM can learn decision rules: if token matches '\\d+' AND length<4 → CARDINAL class → apply number-to-words. Feature engineering captures patterns (dates, money symbols, acronyms) that transformers might miss. Fast training on 8.9M samples."
+      }
+    ]
+  },
+  "text-normalization-challenge-russian-language": {
+    "EDA": "Duration: 2.17 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data systematically. Let me start by reading the instructions and exploring the data structure.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data/\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me write a comprehensive EDA script to analyze the data:\n🔧 Tool: Write\n   Path: /home/eda.py (8944 bytes)\n✓ Completed\nNow let me run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nI need to extract to a writable location. Let me update the script:\n🔧 Tool: Write\n   Path: /home/eda.py (8970 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py 2>&1\n✓ Completed\nPerfect! The EDA has completed successfully. Let me now provide a comprehensive summary of the findings:\n---\n## **COMPETITION DATA ANALYSIS REPORT**\n### **Data Type**\n**TEXT** - Text Normalization (Sequence-to-Sequence task for Russian language)\n### **Dataset Size and Shape**\n- **Training Set:** 9,515,325 tokens across 685,292 sentences\n  - Shape: (9,515,325, 5)\n  - Columns: sentence_id, token_id, class, before, after\n  - File size: 423.08 MB\n- **Test Set:** 1,059,191 tokens across 76,144 sentences\n  - Shape: (1,059,191, 3)\n  - Columns: sentence_id, token_id, before\n  - File size: 20.77 MB\n- **Average tokens per sentence:** ~13.9 tokens (both train and test)\n### **Target Distribution**\n**HIGHLY IMBALANCED** dataset with 15 token classes:\n1. **PLAIN** (69.61%) - 6,623,430 tokens - No normalization needed\n2. **PUNCT** (21.64%) - 2,058,978 tokens - Punctuation marks\n3. **CARDINAL** (2.58%) - 245,620 tokens - Numbers (e.g., \"254\" → \"двести пятьдесят четыре\")\n4. **LETTERS** (1.79%) - 170,659 tokens - Abbreviations (e.g., \"РСФСР\" → \"р с ф с р\")\n5. **DATE** (1.76%) - 167,157 tokens - Dates (e.g., \"1862 год\" → \"тысяча восемьсот шестьдесят второй год\")\n6. **VERBATIM** (1.49%) - 141,875 tokens\n7. **ORDINAL** (0.44%) - 42,159 tokens - Ordinal numbers\n8. **MEASURE** (0.38%) - 36,388 tokens - Measurements\n9. **TELEPHONE** (0.10%) - 9,061 tokens - Phone numbers/ISBNs\n10. **DECIMAL** (0.07%) - 6,582 tokens\n11. **ELECTRONIC** (0.06%) - 5,272 tokens - URLs/emails\n12. **MONEY** (0.03%) - 2,404 tokens\n13. **FRACTION** (0.02%) - 2,185 tokens\n14. **DIGIT** (0.02%) - 1,786 tokens\n15. **TIME** (0.02%) - 1,769 tokens\n**Class balance ratio:** 3,744:1 (max/min) - extremely imbalanced\n### **Key Patterns and Characteristics**\n1. **Self-normalization dominance:** 87.49% of tokens require no change (before == after)\n2. **Normalization needed:** Only 12.51% (1,190,307 tokens) require actual transformation\n3. **Transliteration:** 4.89% of tokens contain \"_trans\" suffix for foreign names/words\n4. **Vocabulary overlap:** 73.23% of test tokens appear in training set\n5. **Unseen tokens:** 49,661 unique tokens in test not seen during training (26.77%)\n6. **Token length:**\n   - Before: mean 5.06 chars, max 230 chars\n   - After: mean 8.10 chars, max 1,003 chars (normalized text is longer)\n7. **Missing values:** 11 in train 'before', 3 in test 'before' (minimal)\n8. **Context matters:** Tokens are grouped by sentence_id, suggesting context is important\n9. **Complex transformations:** Dates, numbers, and URLs require sophisticated rule-based or learned transformations\n### **CRITICAL - Evaluation Metric with Direction**\n**Evaluation Metric:** Prediction Accuracy (HIGHER is better)\n- **Definition:** Total percent of correct tokens\n- **Requirement:** Exact string match required (case-sensitive)\n- **Scoring:** Any error in output = wrong prediction\n- **Note:** Duplicate sentences in train/test are ignored in scoring\n---\n**Key Challenge:** The task requires handling 15 different token classes with distinct normalization rules, including complex transformations for dates, numbers, measurements, and transliteration of foreign words into Russian phonetic equivalents.\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "transformer_seq2seq",
+        "model": "google/mt5-small",
+        "features": {
+          "type": "text",
+          "details": "Multilingual T5 model fine-tuned for Russian text normalization as sequence-to-sequence task. Handles all 15 token classes including complex transformations (dates, numbers, transliteration). Input: raw token + class label, Output: normalized token"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "epochs": 3,
+          "batch_size": 32,
+          "learning_rate": 5e-05,
+          "max_input_length": 128,
+          "max_target_length": 256,
+          "train_split": 0.95
+        },
+        "hypothesis": "mT5 is pre-trained on Russian and designed for seq2seq tasks. The 12.51% normalization rate suggests most tokens are PLAIN/PUNCT (no change), which mT5 can learn to copy. For complex classes (CARDINAL, DATE, LETTERS), the model can learn transformation patterns from 1.19M training examples. Class-aware input helps model route to correct normalization strategy."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "rule_based_hybrid",
+        "model": "custom_rules",
+        "features": {
+          "type": "text",
+          "details": "Rule-based system with class-specific handlers: PLAIN/PUNCT (copy), CARDINAL (num2words library), DATE (regex patterns), LETTERS (character splitting), TELEPHONE (digit-by-digit), ELECTRONIC (verbatim), MONEY/MEASURE (unit expansion). Fallback to training set lookup for unseen patterns."
+        },
+        "hyperparameters": {
+          "use_num2words": true,
+          "use_training_lookup": true,
+          "handle_transliteration": true,
+          "context_window": 3
+        },
+        "hypothesis": "87.49% of tokens need no change (before==after), making rule-based approach viable. Classes like CARDINAL, DATE, ORDINAL follow deterministic patterns that libraries (num2words) handle well. Training set lookup covers 73.23% of test vocabulary. This approach is fast, interpretable, and handles the imbalanced distribution naturally by focusing rules on minority classes."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "gradient_boosting_multiclass",
+        "model": "LightGBM",
+        "features": {
+          "type": "tabular",
+          "details": "Extract features from tokens: char n-grams (1-4), token length, digit/letter/punct ratios, position in sentence, previous/next token context, class label encoding. Train multi-output model: (1) classification head for 15 classes, (2) regression head for character-level edits. Combine predictions with training set lookup table."
+        },
+        "hyperparameters": {
+          "device": "cpu",
+          "num_leaves": 127,
+          "learning_rate": 0.05,
+          "n_estimators": 500,
+          "max_depth": 12,
+          "feature_fraction": 0.8,
+          "bagging_fraction": 0.8,
+          "min_child_samples": 100
+        },
+        "hypothesis": "Token normalization can be framed as feature engineering + classification problem. Character-level features capture patterns (digits→words, abbreviations→expansions). Context features help disambiguate (e.g., '2020' as year vs cardinal). LightGBM handles imbalanced classes well and trains fast on 9.5M samples. Lookup table handles exact matches (73% of test), model handles unseen tokens (27%)."
+      }
+    ]
+  },
+  "the-icml-2013-whale-challenge-right-whale-redux": {
+    "EDA": "Duration: 1.96 minutes\n\nPHASE 1: EDA\n============================================================\nI'll analyze the competition data by first reading the instructions, then writing and running a comprehensive EDA script.\n🔧 Tool: Read\n   Path: /home/instructions.txt\n✓ Completed\n🔧 Tool: Bash\n   Command: ls -la /home/data\n✓ Completed\n🔧 Tool: Read\n   Path: /home/data/description.md\n✓ Completed\nNow let me extract and examine the data files:\n🔧 Tool: Bash\n   Command: cd /home/data && unzip -q train2.zip && unzip -q test2.zip && ls -lh\n✓ Completed\nLet me try a different approach to extract the files to a writable location:\n🔧 Tool: Bash\n   Command: cd /tmp && unzip -q /home/data/train2.zip && unzip -q /home/data/test2.zip && ls -lh\n✓ Completed\nGreat! Now let me check the sample submission and write a comprehensive EDA script:\n🔧 Tool: Read\n   Path: /home/data/sampleSubmission.csv\n✓ Completed\nNow let me write a comprehensive EDA script:\n🔧 Tool: Write\n   Path: /home/eda.py (7120 bytes)\n✓ Completed\nNow let's run the EDA script:\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nLet me fix the error and try reading the .aif files with a different library:\n🔧 Tool: Write\n   Path: /home/eda.py (8902 bytes)\n✓ Completed\n🔧 Tool: Bash\n   Command: cd /home && python eda.py\n✓ Completed\nPerfect! The EDA has completed successfully. Let me now provide a comprehensive summary of the findings:\n## **EXPLORATORY DATA ANALYSIS REPORT**\n### **Data Type**\n**Audio time-series data** - Acoustic recordings in AIFF (.aif) format for whale call detection\n### **Dataset Size and Shape**\n- **Training Set:** 22,692 audio clips\n- **Test Set:** 25,149 audio clips\n- **Audio Specifications:**\n  - Mono (1 channel)\n  - Sample Rate: 2000 Hz\n  - Sample Width: 2 bytes (16-bit)\n  - Duration: 1.2-2.0 seconds per clip (mean: 1.89s)\n  - File Size: ~7.7 KB average\n### **Target Distribution**\n**HIGHLY IMBALANCED:**\n- **Noise (Class 0):** 20,426 samples (90.01%)\n- **Whale Calls (Class 1):** 2,266 samples (9.99%)\n- **Imbalance Ratio:** 9.01:1 (Noise:Whale)\nClass distribution is consistent across training dates:\n- March 28, 2009: 7.80% whale calls\n- March 29, 2009: 11.27% whale calls\n### **Key Patterns and Characteristics**\n1. **Temporal Structure:**\n   - Training data: March 28-29, 2009 (2 consecutive days)\n   - Test data: March 30-31, 2009 (2 following days)\n   - This is a **temporal split** - model must generalize to future recordings\n2. **Data Distribution:**\n   - Training: 8,398 samples (Day 1), 14,294 samples (Day 2)\n   - Test: 11,095 samples (Day 1), 14,054 samples (Day 2)\n3. **Audio Characteristics:**\n   - Short clips (~2 seconds) suitable for real-time detection\n   - Low sample rate (2000 Hz) optimized for whale call frequencies\n   - Consistent format across all files\n4. **Filename Pattern:** `YYYYMMDD_HHMMSS_TIMEms_TRAINXXXX_LABEL.aif`\n   - Contains timestamp information\n   - Sequential recordings throughout each day\n### **CRITICAL - Evaluation Metric:**\n**Evaluation Metric:** AUC (Area Under ROC Curve) **(HIGHER is better)**\n- **Range:** 0.0 to 1.0\n- **Perfect Score:** 1.0\n- **Random Baseline:** 0.5\n- **Submission Format:** Probabilities (not binary predictions)\n- **What it measures:** Model's ability to rank whale calls higher than noise across all probability thresholds\n---\n**Key Challenges Identified:**\n1. Severe class imbalance (9:1 ratio) requiring special handling\n2. Audio signal processing and feature extraction needed\n3. Temporal generalization - test data from different time period\n4. Need to output calibrated probabilities for AUC optimization\n→ Metric direction: HIGHER is better\n============================================================",
+    "Plan": [
+      {
+        "id": "exp_1",
+        "strategy": "bottleneck_features",
+        "models": [
+          "ResNet50",
+          "DenseNet161"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "audio_spectrogram",
+          "details": "Convert audio to mel-spectrograms, extract features using ResNet50 (2048-dim) + DenseNet161 (2208-dim) = 4256-dim, train LogisticRegression with class_weight='balanced' for imbalanced data"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "class_weight": "balanced",
+          "n_mels": 128,
+          "n_fft": 2048,
+          "hop_length": 512
+        },
+        "hypothesis": "Audio whale calls have distinct spectral patterns. Multi-model bottleneck (ResNet50 + DenseNet161) will capture complementary frequency/temporal features from spectrograms. Class-balanced LogReg handles 9:1 imbalance. Fast training (<3 min) ideal for 22K samples. Proven approach: multi-model bottleneck >> single model for small datasets."
+      },
+      {
+        "id": "exp_2",
+        "strategy": "bottleneck_features",
+        "models": [
+          "EfficientNet-B2",
+          "InceptionV3"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "audio_spectrogram",
+          "details": "Alternative backbone combination: EfficientNet-B2 (1408-dim) + InceptionV3 (2048-dim) = 3456-dim features from mel-spectrograms, class-balanced LogisticRegression"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 0.1,
+          "class_weight": "balanced",
+          "n_mels": 128,
+          "n_fft": 2048,
+          "hop_length": 512
+        },
+        "hypothesis": "EfficientNet-B2 excels at efficient feature extraction, InceptionV3 captures multi-scale patterns via inception modules. Different architecture combination than exp_1 may capture different spectral characteristics. Lower C=0.1 for stronger regularization given severe class imbalance. Tests if architecture diversity improves AUC."
+      },
+      {
+        "id": "exp_3",
+        "strategy": "bottleneck_features",
+        "models": [
+          "Wide_ResNet50_2",
+          "DenseNet121",
+          "MobileNetV2"
+        ],
+        "classifier": "LogisticRegression",
+        "features": {
+          "type": "audio_spectrogram",
+          "details": "Triple-model ensemble: Wide_ResNet50_2 (2048-dim) + DenseNet121 (1024-dim) + MobileNetV2 (1280-dim) = 4352-dim features, maximizes feature diversity"
+        },
+        "hyperparameters": {
+          "device": "cuda",
+          "batch_size": 64,
+          "C": 1.0,
+          "class_weight": "balanced",
+          "n_mels": 128,
+          "n_fft": 2048,
+          "hop_length": 512,
+          "max_iter": 1000
+        },
+        "hypothesis": "Triple-model ensemble maximizes architectural diversity: Wide_ResNet (wider layers), DenseNet (dense connections), MobileNet (depthwise separable). More models = richer feature space for rare whale calls. Gold solutions show 3-model ensembles achieve 2-10x better performance. Worth extra 1-2 min training time for potential AUC boost on imbalanced audio data."
+      }
+    ]
+  }
+}

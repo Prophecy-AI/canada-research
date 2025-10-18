@@ -252,17 +252,40 @@ Data: {data_dir}
      * Create learner: `learn = vision_learner(dls, resnet34, metrics=accuracy)`
      * Train: `learn.fit_one_cycle(epochs, lr)` where epochs from spec (default 5), lr from spec (default 3e-2)
      * Predict: `test_dl = learn.dls.test_dl(test_files); preds, _ = learn.get_preds(dl=test_dl)`
-     * Get validation metric: After training, fastai metrics are tensors - convert to float:
+     * **🚨 CRITICAL: Calculate THE COMPETITION METRIC (from EDA), not training loss:**
        ```python
-       val_metric = learn.recorder.values[-1][1]
+       from sklearn.metrics import roc_auc_score, log_loss, accuracy_score
+       import numpy as np
+       
+       # Get validation predictions
+       val_preds, val_targets = learn.get_preds(dl=learn.dls.valid)
+       val_probs = val_preds.numpy()
+       y_val = val_targets.numpy()
+       
+       # Calculate competition metric (READ FROM EDA ABOVE):
+       if "AUC" in eda_metric:  # e.g., "Evaluation Metric: AUC-ROC (HIGHER is better)"
+           val_metric = roc_auc_score(y_val, val_probs[:, 1])  # binary
+       elif "Accuracy" in eda_metric:
+           val_metric = accuracy_score(y_val, val_probs.argmax(axis=1))
+       elif "Log Loss" in eda_metric or "Logloss" in eda_metric:
+           val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
+           val_metric = log_loss(y_val, val_probs)
+       else:
+           # Fallback: use fastai's metric (but make sure it's the right one!)
+           val_metric = learn.recorder.values[-1][1]
+       
+       # Convert to float and print
        if isinstance(val_metric, torch.Tensor):
            val_metric = val_metric.item()
        print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
+       
+       # ⚠️ WRONG: learn.recorder.values[-1][0]  # That's LOSS, not metric!
+       # ✅ CORRECT: Calculate actual competition metric (AUC, accuracy, etc.)
        ```
    - Always convert labels to strings to avoid binary/multi-class confusion
    - Normalize with ImageNet stats (fastai does automatically)
    - Save predictions to submission.csv in correct format
-   - Convert tensor metrics to Python floats using .item() before printing
+   - **DO NOT print training loss as VALIDATION_SCORE - calculate actual competition metric!**
    - This approach gets 95-100% accuracy in 5-10 minutes consistently
 
 **STRATEGY: "fastai_tabular"** (neural networks for small tabular):
@@ -303,10 +326,15 @@ Data: {data_dir}
   * Average the feature vectors before feeding to LogReg
   * Adds ~10s but improves accuracy 2-5%
 - **Validation metric:**
-  * For classification: Use log_loss with clipped probabilities AND labels argument
-  * `log_loss(y_val, val_probs, labels=list(range(num_classes)))`
-  * CRITICAL: labels argument prevents errors when val set missing some classes
-  * Print VALIDATION_SCORE with the logloss value
+  * **🚨 CALCULATE THE COMPETITION METRIC FROM EDA, NOT ARBITRARY METRIC**
+  * Read EDA context above for "Evaluation Metric: XXX (HIGHER/LOWER is better)"
+  * Common patterns:
+    - AUC-ROC competition: `roc_auc_score(y_val, val_probs[:, 1])`
+    - Accuracy competition: `accuracy_score(y_val, val_probs.argmax(axis=1))`
+    - Log Loss competition: `log_loss(y_val, val_probs, labels=list(range(num_classes)))`
+  * ALWAYS clip probabilities: `val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)`
+  * For log_loss: CRITICAL to pass labels argument to prevent errors when val set missing classes
+  * Print VALIDATION_SCORE with the COMPETITION metric value (not loss!)
 - **Save:** backbone weights, classifier, scaler, model_names config
 
 **Example code structure:**
@@ -378,11 +406,22 @@ C_value = spec.get('C', 1.0)
 clf = LogisticRegression(C=C_value, multi_class='multinomial', solver='lbfgs', max_iter=1000, random_state=42)
 clf.fit(X_train, y_train)
 
-# Validation
+# Validation - CALCULATE THE COMPETITION METRIC FROM EDA!
+from sklearn.metrics import roc_auc_score, log_loss, accuracy_score
 val_probs = clf.predict_proba(X_val)
 val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
-num_classes = len(clf.classes_)
-val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
+
+# Use the EXACT competition metric from EDA context:
+# Check EDA for "Evaluation Metric: XXX (HIGHER/LOWER is better)"
+# Example: If EDA says "AUC-ROC (HIGHER is better)", use roc_auc_score
+if "AUC" in eda_metric:
+    val_metric = roc_auc_score(y_val, val_probs[:, 1])  # binary AUC
+elif "Accuracy" in eda_metric:
+    val_metric = accuracy_score(y_val, val_probs.argmax(axis=1))
+else:  # Log Loss or default
+    num_classes = len(clf.classes_)
+    val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
+
 print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
 
 # Save models
@@ -414,19 +453,39 @@ print("Models saved!")
      * LightGBM: Use LGBMClassifier/LGBMRegressor with hyperparams from spec
      * XGBoost: Use XGBClassifier/XGBRegressor with tree_method='hist'
      * Set appropriate objective: binary/multiclass/regression
-   - Validate and print VALIDATION_SCORE based on task:
-     * Binary classification → AUC (roc_auc_score)
-     * Multiclass → Log Loss (log_loss) with labels argument:
-       ```python
-       from sklearn.metrics import log_loss
-       val_probs = model.predict_proba(X_val)
-       val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
-       num_classes = len(np.unique(y_train))
-       val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
-       ```
-       CRITICAL: Always pass `labels=list(range(num_classes))` to log_loss for multiclass
-       This prevents errors when validation set doesn't contain all classes
-     * Regression → RMSE (mean_squared_error with squared=False)
+   - **🚨 CRITICAL: Calculate THE COMPETITION METRIC (from EDA context above), not arbitrary metric:**
+     
+     **Read EDA to find evaluation metric:**
+     - Look for "Evaluation Metric: XXX (HIGHER/LOWER is better)"
+     - Use THAT EXACT metric for VALIDATION_SCORE
+     
+     **Common competition metrics:**
+     ```python
+     from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error
+     import numpy as np
+     
+     val_probs = model.predict_proba(X_val)  # for classification
+     val_preds = model.predict(X_val)  # for regression
+     val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)  # prevent log(0)
+     
+     # Match the competition metric from EDA:
+     if "AUC" in competition_metric:  # Binary classification → AUC
+         val_metric = roc_auc_score(y_val, val_probs[:, 1])
+     elif "Accuracy" in competition_metric:  # Classification → Accuracy
+         val_metric = accuracy_score(y_val, val_preds)
+     elif "Log Loss" in competition_metric or "Logloss" in competition_metric:  # Multiclass
+         num_classes = len(np.unique(y_train))
+         val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
+         # CRITICAL: Always pass labels argument to prevent errors when val missing classes
+     elif "RMSE" in competition_metric:  # Regression
+         val_metric = mean_squared_error(y_val, val_preds, squared=False)
+     elif "MAE" in competition_metric:  # Regression
+         val_metric = mean_absolute_error(y_val, val_preds)
+     
+     print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
+     
+     # ⚠️ DO NOT use wrong metric! Check EDA carefully!
+     ```
    - Save model: `joblib.dump(model, 'model.pkl')`
 
 **STRATEGY: "fine_tuning"** (standard CNN training):
@@ -462,18 +521,59 @@ print("Models saved!")
    - GPU training (model.to(device), data.to(device))
    - Early stopping with patience 3-5 epochs
    - For perfect score termination: if metric is AUC/accuracy (higher is better), stop at val_metric >= 0.9999; if logloss/error (lower is better), stop at val_metric <= 0.001
-   - **CRITICAL: Print validation score in EXACT format (orchestrator parses this):**
+   - **🚨 CRITICAL: Calculate and print THE COMPETITION METRIC, NOT LOSS! 🚨**
+     
+     **Step 1: READ THE EVALUATION METRIC FROM EDA CONTEXT ABOVE**
+     Look for lines like "Evaluation Metric: XXX (HIGHER/LOWER is better)"
+     Examples:
+     - "Evaluation Metric: AUC-ROC (HIGHER is better)" → Calculate AUC-ROC score
+     - "Evaluation Metric: Log Loss (LOWER is better)" → Calculate Log Loss
+     - "Evaluation Metric: Accuracy (HIGHER is better)" → Calculate Accuracy
+     - "Evaluation Metric: RMSE (LOWER is better)" → Calculate RMSE
+     
+     **Step 2: CALCULATE THAT EXACT METRIC ON VALIDATION SET**
+     ```python
+     from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error
+     import numpy as np
+     
+     # Get predictions on validation set
+     val_probs = model.predict_proba(X_val)  # or learn.get_preds(dl=val_dl)[0]
+     val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)  # prevent log(0) errors
+     
+     # Calculate THE COMPETITION METRIC (match what's in EDA):
+     if competition_metric == "AUC" or "ROC":
+         val_metric = roc_auc_score(y_val, val_probs[:, 1])  # binary
+         # OR for multiclass: roc_auc_score(y_val, val_probs, multi_class='ovr', average='macro')
+     elif competition_metric == "Log Loss" or "Logloss":
+         val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
+     elif competition_metric == "Accuracy":
+         val_metric = accuracy_score(y_val, val_probs.argmax(axis=1))
+     elif competition_metric == "RMSE":
+         val_metric = mean_squared_error(y_val, val_preds, squared=False)
+     # ... add other metrics as needed
+     
+     # ⚠️ DO NOT USE: val_metric = loss  # WRONG! Loss ≠ competition metric
+     # ⚠️ DO NOT USE: val_metric = learn.recorder.final_record[0]  # That's loss!
+     ```
+     
+     **Step 3: PRINT IN EXACT FORMAT**
      ```python
      if isinstance(val_metric, torch.Tensor):
          val_metric = val_metric.item()
      print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
      ```
-     * ALWAYS convert tensors to Python floats using `.item()` before formatting
-     * Use the EXACT competition metric from EDA context (e.g., logloss, AUC, accuracy, etc.)
-     * Format must be exactly "VALIDATION_SCORE: " followed by the number
-     * Example: "VALIDATION_SCORE: 0.623456" or "VALIDATION_SCORE: 0.954321"
-     * All experiments MUST report the same metric for fair comparison
-     * Do NOT print other metrics on lines containing "VALIDATION_SCORE"
+     
+     **EXAMPLES OF CORRECT VALIDATION_SCORE:**
+     - AUC-ROC competition: `VALIDATION_SCORE: 0.9876` (not 0.0124 which is loss!)
+     - Accuracy competition: `VALIDATION_SCORE: 0.9500` (not 0.0500 which is loss!)
+     - Log Loss competition: `VALIDATION_SCORE: 0.1234` (log loss itself, OK)
+     - RMSE competition: `VALIDATION_SCORE: 2.3456` (RMSE itself, OK)
+     
+     **Common mistakes to AVOID:**
+     - ❌ Printing training loss instead of competition metric
+     - ❌ Printing wrong metric (accuracy when competition uses AUC)
+     - ❌ For AUC/accuracy competitions: printing loss (0.01) instead of score (0.99)
+     - ✅ ALWAYS calculate the exact metric mentioned in EDA, not training loss!
    - **Save model appropriately:**
      * bottleneck_features: Save backbone + classifier + scaler
      * fine_tuning: Save `torch.save(model.state_dict(), 'model.pth')`
