@@ -135,17 +135,17 @@ Best: {best_score}
   * Activation: 'relu' for hidden layers, 'softmax'/'sigmoid' for output
   * Optimizer: 'adam' (lr=1e-3 to 1e-4) or 'rmsprop' (lr=1e-3)
   * Loss: 'categorical_crossentropy' (multiclass), 'binary_crossentropy' (binary), 'mse' (regression)
-  * Regularization: Dropout + EarlyStopping(patience=40-200, restore_best_weights=True)
+  * Regularization: Dropout + EarlyStopping(patience=15-30, restore_best_weights=True)
   * Batch normalization: Add after Dense layers for large networks (optional)
 - **Data preprocessing:**
   * Features: StandardScaler or MinMaxScaler (REQUIRED)
   * Target: LabelEncoder → to_categorical for classification
   * Missing values: SimpleImputer (mean/median for numeric, most_frequent for categorical)
 - **Hyperparameters:**
-  * epochs: 200-1000 (let EarlyStopping decide)
+  * epochs: 100-300 (let EarlyStopping decide)
   * batch_size: 64-256 depending on data size
   * validation_split: 0.1-0.2
-- **Example:** {{"strategy": "keras_neural_network", "architecture": [1024, 512, 256], "dropout": 0.2, "epochs": 600, "batch_size": 128, "lr": 1e-3, "optimizer": "adam"}}
+- **Example:** {{"strategy": "keras_neural_network", "architecture": [1024, 512, 256], "dropout": 0.2, "epochs": 200, "batch_size": 128, "lr": 1e-3, "optimizer": "adam"}}
 
 **Strategy 5: "gradient_boosting"** (for medium/large tabular data)
 - **When to try:** Tabular data with numerical/categorical features in CSV format
@@ -396,7 +396,7 @@ Data: {data_dir}
      model.compile(optimizer=optimizer, loss=loss, metrics=['accuracy'])
      
      # 9. Setup callbacks
-     patience = spec.get('patience', 100)
+     patience = spec.get('patience', 20)
      early_stop = callbacks.EarlyStopping(
          monitor='val_loss', patience=patience, 
          restore_best_weights=True, verbose=1
@@ -404,7 +404,7 @@ Data: {data_dir}
      
      # 10. Train
      batch_size = spec.get('batch_size', 128)
-     epochs = spec.get('epochs', 600)
+     epochs = spec.get('epochs', 200)
      
      history = model.fit(
          X_train, y_train,
@@ -439,7 +439,7 @@ Data: {data_dir}
    - **Key points:**
      * ALWAYS use StandardScaler before training
      * Use architecture from spec, fallback to [1024, 512, 256]
-     * EarlyStopping with patience from spec (default 100)
+     * EarlyStopping with patience from spec (default 20)
      * Print best validation score (from history or after training)
      * Save model.h5 + scaler.pkl + label_encoder.pkl
 
