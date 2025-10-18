@@ -221,21 +221,43 @@ Data: {data_dir}
 - Use lambda functions or other unpicklable objects
 
 **DO:**
-1. **🚨 CRITICAL: Extract data correctly to avoid path errors:**
+1. **🚨 STEP 1: INSPECT ZIP STRUCTURE FIRST:**
    ```bash
-   # Check what's in /home/data/
-   ls -la /home/data/
+   # DON'T blindly extract! Check what's in the zip:
+   zipinfo /home/data/train.zip | head -20
    
-   # Extract zip files to CURRENT DIRECTORY (not /home/data):
-   unzip -q /home/data/train.zip -d .
-   unzip -q /home/data/test.zip -d .
+   # Common patterns:
+   # Pattern A: train/image1.jpg, train/image2.jpg  → Unzip creates train/ folder
+   # Pattern B: image1.jpg, image2.jpg  → Unzip puts files directly in current dir
+   ```
+
+2. **🚨 STEP 2: EXTRACT AND VERIFY:**
+   ```python
+   import os
+   import subprocess
    
-   # Verify extraction:
-   ls -la train/ test/
+   # Extract to current directory
+   result = subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'], 
+                          capture_output=True, text=True)
+   if result.returncode != 0:
+       print(f"ERROR extracting train.zip: {{result.stderr}}")
+       exit(1)
    
-   # After extraction, images are at:
-   # ./train/image.jpg  (NOT /home/data/train/image.jpg)
-   # ./test/image.jpg   (NOT /home/data/test/image.jpg)
+   # VERIFY extraction worked - check what was created:
+   print("After extraction, current directory contains:")
+   os.system('ls -la')
+   
+   # Adapt based on what you see:
+   # If you see train/ folder → images are in ./train/*.jpg
+   # If you see *.jpg files → images are in ./*.jpg
+   # If neither → extraction failed, debug!
+   
+   # CRITICAL: Don't proceed if files not found!
+   if not os.path.exists('train'):
+       print("ERROR: train/ directory not found after extraction!")
+       # Check if images were extracted to different location
+       os.system('find . -name "*.jpg" | head -10')
+       exit(1)
    ```
    
 2. **🚨 Path handling in code - AVOID DOUBLE PATHS:**
@@ -273,22 +295,40 @@ Data: {data_dir}
 
 **STRATEGY: "fastai_vision"** (for images):
    
-   **Step-by-step (adapt to your data structure):**
-   1. Extract zip files to current directory: `os.system('unzip -q /home/data/train.zip -d .')`
-   2. Load CSV, build relative paths: `train_df['filepath'] = 'train/' + train_df['id'] + '.jpg'`
-   3. For binary: Convert labels to strings: `train_df['label'] = train_df['label'].astype(str)`
-   4. Create DataLoaders using **spec hyperparameters**:
-      - `size = spec['size']`, `split_pct = spec['split_pct']`, `bs = spec['batch_size']`
-      - `dls = ImageDataLoaders.from_df(df, path='.', fn_col='filepath', valid_pct=split_pct, item_tfms=Resize(size), bs=bs)`
-   5. Train using **spec hyperparameters**:
-      - `model_name = spec['model']`, `epochs = spec['epochs']`, `lr = spec['lr']`
-      - `learn = vision_learner(dls, getattr(models, model_name), metrics=accuracy)`
-      - `learn.fit_one_cycle(epochs, lr)`
-   6. Calculate **competition metric** (read from EDA context above):
-      - Get val predictions: `val_preds, val_targets = learn.get_preds(dl=learn.dls.valid)`
-      - Convert to numpy: `val_probs = val_preds.numpy()`, `y_val = val_targets.numpy()`
-      - Calculate metric from EDA (AUC/Accuracy/LogLoss): Use sklearn functions
-      - Print: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
+   **CRITICAL: Check zip structure BEFORE extracting!**
+   ```python
+   import os, subprocess
+   
+   # STEP 1: Check what's in the zip
+   result = subprocess.run(['zipinfo', '/home/data/train.zip'], 
+                          capture_output=True, text=True)
+   print(result.stdout[:500])  # Show first 500 chars
+   
+   # STEP 2: Extract with error checking
+   result = subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'], 
+                          capture_output=True, text=True)
+   if result.returncode != 0:
+       print(f"EXTRACTION FAILED: {{result.stderr}}")
+       exit(1)
+   
+   # STEP 3: VERIFY files exist (CRITICAL!)
+   os.system('ls -la')  # Show what was created
+   if not (os.path.exists('train') or os.path.exists('train.csv') or len(os.listdir('.')) > 3):
+       print("ERROR: No files extracted!")
+       os.system('find . -name \"*.jpg\" | head -10')
+       exit(1)
+   
+   print("✓ Data extracted successfully")
+   ```
+   
+   **Then follow spec hyperparameters:**
+   - Load CSV, build filepath column
+   - For binary: `df['label'] = df['label'].astype(str)`
+   - Create DataLoaders: `ImageDataLoaders.from_df(df, path='.', fn_col='filepath', valid_pct=spec['split_pct'], item_tfms=Resize(spec['size']), bs=spec['batch_size'])`
+   - Train: `learn = vision_learner(dls, getattr(models, spec['model']), metrics=accuracy)`
+   - Fit: `learn.fit_one_cycle(spec['epochs'], spec['lr'])`
+   - Calculate competition metric from EDA (use sklearn: roc_auc_score/accuracy_score/log_loss)
+   - Print: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
    
    **What train.py should do:**
    - Extract data, load with fastai using spec parameters
