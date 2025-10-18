@@ -21,7 +21,7 @@ Instructions: {instructions_path}
 NO model suggestions. NO iteration. ONE script, ONE run."""
 
 
-PLANNING_PROMPT = """You are an expert ML engineer. Design 2-3 NEW experiments based on dataset analysis.
+PLANNING_PROMPT = """You are an expert ML engineer. Analyze the dataset and design 2-3 experiments that will achieve the best performance.
 
 Competition: {competition_id}
 Round: {round_num}
@@ -29,16 +29,16 @@ Best: {best_score}
 
 {context}
 
-**TASK: Analyze the data characteristics above, then propose 2-3 DIFFERENT modeling approaches.**
+**Your task:** Read the EDA above carefully, reason about the problem, then design 2-3 experiments.
 
-**Step 1: Reason about the dataset**
-- Data type: tabular/image/text/time-series?
-- Size: small (<10K), medium (10K-100K), large (>100K)?
-- Complexity: number of features, classes, dimensionality?
-- Target: classification/regression? Binary/multiclass? Imbalanced?
-- Metric: what does it optimize for?
+**Step 1: Understand the problem**
+- What type of data? (images, tabular, text, audio)
+- How much data? (sample size, features, classes)
+- What's the evaluation metric? (optimize for that specific metric!)
+- What's challenging about this dataset? (class imbalance, small data, high dimensionality)
+- What approaches would work best given these characteristics?
 
-**Step 2: Choose strategy and models based on data characteristics**
+**Step 2: Design experiments based on your analysis**
 
 **CRITICAL: ONLY use models from standard libraries (torchvision.models, transformers, sklearn, xgboost, lightgbm)**
 **DO NOT propose custom architectures or models implemented from scratch - worker will fail**
@@ -78,11 +78,11 @@ Best: {best_score}
 - **Key advantages:**
   * fit_one_cycle() automatically finds optimal learning rate and schedule
   * Heavy augmentation (flip, rotate, zoom, lighting, warp) prevents overfitting
-  * 99/1 train/val split (maximum training data, minimal validation)
+  * Standard validation split: 15-20% (ensures robust generalization)
   * Image size 128-224 (smaller = faster training, still excellent accuracy)
   * Much simpler code than manual PyTorch (less room for bugs)
 - **Performance:** Regularly achieves 95-100% accuracy in 5-10 minutes
-- **Example:** {{"strategy": "fastai_vision", "model": "densenet161", "epochs": 5, "size": 128, "lr": 3e-2, "split_pct": 0.01}}
+- **Example:** {{"strategy": "fastai_vision", "model": "densenet161", "epochs": 5, "size": 128, "lr": 3e-2, "split_pct": 0.15}}
 
 **Strategy 2: "fastai_tabular"** (neural networks for small tabular datasets)
 - **When to try:** Tabular data with <10K samples and high dimensionality (features > samples per class)
@@ -104,10 +104,10 @@ Best: {best_score}
     - ResNet50 + InceptionV3 + DenseNet121 = 5120-dim
     - Wide_ResNet50_2 + EfficientNet-B2 + DenseNet161 = 5664-dim
   * **Image size: 299x299** (better than 224x224 for feature quality)
-  * **Train split: 0.95** (more data for LogReg = better calibration)
+  * **Train split: 0.8-0.85** (15-20% validation for proper generalization)
   * **LogReg tuning: Try C=0.1, 0.5, 1.0** (pick best on val, adds 5s)
   * **Test-time augmentation (TTA):** Predict on original + horizontal flip, average predictions (+10s, +2-5% accuracy)
-- **Example:** {{"strategy": "bottleneck_features", "models": ["EfficientNet-B2", "DenseNet161", "ResNet50"], "classifier": "LogisticRegression", "image_size": 299, "tta": true, "train_split": 0.95}}
+- **Example:** {{"strategy": "bottleneck_features", "models": ["EfficientNet-B2", "DenseNet161", "ResNet50"], "classifier": "LogisticRegression", "image_size": 299, "tta": true, "train_split": 0.85}}
 
 **Strategy 4: "gradient_boosting"** (for medium/large tabular data)
 - **When to try:** Tabular data with numerical/categorical features in CSV format
@@ -119,46 +119,38 @@ Best: {best_score}
 - **When to try:** Text data
 - **Models:** distilbert-base-uncased, bert-base-uncased, roberta-base
 
-**Recommendation for Round 1:**
-- **Images <50K (raw image files - PRIMARY STRATEGY):** 
-  * **🏆 USE FASTAI FIRST** - proven gold-medal approach, simple, fast
-  * exp_1: fastai_vision (densenet161, epochs=5, size=128, lr=3e-2, split_pct=0.01)
-  * exp_2: fastai_vision (resnet50, epochs=5, size=128, lr=3e-2, split_pct=0.01)
-  * exp_3: fastai_vision (efficientnet_b2, epochs=7, size=160, lr=2e-2, split_pct=0.01)
-  * Each finishes in 5-10 min, explores different architectures
-  * **ONLY use bottleneck_features if fastai fails or for very fast baseline (<3 min)**
-- **Tabular <10K samples (high dimensionality):**
-  * exp_1: fastai_tabular (layers=[200, 100], epochs=50, lr=1e-3)
-  * exp_2: gradient_boosting (LightGBM with regularization)
-  * exp_3: gradient_boosting (XGBoost with different hyperparameters)
-  * Try fastai first - often beats gradient boosting on small data
-- **Tabular >10K samples:**
-  * exp_1: LightGBM with feature engineering
-  * exp_2: XGBoost with different hyperparameters
-  * exp_3: LightGBM with different feature combinations
-  * **DO NOT use image/text strategies on tabular data!**
-- **Text data:** 
-  * exp_1: transformer_features (distilbert)
-  * exp_2: transformer_features (roberta)
-  * exp_3: gradient_boosting with TF-IDF features
-- **Audio:** 
-  * Convert to spectrograms
-  * exp_1: fastai_vision (treat spectrograms as images)
-  * exp_2: bottleneck_features (if fastai too slow)
+**Hyperparameter Selection Principles:**
 
-**Experiment Design Guidelines:**
-- **For images <50K: PREFER fastai_vision (gold-medal approach), bottleneck_features as fast fallback**
-- **Multi-model selection:** Choose 2-3 complementary backbones with different architectures:
-  * Good pairs: ResNet50 + InceptionV3, DenseNet161 + Wide_ResNet50_2, EfficientNet-B2 + ResNet50
-  * Good triplets: EfficientNet-B2 + DenseNet121 + ResNet50
-  * Different architectures capture different features
-- **Classifier for bottleneck: ALWAYS LogisticRegression** (DO NOT use XGBoost/tree methods - too slow for time budget)
-- **Different model combinations:** Each experiment should try different backbone combinations to find best ensemble
-- **For images >50K: Use fine_tuning (enough data to train full networks)**
-- **Batch size:** 32-64 for GPU training
-- **Train split:** <5000 samples use 0.85, larger use 0.9-0.95
-- **Image augmentation:** ONLY RandomHorizontalFlip, RandomRotation, ColorJitter, RandomCrop, RandomResizedCrop
-- **DO NOT use:** AutoAugment, RandAugment, Mixup, CutMix, Cutout, RandomErasing, Custom LSTM, BiLSTM, GloVe/FastText
+**For validation split:**
+- Use 15-20% validation (0.15-0.20 split_pct) for proper generalization estimates
+- Smaller datasets may use 20%, larger can use 15%
+- NEVER use <10% - validation too small to detect overfitting
+
+**For image size:**
+- Consider source image resolution and task complexity
+- Smaller images (128-160): Faster training, good for simple patterns
+- Larger images (224-256): Better feature learning, needed for fine details
+- Balance speed vs accuracy based on time budget
+
+**For learning rate:**
+- Standard ranges: 1e-2 to 3e-2 for fastai, 0.01-0.1 for gradient boosting
+- Adjust based on batch size and architecture
+- Lower for larger models/images
+
+**For epochs:**
+- Images with fastai: 5-10 epochs typically sufficient
+- Gradient boosting: 500-1000 trees with early stopping
+- More epochs if dataset is complex or large
+
+**For batch size:**
+- GPU memory constraint: Larger images → smaller batch
+- Standard: 32-64 for most image tasks
+- Adjust based on image size and model
+
+**Choose models and strategies based on:**
+- Dataset characteristics (size, type, complexity)
+- Time budget (fastai ~5-10min, bottleneck ~2-3min, gradient boosting varies)
+- What's most likely to achieve best performance on the evaluation metric
 
 **Step 3: Output ONLY JSON (NO text before/after):**
 
@@ -206,17 +198,66 @@ Data: {data_dir}
 **EDA Context (use this to understand the problem):**
 {eda_context}
 
-**CRITICAL: Your ONLY job is to write train.py. DO NOT:**
-- Run train.py (orchestrator will run it)
-- Write summaries/documentation
-- Test imports
-- Create verification scripts
-- Print debug metrics (accuracy, loss) using tensors - convert to float first with .item()
-- Format tensors directly in f-strings - causes TypeError
+**🚨 COMMON MISTAKES TO AVOID (READ FIRST!):**
+1. ❌ Double paths: `/home/home/train/img.jpg` → Extract to `.` and use relative paths
+2. ❌ Printing loss instead of competition metric → Read EDA for "Evaluation Metric"
+3. ❌ Missing imports: `accuracy_score` not defined → Add ALL sklearn.metrics imports at top
+4. ❌ Tensor formatting: `print(f"{{tensor:.6f}}")` → Convert to float first with `.item()`
+5. ❌ DataLoader iteration: `images = images.to(device)` on list → Unpack: `for batch in loader: images, labels = batch`
+6. ❌ Saving model in train.py → DON'T save or generate test predictions, ONLY train and print VALIDATION_SCORE
+7. ❌ Using lambda functions → Can't pickle, use regular functions
+8. ❌ Wrong validation split: <10% too small → Use 15-20% from spec
+
+**CRITICAL: Your ONLY job is to write train.py that:**
+1. Trains the model
+2. Prints VALIDATION_SCORE: {score}
+3. Exits
+
+**DO NOT in train.py:**
+- Generate test predictions (submission phase does that separately)
+- Save models (submission phase loads best model and does this)
+- Run extensive validation/debugging
+- Print anything except VALIDATION_SCORE line
+- Use lambda functions or other unpicklable objects
 
 **DO:**
-1. Check data structure (use Bash: ls, zipinfo, head CSV)
-2. Extract zip files to workspace if needed (unzip -q /home/data/train.zip -d .)
+1. **🚨 CRITICAL: Extract data correctly to avoid path errors:**
+   ```bash
+   # Check what's in /home/data/
+   ls -la /home/data/
+   
+   # Extract zip files to CURRENT DIRECTORY (not /home/data):
+   unzip -q /home/data/train.zip -d .
+   unzip -q /home/data/test.zip -d .
+   
+   # Verify extraction:
+   ls -la train/ test/
+   
+   # After extraction, images are at:
+   # ./train/image.jpg  (NOT /home/data/train/image.jpg)
+   # ./test/image.jpg   (NOT /home/data/test/image.jpg)
+   ```
+   
+2. **🚨 Path handling in code - AVOID DOUBLE PATHS:**
+   ```python
+   # ❌ WRONG: path='/home/data', fn_col adds /home/ → /home/home/data/image.jpg
+   # ✅ RIGHT: Use relative paths after extraction
+   
+   train_df = pd.read_csv('/home/data/train.csv')
+   # If CSV has just filenames like "abc.jpg":
+   train_df['filepath'] = 'train/' + train_df['id'] + '.jpg'  # Relative path
+   
+   # Load with fastai:
+   dls = ImageDataLoaders.from_df(
+       train_df, 
+       path='.',              # Current directory (where you extracted)
+       fn_col='filepath',     # Already has train/ prefix
+       label_col='label',
+       valid_pct=0.15
+   )
+   # This creates correct paths: ./train/abc.jpg (NOT /home/home/...)
+   ```
+
 3. **🚨 CRITICAL: Add ALL necessary imports at the TOP of train.py:**
    ```python
    # ALWAYS include these metric imports at the top:
@@ -230,83 +271,39 @@ Data: {data_dir}
 4. **Check strategy from spec** (spec['strategy'])
 5. Write train.py based on strategy:
 
-**STRATEGY: "fastai_vision"** (RECOMMENDED for images, gold-medal approach):
-   - Use fastai.vision library for simple, fast, accurate image classification (v2 API)
-   - Key patterns from gold solutions:
-     * CRITICAL: For binary classification (2 classes or 0/1 labels), convert labels to strings first: `df['label'] = df['label'].astype(str)`
-     * Load images using DataBlock (most reliable):
-       ```python
-       dls = DataBlock(
-           blocks=(ImageBlock, CategoryBlock),
-           get_items=get_image_files,
-           get_y=parent_label,
-           splitter=RandomSplitter(valid_pct=0.01, seed=42),
-           item_tfms=Resize(size),
-           batch_tfms=aug_transforms(size=size, min_scale=0.75)
-       ).dataloaders(path, bs=64)
-       ```
-     * Or from dataframe:
-       ```python
-       dls = ImageDataLoaders.from_df(
-           df, path='.', 
-           fn_col='filename', label_col='label',
-           valid_pct=0.01, seed=42,
-           item_tfms=Resize(size),
-           batch_tfms=aug_transforms(size=size, min_scale=0.75),
-           bs=64
-       )
-       ```
-     * Augmentation: `aug_transforms(size=size, min_scale=0.75, do_flip=True, flip_vert=True, max_rotate=10, max_lighting=0.2, max_warp=0.2)`
-     * Image size: Use spec['size'] (default 128-224, smaller = faster)
-     * Create learner: `learn = vision_learner(dls, resnet34, metrics=accuracy)`
-     * Train: `learn.fit_one_cycle(epochs, lr)` where epochs from spec (default 5), lr from spec (default 3e-2)
-     * Predict: `test_dl = learn.dls.test_dl(test_files); preds, _ = learn.get_preds(dl=test_dl)`
-     * **🚨 CRITICAL: Calculate THE COMPETITION METRIC (from EDA), not training loss:**
-       ```python
-       # Get validation predictions
-       val_preds, val_targets = learn.get_preds(dl=learn.dls.valid)
-       val_probs = val_preds.numpy()  # Convert to numpy IMMEDIATELY
-       y_val = val_targets.numpy()  # Convert to numpy IMMEDIATELY
-       
-       # Calculate competition metric (READ FROM EDA ABOVE):
-       # Metrics already imported at top: roc_auc_score, log_loss, accuracy_score
-       if "AUC" in eda_metric:  # e.g., "Evaluation Metric: AUC-ROC (HIGHER is better)"
-           val_metric = roc_auc_score(y_val, val_probs[:, 1])  # binary - returns float
-       elif "Accuracy" in eda_metric:
-           val_metric = accuracy_score(y_val, val_probs.argmax(axis=1))  # returns float
-       elif "Log Loss" in eda_metric or "Logloss" in eda_metric:
-           val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
-           val_metric = log_loss(y_val, val_probs)  # returns float
-       else:
-           # Fallback: use fastai's metric BUT CONVERT TO FLOAT
-           val_metric_tensor = learn.recorder.values[-1][1]
-           val_metric = val_metric_tensor.item() if isinstance(val_metric_tensor, torch.Tensor) else float(val_metric_tensor)
-       
-       # val_metric is now a Python float (from sklearn metrics or .item() conversion)
-       print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
-       
-       # ⚠️ WRONG: print(f"{{some_tensor:.6f}}")  # TypeError: can't format tensor!
-       # ⚠️ WRONG: val_metric = learn.recorder.values[-1][0]  # That's LOSS, not metric!
-       # ⚠️ WRONG: print(f"Accuracy: {{accuracy(preds, targs):.6f}}")  # accuracy() returns tensor!
-       # ✅ CORRECT: Use sklearn metrics (return floats) or convert with .item()
-       ```
-       **CRITICAL NOTES:**
-       - sklearn metrics (roc_auc_score, accuracy_score, log_loss) return Python floats - safe to print directly
-       - fastai metrics (accuracy, error_rate) return tensors - MUST use .item() before formatting
-       - When in doubt, always convert: `float(value.item() if hasattr(value, 'item') else value)`
-       - **DO NOT print debug metrics** (intermediate accuracy, loss, etc.) - only print VALIDATION_SCORE
-       - If you must print debug info, convert ALL tensors first: `acc.item()` not `acc`
-   - Always convert labels to strings to avoid binary/multi-class confusion
-   - Normalize with ImageNet stats (fastai does automatically)
-   - Save predictions to submission.csv in correct format
-   - **DO NOT print training loss as VALIDATION_SCORE - calculate actual competition metric!**
-   - **For debugging: Convert ALL tensors before printing:**
-     ```python
-     # WRONG: print(f"Accuracy: {{acc:.4f}}")  # if acc is tensor → TypeError
-     # RIGHT: print(f"Accuracy: {{acc.item():.4f}}")  # convert first
-     # SAFEST: Only print VALIDATION_SCORE, skip debug prints
-     ```
-   - This approach gets 95-100% accuracy in 5-10 minutes consistently
+**STRATEGY: "fastai_vision"** (for images):
+   
+   **Step-by-step (adapt to your data structure):**
+   1. Extract zip files to current directory: `os.system('unzip -q /home/data/train.zip -d .')`
+   2. Load CSV, build relative paths: `train_df['filepath'] = 'train/' + train_df['id'] + '.jpg'`
+   3. For binary: Convert labels to strings: `train_df['label'] = train_df['label'].astype(str)`
+   4. Create DataLoaders using **spec hyperparameters**:
+      - `size = spec['size']`, `split_pct = spec['split_pct']`, `bs = spec['batch_size']`
+      - `dls = ImageDataLoaders.from_df(df, path='.', fn_col='filepath', valid_pct=split_pct, item_tfms=Resize(size), bs=bs)`
+   5. Train using **spec hyperparameters**:
+      - `model_name = spec['model']`, `epochs = spec['epochs']`, `lr = spec['lr']`
+      - `learn = vision_learner(dls, getattr(models, model_name), metrics=accuracy)`
+      - `learn.fit_one_cycle(epochs, lr)`
+   6. Calculate **competition metric** (read from EDA context above):
+      - Get val predictions: `val_preds, val_targets = learn.get_preds(dl=learn.dls.valid)`
+      - Convert to numpy: `val_probs = val_preds.numpy()`, `y_val = val_targets.numpy()`
+      - Calculate metric from EDA (AUC/Accuracy/LogLoss): Use sklearn functions
+      - Print: `print(f"VALIDATION_SCORE: {val_metric:.6f}")`
+   
+   **What train.py should do:**
+   - Extract data, load with fastai using spec parameters
+   - Train model: `learn.fit_one_cycle(spec['epochs'], spec['lr'])`
+   - Calculate validation metric using sklearn (roc_auc_score/accuracy_score/log_loss based on EDA)
+   - Print ONLY: `print(f"VALIDATION_SCORE: {val_metric:.6f}")`
+   - Exit (DO NOT save model, DO NOT generate test predictions)
+   
+   **What train.py should NOT do:**
+   - ❌ Save model with learn.export() - causes pickling errors
+   - ❌ Generate test predictions - that's done in submission phase
+   - ❌ Save to submission.csv - not your job
+   - ❌ Use lambda functions - can't pickle
+   - ❌ Print debug info - only VALIDATION_SCORE
+   - ❌ Hardcode hyperparameters - use spec values
 
 **STRATEGY: "fastai_tabular"** (neural networks for small tabular):
    - Use fastai.tabular for small tabular datasets where gradient boosting overfits
@@ -320,44 +317,25 @@ Data: {data_dir}
    - Faster convergence than manual neural networks
 
 **STRATEGY: "bottleneck_features"** (extract features, train LogisticRegression):
-
-**Implementation guidance (adapt based on spec):**
-- **Image preprocessing:**
-  * Use image_size from spec (default 299 for EfficientNet, 224 for others)
-  * Normalize with ImageNet stats: mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-  * Resize larger (299x299) gives better features than smaller (224x224)
-- **Multi-model ensembles:**
-  * Load all models from spec['models'] (or single spec['model'])
-  * Remove final classification layer (fc/classifier/head → Identity)
-  * Extract features from each backbone, concatenate (np.hstack)
-  * Always use eval() mode, no_grad() for inference
-- **Feature normalization:**
-  * CRITICAL: Use StandardScaler().fit_transform() on features before LogReg
-  * Without scaling, LogReg performs poorly
-- **Train/val split:**
-  * Use train_split from spec (default 0.95 for small datasets, 0.85 for large)
-  * More training data = better LogReg calibration = lower logloss
-- **LogisticRegression hyperparameters:**
-  * If spec has 'C' values list → try each, pick best on validation
-  * If spec has single C → use it (default C=1.0)
-  * Use multi_class='multinomial', solver='lbfgs', max_iter=1000
-- **Test-time augmentation (TTA) if spec['tta']=true:**
-  * Extract features on: original images + horizontal flips
-  * Average the feature vectors before feeding to LogReg
-  * Adds ~10s but improves accuracy 2-5%
-- **Validation metric:**
-  * **🚨 CALCULATE THE COMPETITION METRIC FROM EDA, NOT ARBITRARY METRIC**
-  * Read EDA context above for "Evaluation Metric: XXX (HIGHER/LOWER is better)"
-  * Common patterns:
-    - AUC-ROC competition: `roc_auc_score(y_val, val_probs[:, 1])`
-    - Accuracy competition: `accuracy_score(y_val, val_probs.argmax(axis=1))`
-    - Log Loss competition: `log_loss(y_val, val_probs, labels=list(range(num_classes)))`
-  * ALWAYS clip probabilities: `val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)`
-  * For log_loss: CRITICAL to pass labels argument to prevent errors when val set missing classes
-  * Print VALIDATION_SCORE with the COMPETITION metric value (not loss!)
-- **Save:** backbone weights, classifier, scaler, model_names config
-
-**Example code structure:**
+   
+   **Step-by-step:**
+   1. Load models from **spec['models']** (list) or **spec['model']** (single)
+   2. Remove classification heads: `backbone.fc = nn.Identity()`
+   3. Extract features from images (use eval mode, no_grad)
+   4. **StandardScaler** on features (CRITICAL for LogReg)
+   5. Train/val split using **spec.get('train_split', 0.85)**
+   6. Train LogisticRegression with **spec.get('C', 1.0)**
+   7. Calculate competition metric (read from EDA), print VALIDATION_SCORE
+   8. Save: backbones, classifier, scaler, config
+   
+   **Critical rules:**
+   - ✅ Use ALL spec parameters (models, C, train_split, image_size, tta)
+   - ✅ Extract to current directory, use relative paths
+   - ✅ StandardScaler on features before LogReg
+   - ✅ Calculate competition metric from EDA
+   - ❌ DON'T hardcode parameters
+   
+   **Condensed example structure:**
 ```python
 import torch
 import torch.nn as nn
@@ -461,53 +439,26 @@ print("Models saved!")
 - C tuning: Try C=[0.1, 0.5, 1.0], pick best on validation (quick cross-validation)
 - Ensure StandardScaler is applied to all feature sets (train/val/test)
 
-**STRATEGY: "gradient_boosting"** (for tabular data):
-   - Load train CSV, identify target column (column in train but not in test)
-   - Separate features (X) and target (y), drop ID columns
-   - Handle categorical features (LabelEncoder for string columns)
-   - Determine task type: classification (y.nunique() < 50) vs regression
-   - Check class imbalance for classification:
-     * If any class has < 2 samples → drop those classes OR use 95/5 train/val split
-     * If min_class >= 2 → use stratified split (test_size=0.15, stratify=y)
-     * For regression → standard split (no stratify)
-   - Train model based on spec['model']:
-     * LightGBM: Use LGBMClassifier/LGBMRegressor with hyperparams from spec
-     * XGBoost: Use XGBClassifier/XGBRegressor with tree_method='hist'
-     * Set appropriate objective: binary/multiclass/regression
-   - **🚨 CRITICAL: Calculate THE COMPETITION METRIC (from EDA context above), not arbitrary metric:**
-     
-     **Read EDA to find evaluation metric:**
-     - Look for "Evaluation Metric: XXX (HIGHER/LOWER is better)"
-     - Use THAT EXACT metric for VALIDATION_SCORE
-     
-     **Common competition metrics:**
-     ```python
-     # Metrics already imported at top of file!
-     # from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
-     
-     val_probs = model.predict_proba(X_val)  # for classification
-     val_preds = model.predict(X_val)  # for regression
-     val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)  # prevent log(0)
-     
-     # Match the competition metric from EDA:
-     if "AUC" in competition_metric:  # Binary classification → AUC
-         val_metric = roc_auc_score(y_val, val_probs[:, 1])
-     elif "Accuracy" in competition_metric:  # Classification → Accuracy
-         val_metric = accuracy_score(y_val, val_preds)
-     elif "Log Loss" in competition_metric or "Logloss" in competition_metric:  # Multiclass
-         num_classes = len(np.unique(y_train))
-         val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
-         # CRITICAL: Always pass labels argument to prevent errors when val missing classes
-     elif "RMSE" in competition_metric:  # Regression
-         val_metric = mean_squared_error(y_val, val_preds, squared=False)
-     elif "MAE" in competition_metric:  # Regression
-         val_metric = mean_absolute_error(y_val, val_preds)
-     
-     print(f"VALIDATION_SCORE: {{val_metric:.6f}}")
-     
-     # ⚠️ DO NOT use wrong metric! Check EDA carefully!
-     ```
-   - Save model: `joblib.dump(model, 'model.pkl')`
+**STRATEGY: "gradient_boosting"** (for tabular):
+   
+   **Step-by-step:**
+   1. Load CSV: `train_df = pd.read_csv('/home/data/train.csv')`
+   2. Identify target (column in train but not test), separate X and y
+   3. Encode categoricals if needed (LabelEncoder)
+   4. Train/val split: Use 15-20% validation (stratified for classification)
+   5. Train model using **spec['model']** and **spec['hyperparameters']**:
+      - LightGBM: `LGBMClassifier(**spec['hyperparameters'])`
+      - XGBoost: `XGBClassifier(tree_method='hist', **spec['hyperparameters'])`
+   6. Calculate **competition metric** from EDA context:
+      - Read EDA for "Evaluation Metric: XXX"
+      - Use sklearn: `roc_auc_score`, `log_loss`, `accuracy_score`, `mean_squared_error`
+      - Print: `print(f"VALIDATION_SCORE: {val_metric:.6f}")`
+   7. Save: `joblib.dump(model, 'model.pkl')`
+   
+   **Critical rules:**
+   - ✅ Use ALL hyperparameters from spec (n_estimators, learning_rate, max_depth, etc.)
+   - ✅ Calculate competition metric (not just any metric)
+   - ❌ DON'T hardcode hyperparameters - read from spec
 
 **STRATEGY: "fine_tuning"** (standard CNN training):
    - **For image datasets:** Read CSV with dtype={{'id': str}} to preserve filename format
