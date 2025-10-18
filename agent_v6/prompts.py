@@ -303,7 +303,9 @@ Data: {data_dir}
   * Average the feature vectors before feeding to LogReg
   * Adds ~10s but improves accuracy 2-5%
 - **Validation metric:**
-  * For classification: Use log_loss with clipped probabilities (1e-7, 1-1e-7)
+  * For classification: Use log_loss with clipped probabilities AND labels argument
+  * `log_loss(y_val, val_probs, labels=list(range(num_classes)))`
+  * CRITICAL: labels argument prevents errors when val set missing some classes
   * Print VALIDATION_SCORE with the logloss value
 - **Save:** backbone weights, classifier, scaler, model_names config
 
@@ -378,8 +380,9 @@ clf.fit(X_train, y_train)
 
 # Validation
 val_probs = clf.predict_proba(X_val)
-val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)  # Prevent log(0)
-val_metric = log_loss(y_val, val_probs)
+val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
+num_classes = len(clf.classes_)
+val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
 print(f"VALIDATION_SCORE: {val_metric:.6f}")
 
 # Save models
@@ -413,7 +416,16 @@ print("Models saved!")
      * Set appropriate objective: binary/multiclass/regression
    - Validate and print VALIDATION_SCORE based on task:
      * Binary classification → AUC (roc_auc_score)
-     * Multiclass → Log Loss (log_loss)
+     * Multiclass → Log Loss (log_loss) with labels argument:
+       ```python
+       from sklearn.metrics import log_loss
+       val_probs = model.predict_proba(X_val)
+       val_probs = np.clip(val_probs, 1e-7, 1 - 1e-7)
+       num_classes = len(np.unique(y_train))
+       val_metric = log_loss(y_val, val_probs, labels=list(range(num_classes)))
+       ```
+       CRITICAL: Always pass `labels=list(range(num_classes))` to log_loss for multiclass
+       This prevents errors when validation set doesn't contain all classes
      * Regression → RMSE (mean_squared_error with squared=False)
    - Save model: `joblib.dump(model, 'model.pkl')`
 
