@@ -154,6 +154,10 @@ class Orchestrator:
         
         json_str = json_match.group(0)
         
+        json_str = re.sub(r'(?<!\\)\n', ' ', json_str)
+        json_str = re.sub(r'(?<!\\)\r', ' ', json_str)
+        json_str = re.sub(r'(?<!\\)\t', ' ', json_str)
+        
         try:
             experiments = json.loads(json_str)
             if not isinstance(experiments, list):
