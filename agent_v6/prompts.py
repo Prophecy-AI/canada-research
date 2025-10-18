@@ -71,6 +71,9 @@ Best: {best_score}
 **Strategy 3: "gradient_boosting"** (for tabular)
 - **When to try:** Tabular data
 - **Models:** XGBoost (tree_method='hist'), LightGBM (CPU), CatBoost
+- **CatBoost CRITICAL:** If bootstrap_type="Bayesian", DO NOT use subsample parameter (incompatible). Either:
+  * Use bootstrap_type="Bayesian" WITHOUT subsample, OR
+  * Use bootstrap_type="Bernoulli" WITH subsample=0.8
 
 **Strategy 4: "transformer_features"** (for text)
 - **When to try:** Text data
