@@ -214,6 +214,19 @@ Strategy:
   - 3-fold CV (TimeSeriesSplit for time-ordered data - MANDATORY)
   - Default parameters + early stopping (finds optimal trees automatically)
 
+FASTAI RAPID PROTOTYPING
+------------------------
+When to use:
+  - Need a high-quality image or tabular baseline in <30 minutes using proven defaults.
+  - Want fast iteration (learning-rate finder, automated callbacks) before investing in heavy custom code.
+How to deploy:
+  - Image tasks: `fastai.vision.learner` with pretrained resnet34/resnet50 delivers competitive CV in minutes.
+  - Tabular tasks: `TabularLearner` + fastai tabular preprocessing gives strong baselines prior to GBDT feature engineering.
+  - Always run `learn.fit_one_cycle` (mixed precision on by default) and export weights to PyTorch state dict for later ensembling.
+Guidance:
+  - Keep augmentations modest when time budget tight—fastai defaults already balanced.
+  - Review automatic normalisation/processing steps so they align with competition requirements (disable if they introduce leakage).
+
 NATURAL LANGUAGE PROCESSING
 ----------------------------
 Examples: jigsaw-toxic-comment-classification-challenge,
@@ -227,6 +240,19 @@ Strategy:
   - Keep max_length small (128 or 256)
   - Train 1-2 epochs only (diminishing returns after)
   - 3-fold StratifiedKFold or GroupKFold
+
+KERAS / TENSORFLOW BUILDS
+-------------------------
+When to use:
+  - Multi-label NLP or mixed-modal problems where Keras Functional API simplifies custom heads.
+  - Need rapid prototyping of transformer classifiers using TensorFlow Hub / KerasNLP within well-tested training loops.
+How to deploy:
+  - Text: `tf.keras.Sequential` or Functional graph with `TextVectorization`, pretrained embeddings, and metric callbacks (AUC/F1).
+  - Multi-input: combine structured features + text streams using Functional model; Keras handles branching/merges cleanly.
+  - Enable `tf.keras.mixed_precision.set_global_policy("mixed_float16")` on NVIDIA GPUs for 1.5-2× throughput, monitor via `tf.config.experimental.get_memory_usage`.
+Guidance:
+  - Keep sequence length ≤256 for 30-minute budgets; rely on ReduceLROnPlateau + ModelCheckpoint callbacks for stable training.
+  - Export final model to SavedModel/ONNX for flexible inference; convert logits to Kaggle submission directly in `predict.py`.
 
 AUDIO
 -----

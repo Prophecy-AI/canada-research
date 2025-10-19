@@ -86,6 +86,34 @@ Solution: Loss calculation MUST be inside autocast():
   ```
 
 ────────────────────────────────────────────────────────────────────────────────
+SECTION 3A: FASTAI & KERAS QUICK START OPTIONS
+────────────────────────────────────────────────────────────────────────────────
+
+FASTAI (vision/tabular rapid baselines)
+  When to use:
+    - Need a strong image or tabular baseline in <30 minutes with minimal boilerplate.
+    - Want automatic learning-rate finder, fit-one-cycle scheduling, and callback stack before diving into custom PyTorch.
+  How to run:
+    - Images: `from fastai.vision.all import *`; create `DataBlock` → `Learner` (resnet34/resnet50) → `learn.fit_one_cycle(epochs)`.
+    - Tabular: `fastai.tabular.all` with `TabularPandas` + `TabularLearner` gives competitive baselines prior to LightGBM tuning.
+    - Export: `learn.export()` or `learn.model.state_dict()` so you can ensemble with later PyTorch models.
+  Tips:
+    - Fastai auto-augments aggressively; trim augmentations if GPU <60% or time budget tight.
+    - Review normalization/categorical encoders to ensure they match Kaggle CV split (fit on train folds only).
+
+KERAS / TENSORFLOW (text & multi-input flexibility)
+  When to use:
+    - Multi-label NLP or mixed-modal problems where Keras Functional API simplifies branching heads.
+    - Need to fuse TextVectorization, embeddings, and metadata with minimal custom training loop code.
+  How to run:
+    - Text: `tf.keras.Sequential` with `TextVectorization` + Dense/Transformer layers, callbacks `ModelCheckpoint` + `ReduceLROnPlateau`.
+    - Mixed inputs: Functional API to merge text + tabular branches; use `tf.keras.mixed_precision.set_global_policy("mixed_float16")` on NVIDIA GPUs.
+    - Export: `model.save("model.keras")` or `tf.saved_model.save` for inference in predict.py.
+  Tips:
+    - Cap sequence length at 128/256 unless budget allows (remember mean column-wise AUC tasks prefer throughput).
+    - Monitor GPU usage via `tf.config.experimental.get_memory_usage("GPU:0")`; if 0 bytes, training silently fell back to CPU.
+
+────────────────────────────────────────────────────────────────────────────────
 SECTION 4: BATCH SIZE & DATA LOADING
 ────────────────────────────────────────────────────────────────────────────────
 
