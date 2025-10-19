@@ -190,99 +190,45 @@ Best: {best_score}
 - Round 1: Try multi-model bottleneck + comparison experiments. Round 2+: Double down on what worked."""
 
 
-WORKER_PROMPT = """Write train.py for this experiment. DO NOT RUN IT.
+WORKER_PROMPT = """You're a skilled ML engineer. Write train.py for this experiment.
 
-Experiment: {spec}
-Data: {data_dir}
+Experiment spec: {spec}
+Data location: {data_dir}
 
-**EDA Context (use this to understand the problem):**
-{eda_context}
+EDA context: {eda_context}
 
-**🚨 COMMON MISTAKES TO AVOID (READ FIRST!):**
-1. ❌ Double paths: `/home/home/train/img.jpg` → Extract to `.` and use relative paths
-2. ❌ Printing loss instead of competition metric → Read EDA for "Evaluation Metric"
-3. ❌ Missing imports: `accuracy_score` not defined → Add ALL sklearn.metrics imports at top
-4. ❌ Tensor formatting: `print(f"{{tensor:.6f}}")` → Convert to float first with `.item()`
-5. ❌ DataLoader iteration: `images = images.to(device)` on list → Unpack: `for batch in loader: images, labels = batch`
-6. ❌ Saving model in train.py → DON'T save or generate test predictions, ONLY train and print VALIDATION_SCORE
-7. ❌ Using lambda functions → Can't pickle, use regular functions
-8. ❌ Wrong validation split: <10% too small → Use 15-20% from spec
+**Your task:**
+1. Explore {data_dir} using Bash tools (ls, zipinfo, head) to understand structure
+2. Write train.py that:
+   - Loads data based on what you find (don't assume filenames!)
+   - Trains model using spec['strategy'] and ALL spec['hyperparameters']
+   - Calculates competition metric from EDA context (search for "Evaluation Metric:")
+   - Prints required output (see below)
+   - Exits
 
-**CRITICAL: Your job is to write train.py that:**
-1. Trains the model
-2. Prints VALIDATION_SCORE: {{primary_metric}} (the competition metric)
-3. Prints SECONDARY_METRICS: {{other useful metrics}} (for tie-breaking)
-4. Exits
-
-**What to print:**
-- `VALIDATION_SCORE: {{competition_metric}}` (REQUIRED - AUC/Accuracy/LogLoss from EDA)
-- `TRAIN_LOSS: {{train_loss}}` (OPTIONAL - helps detect overfitting)
-- `VAL_LOSS: {{val_loss}}` (OPTIONAL - better calibration metric)
-- `TRAIN_TIME: {{seconds}}` (OPTIONAL - efficiency metric)
-
-**DO NOT in train.py:**
-- Generate test predictions (submission phase does that separately)
-- Save models (submission phase loads best model and does this)
-- Use lambda functions or other unpicklable objects
-
-**DO:**
-1. **Check data structure first** (adapt based on data type):
-   
-   **For IMAGE data** (if strategy is fastai_vision, bottleneck_features, fine_tuning):
-   - Check zip structure: `zipinfo /home/data/train.zip | head -20`
-   - Extract: `subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'])`
-   - Detect structure: Check if images in `train/` subdirectory or directly in `.`
-   - Adapt filepath prefix accordingly
-   
-   **For TABULAR data** (if strategy is gradient_boosting, fastai_tabular):
-   - Data is usually already in CSV format at `/home/data/train.csv`
-   - No extraction needed unless data is zipped
-   - Load directly: `pd.read_csv('/home/data/train.csv')`
-   
-   **For TEXT data** (if strategy is transformer_features):
-   - Text is usually in CSV columns
-   - Load CSV: `train_df = pd.read_csv('/home/data/train.csv')`
-   - Identify text column(s) from EDA context
-   
-   **For AUDIO data**:
-   - Extract zip files if needed
-   - Convert audio to spectrograms
-   - Treat as images (use fastai_vision or bottleneck_features)
-
-2. **🚨 ALWAYS include metric imports at TOP of train.py:**
-```python
-from sklearn.metrics import roc_auc_score, log_loss, accuracy_score, mean_squared_error, mean_absolute_error
-import numpy as np
-# Plus strategy-specific imports (fastai, torch, lightgbm, etc.)
+**Required output format:**
+```
+VALIDATION_SCORE: {{primary_metric}}
+VAL_LOSS: {{val_loss}}
+TRAIN_LOSS: {{train_loss}}  
+TRAIN_TIME: {{seconds}}
 ```
 
-**ALL STRATEGIES - General principles:**
+**Key rules:**
+- Explore data structure FIRST - use ls, zipinfo, head to see what files exist
+- Don't hardcode paths/filenames - adapt to what you find
+- Use ALL hyperparameters from spec (epochs, lr, size, batch_size, split_pct, etc.)
+- Import sklearn.metrics at top of train.py
+- Convert tensors to float before printing (.item() or .numpy())
+- Don't save models or generate test predictions in train.py
 
-1. **Load data** - Inspect structure first, adapt to what you find (don't assume)
-2. **Use ALL spec hyperparameters** - Never hardcode, always read from spec
-3. **Train model** - Follow the strategy (fastai/sklearn/lightgbm/transformers)
-4. **Calculate metrics**:
-   - PRIMARY: Competition metric from EDA (AUC/Accuracy/LogLoss/RMSE)
-   - SECONDARY: val_loss, train_loss, train_time (for tie-breaking)
-5. **Print metrics**:
-   ```
-   VALIDATION_SCORE: <primary_metric>
-   VAL_LOSS: <validation_loss>
-   TRAIN_LOSS: <final_training_loss>
-   TRAIN_TIME: <seconds>
-   ```
-6. **Exit** - Don't save models or generate predictions
+**Common strategies:**
+- fastai_vision: Fine-tune with fit_one_cycle
+- bottleneck_features: Extract features, train LogReg
+- gradient_boosting: LightGBM/XGBoost
+- transformer_features: Extract embeddings, train LogReg
 
-**Strategy-specific notes:**
-
-- **fastai_vision**: Extract zip, detect if images in subfolder or direct, adapt prefix
-- **bottleneck_features**: Extract features, StandardScaler, LogReg with spec['C']
-- **gradient_boosting**: Load CSV, encode categoricals, use spec hyperparameters
-- **transformer_features**: Tokenize text, extract embeddings, LogReg on features
-
-**End of general guidance. Implement based on spec['strategy'] and EDA context.**
-
-Respond "READY" when done writing train.py.
+Respond "READY" when done.
 
 Tools: Bash, Read, Write"""
 
