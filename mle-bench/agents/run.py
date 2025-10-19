@@ -1,6 +1,7 @@
 import logging
 import time
 from pathlib import Path
+import codecs
 
 import docker
 from docker.models.containers import Container
@@ -60,10 +61,11 @@ def execute_agent(container: Container, agent: Agent, logger: logging.Logger):
     exit_code, output = container.exec_run(cmd, stream=True, user="nonroot")
 
     # Buffer for accumulating partial lines (chunks are arbitrary byte boundaries)
+    decoder = codecs.getincrementaldecoder("utf-8")()
     buffer = ""
     for chunk in output:
-        # Decode chunk and add to buffer
-        buffer += chunk.decode('utf-8')
+        # Decode chunk incrementally to avoid splitting multibyte sequences
+        buffer += decoder.decode(chunk, final=False)
 
         # Split on newlines and log complete lines
         while '\n' in buffer:
@@ -72,6 +74,7 @@ def execute_agent(container: Container, agent: Agent, logger: logging.Logger):
                 logger.info(f"[Container] {line}")
 
     # Log any remaining content (last line without newline)
+    buffer += decoder.decode(b"", final=True)
     if buffer.strip():
         logger.info(f"[Container] {buffer}")
 

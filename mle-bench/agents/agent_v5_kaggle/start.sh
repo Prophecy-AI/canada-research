@@ -15,6 +15,9 @@ echo "========================================="
 eval "$(conda shell.bash hook)"
 conda activate agent
 
+# Ensure agent package imports work everywhere
+export PYTHONPATH="/home:${PYTHONPATH:-}"
+
 # Set working directory to CODE_DIR (agent's workspace)
 cd ${CODE_DIR}
 
