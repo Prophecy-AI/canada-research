@@ -43,6 +43,7 @@ RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     wget \
+    ripgrep \
     && rm -rf /var/lib/apt/lists/*
 
 # Install newer CMake (3.28+ required by LightGBM)
