@@ -305,13 +305,26 @@ class OracleTool(BaseTool):
             role = msg["role"]
             content = msg["content"]
 
-            if role == "user" and isinstance(content, list):
-                # Tool results - format nicely
+            if role == "user" and isinstance(content, str):
+                messages.append({"role": "user", "content": content})
+
+            elif role == "user" and isinstance(content, list):
+                # Backwards compatibility: treat embedded tool results as user content
                 formatted = []
                 for item in content:
                     if item.get("type") == "tool_result":
                         tool_content = item.get("content", "")
                         formatted.append(f"[Tool Result]: {tool_content}")
+                if formatted:
+                    messages.append({"role": "user", "content": "\n".join(formatted)})
+
+            elif role == "tool" and isinstance(content, list):
+                formatted = []
+                for item in content:
+                    if item.get("type") == "tool_result":
+                        tool_name = item.get("tool_name", "tool")
+                        tool_output = item.get("content", "")
+                        formatted.append(f"[Tool Result – {tool_name}]: {tool_output}")
                 if formatted:
                     messages.append({"role": "user", "content": "\n".join(formatted)})
 
@@ -492,4 +505,3 @@ class OracleTool(BaseTool):
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             "**Oracle Consultation Complete.** Follow the synthesized optimal plan above."
         )
-
