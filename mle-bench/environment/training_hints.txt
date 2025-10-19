@@ -292,15 +292,14 @@ for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
             scaler.update()
             optimizer.zero_grad()
 
-            # GPU validation (first batch only) - A100 40GB
-            if epoch == 0 and i == 0:
-                mem = torch.cuda.memory_allocated() / 1024**3
-                total = torch.cuda.get_device_properties(0).total_memory / 1024**3
-                print(f"GPU: {mem:.1f} GB / {total:.1f} GB ({mem/total*100:.1f}%)")
-                print(f"Expected on A100 40GB: 28-36GB (70-90%)")
-                if mem/total < 0.10:
-                    print("⚠️  CRITICAL: GPU <10% - likely training on CPU!")
-                    raise RuntimeError("GPU not being used - check data.cuda() calls")
+            # Print timing every epoch (GPU validation via speed, not memory)
+            if i == 0:  # First batch of epoch
+                epoch_start = time.time()
+            if i == len(train_loader) - 1:  # Last batch of epoch
+                epoch_time = time.time() - epoch_start
+                print(f"Epoch {epoch} completed in {epoch_time:.1f}s")
+                # Expected A100 times: EfficientNet-B3 ~30-60s/epoch, ResNet-50 ~20-30s/epoch
+                # If seeing >300s/epoch, likely training on CPU (10-20x slower)
 
         # Validation
         model.eval()

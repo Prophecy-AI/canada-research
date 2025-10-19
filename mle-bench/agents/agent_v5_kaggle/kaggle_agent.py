@@ -61,11 +61,13 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **PLANNING RULE:** Before starting training, estimate time (folds × epochs × min_per_epoch). If >30 min estimated, reduce strategy.
 - **MONITORING RULE:** If training exceeds 25 min, consider killing and using partial models (unless on track to finish by 35-40 min)
 
-**GPU MANDATE (NEVER TRAIN ON CPU):**
-- **ALL training MUST use GPU** (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', LightGBM: device_type='cuda')
+**GPU USAGE (EFFICIENT, NOT EXTREME):**
+- **ALL training MUST use GPU** (PyTorch: .to(device), XGBoost: tree_method='gpu_hist', LightGBM: device_type='cuda')
 - **CPU training is FORBIDDEN** (10-100x slower, wastes time)
-- **Target GPU utilization:** 70-90% memory (28-36GB on A100 40GB), 80-95% compute
-- **Underutilizing GPU is wasteful** - maximize batch size: 256-384 for 224x224 images, 128-192 for 384x384, 8192+ for tabular
+- **Goal: Efficient training, not max GPU usage** - focus on speed and parallel training
+- **Batch sizes:** Use reasonable sizes that work well (256-384 for 224x224 images, 128-192 for 384x384)
+- **Parallel training preferred:** Train 2-3 models simultaneously rather than one giant model
+- **Validation:** Use GPUValidate tool BEFORE training to confirm GPU is working (timing-based, reliable)
 
 **KAGGLE GRANDMASTER KNOWLEDGE BASE (CRITICAL - READ THIS FIRST):**
 - **File location:** /home/kaggle_competition_strategy.txt
@@ -95,13 +97,17 @@ Current date: {current_date}
 {instructions}
 
 **Available Tools (use only these):**
-- Bash: Execute shell commands. background (REQUIRED): false (quick ops, max 600s) or true (training/inference, no timeout, uses A10 GPU)
+- Bash: Execute shell commands. background (REQUIRED): false (quick ops, max 600s) or true (training/inference, no timeout, uses A100 GPU)
   - Monitor with ReadBashOutput(shell_id); cancel with KillShell(shell_id)
 - Read, Write, Edit: File operations
 - Glob, Grep: Find/search files
 - TodoWrite, ReadTodoList: Task tracking
 - RunSummary: Log run results (JSONL)
 - **ElapsedTime:** Check how long you've been working (tracks against 20±10 min budget). Use every 5-10 minutes to stay on track.
+- **GPUValidate:** Verify GPU training is working correctly (timing-based benchmark). Use BEFORE training to catch CPU fallback early.
+  - Example: GPUValidate(framework='pytorch', model_size='small', batch_size=256)
+  - Example: GPUValidate(framework='lightgbm', rows=100000)
+  - Returns clear confirmation if GPU is working or error if CPU fallback detected
 - **Oracle (O3 + DeepSeek-R1 Grandmaster):** WORLD-CLASS KAGGLE EXPERT for strategic planning, code review, and debugging. Use for:
   - Initial competition strategy (MANDATORY)
   - Code review before training (MANDATORY)
@@ -127,9 +133,9 @@ Current date: {current_date}
    • Run: Bash(command='nproc', background=false) to get CPU core count
    • Run: Bash(command='nvidia-smi --query-gpu=name,memory.total,memory.free --format=csv,noheader', background=false) to get GPU info
    • Run: Bash(command='free -h', background=false) to check RAM
-   • Run: Bash(command='python -c "import torch; print(torch.cuda.is_available(), torch.cuda.get_device_name(0) if torch.cuda.is_available() else None)"', background=false) to verify PyTorch GPU
-   • Document: "We have X CPU cores, NVIDIA A10 GPU with Y GB VRAM (Z GB free), W GB system RAM"
-   • **CRITICAL: You have NVIDIA A10 GPU (24GB VRAM, Tensor Cores). Use ALL resources: max batch sizes, n_jobs=-1, mixed precision.**
+   • Run: GPUValidate(framework='pytorch', model_size='small', batch_size=256) to verify GPU training works
+   • Document: "We have X CPU cores, NVIDIA A100 GPU with Y GB VRAM (Z GB free), W GB system RAM. GPU validation: PASSED"
+   • **CRITICAL: You have NVIDIA A100 GPU (40GB VRAM). Focus on efficient parallel training (2-3 models), not extreme single-model optimization.**
    • This informs all downstream decisions about batch sizes, parallelism, and framework choices
 
 1) **Initial Data Exploration** (FIRST TURN ONLY - Quick, <5 min)
@@ -315,18 +321,18 @@ Current date: {current_date}
      2. Write train.py following hints guidelines
      3. Validate train.py with Oracle
      4. Launch training: `Bash(command="python -u train.py", background=true)`
-     5. **MANDATORY GPU VALIDATION (60 seconds after launch) - CRITICAL:**
-        - Read training output with ReadBashOutput
-        - **CHECK 1 - GPU IS BEING USED:** Look for GPU memory usage print (should show XX.X GB / YY.Y GB)
-          * **If GPU memory <10% or no GPU usage → KILL IMMEDIATELY - training on CPU (10-100x slower)**
-          * This is the #1 failure mode - verify GPU is actually being used, not just available
-        - **CHECK 2 - GPU UTILIZATION:** Once confirmed using GPU, check memory %
-          * If GPU memory <50% → KILL, increase batch_size by 2x, relaunch
-          * If GPU memory 50-70% → OPTIONAL: Can increase batch_size by 1.5x for better utilization
-        - **CHECK 3 - LOSS SANITY:** After 1-2 epochs, check validation loss vs random baseline
+     5. **MANDATORY VALIDATION (After launch) - CRITICAL:**
+        - **CHECK 1 - LOSS SANITY (after 2-3 epochs):** Check validation loss vs random baseline
           * Random baseline = ln(num_classes). Example: 120 classes → ln(120) ≈ 4.79
           * If validation loss ≈ baseline (within 0.1) → model not learning, KILL and debug
-        - Only proceed if: GPU >10% usage, GPU >50% memory, loss improving beyond random
+        - **CHECK 2 - EPOCH TIMING (after first epoch):** Verify GPU speed vs CPU speed
+          * **Expected on A100 GPU:** EfficientNet-B3 = 0.5-1 min/epoch, ResNet-50 = 0.3-0.5 min/epoch
+          * **CPU fallback (BAD):** EfficientNet-B3 = 10-20 min/epoch, ResNet-50 = 5-10 min/epoch
+          * **If epoch >5 min → KILL IMMEDIATELY** - likely training on CPU (10-20x slower)
+          * Don't rely on memory checks alone - epoch timing is the most reliable GPU indicator
+        - **CHECK 3 - MODEL AVAILABILITY (before training):** Ensure pretrained model can download
+          * If model download fails, training will fail. Verify model name exists in timm/torchvision
+        - Only proceed if: epochs are fast (<2 min/epoch for medium models), loss improving beyond random
      6. **IMMEDIATELY (same turn) write predict.py** - DO NOT wait for training to finish
      7. Validate predict.py with Oracle if needed
      8. **Monitor GPU usage during training (every 120-180s):**
@@ -586,3 +592,12 @@ class KaggleAgent(ResearchAgent):
             workspace_dir=workspace_dir,
             system_prompt=system_prompt
         )
+
+    def _register_core_tools(self):
+        """Register core tools + Kaggle-specific tools"""
+        # Register parent class tools
+        super()._register_core_tools()
+
+        # Register Kaggle-specific tool: GPUValidate
+        from .tools.gpu_validate import GPUValidateTool
+        self.tools.register(GPUValidateTool(self.workspace_dir))

@@ -50,6 +50,56 @@ class ToolRegistry:
         """
         return [tool.schema for tool in self.tools.values()]
 
+    def get_schemas_gemini(self) -> List:
+        """
+        Get all tool schemas in Gemini API format (FunctionDeclaration)
+
+        Returns:
+            List of FunctionDeclaration objects for Gemini API
+        """
+        from google.genai import types
+
+        function_declarations = []
+        for tool in self.tools.values():
+            schema = tool.schema
+
+            # Convert Anthropic schema to Gemini FunctionDeclaration
+            input_schema = schema.get("input_schema", {})
+            parameters = {
+                "type": "OBJECT",
+                "properties": {},
+                "required": input_schema.get("required", [])
+            }
+
+            # Convert properties
+            for prop_name, prop_value in input_schema.get("properties", {}).items():
+                param_type = prop_value.get("type", "string").upper()
+                # Map JSON schema types to Gemini types
+                type_mapping = {
+                    "STRING": "STRING",
+                    "NUMBER": "NUMBER",
+                    "INTEGER": "INTEGER",
+                    "BOOLEAN": "BOOLEAN",
+                    "OBJECT": "OBJECT",
+                    "ARRAY": "ARRAY"
+                }
+                gemini_type = type_mapping.get(param_type, "STRING")
+
+                parameters["properties"][prop_name] = {
+                    "type": gemini_type,
+                    "description": prop_value.get("description", "")
+                }
+
+            function_declarations.append(
+                types.FunctionDeclaration(
+                    name=schema["name"],
+                    description=schema.get("description", ""),
+                    parameters=parameters
+                )
+            )
+
+        return function_declarations
+
     async def execute(self, tool_name: str, tool_input: Dict) -> Dict:
         """
         Execute a tool by name

@@ -345,7 +345,7 @@ class OracleTool(BaseTool):
 
     async def _query_o3(self, client: 'OpenAI', messages: List[Dict]) -> str:
         """
-        Query OpenAI O3 model
+        Query OpenAI O3 model with streaming and 10-minute timeout
 
         Args:
             client: OpenAI client instance
@@ -355,20 +355,50 @@ class OracleTool(BaseTool):
             O3's response text or error message
         """
         try:
-            response = await asyncio.to_thread(
+            # Create task with timeout (10 minutes = 600 seconds)
+            task = asyncio.create_task(self._query_o3_stream(client, messages))
+            response_text = await asyncio.wait_for(task, timeout=600)
+            return response_text
+        except asyncio.TimeoutError:
+            return "ERROR: O3 timed out after 10 minutes - returning partial response if available"
+        except Exception as e:
+            return f"ERROR: O3 failed - {str(e)}"
+
+    async def _query_o3_stream(self, client: 'OpenAI', messages: List[Dict]) -> str:
+        """Stream O3 response and collect full text"""
+        try:
+            print("🔮 O3 streaming... ", end="", flush=True)
+
+            # Use streaming API
+            stream = await asyncio.to_thread(
                 client.chat.completions.create,
                 model="o3",
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=1.0
+                temperature=1.0,
+                stream=True
             )
-            return response.choices[0].message.content
+
+            chunks = []
+            chunk_count = 0
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    chunks.append(content)
+                    chunk_count += 1
+                    # Print progress indicator every 50 chunks
+                    if chunk_count % 50 == 0:
+                        print(".", end="", flush=True)
+
+            print(" ✓")
+            return "".join(chunks)
         except Exception as e:
-            return f"ERROR: O3 failed - {str(e)}"
+            print(f" ✗ ({e})")
+            raise
 
     async def _query_deepseek_r1(self, client: 'OpenAI', messages: List[Dict]) -> str:
         """
-        Query DeepSeek-R1 model (reasoning mode with Chain of Thought)
+        Query DeepSeek-R1 model with streaming and 10-minute timeout
 
         Args:
             client: OpenAI client instance configured for DeepSeek API
@@ -385,19 +415,46 @@ class OracleTool(BaseTool):
             - Get API key at: https://platform.deepseek.com/api_keys
         """
         try:
-            # DeepSeek-R1 reasoning model
-            # API: https://api.deepseek.com
-            # Model: deepseek-reasoner (generates CoT reasoning)
-            response = await asyncio.to_thread(
+            # Create task with timeout (10 minutes = 600 seconds)
+            task = asyncio.create_task(self._query_deepseek_r1_stream(client, messages))
+            response_text = await asyncio.wait_for(task, timeout=600)
+            return response_text
+        except asyncio.TimeoutError:
+            return "ERROR: DeepSeek-R1 timed out after 10 minutes - returning partial response if available"
+        except Exception as e:
+            return f"ERROR: DeepSeek-R1 failed - {str(e)}"
+
+    async def _query_deepseek_r1_stream(self, client: 'OpenAI', messages: List[Dict]) -> str:
+        """Stream DeepSeek-R1 response and collect full text"""
+        try:
+            print("🔮 DeepSeek-R1 streaming... ", end="", flush=True)
+
+            # Use streaming API
+            stream = await asyncio.to_thread(
                 client.chat.completions.create,
                 model="deepseek-reasoner",  # Reasoning mode (R1)
                 messages=messages,
                 max_completion_tokens=8192,
-                temperature=1.0
+                temperature=1.0,
+                stream=True
             )
-            return response.choices[0].message.content
+
+            chunks = []
+            chunk_count = 0
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    chunks.append(content)
+                    chunk_count += 1
+                    # Print progress indicator every 50 chunks
+                    if chunk_count % 50 == 0:
+                        print(".", end="", flush=True)
+
+            print(" ✓")
+            return "".join(chunks)
         except Exception as e:
-            return f"ERROR: DeepSeek-R1 failed - {str(e)}"
+            print(f" ✗ ({e})")
+            raise
 
     async def _critic_synthesis(
         self,
@@ -451,16 +508,46 @@ class OracleTool(BaseTool):
                 )
             })
 
-            response = await asyncio.to_thread(
+            # Create task with timeout (10 minutes = 600 seconds)
+            task = asyncio.create_task(self._critic_synthesis_stream(client, critic_messages))
+            response_text = await asyncio.wait_for(task, timeout=600)
+            return response_text
+        except asyncio.TimeoutError:
+            return "ERROR: O3 Critic timed out after 10 minutes - returning partial synthesis if available"
+        except Exception as e:
+            return f"ERROR: Critic synthesis failed - {str(e)}"
+
+    async def _critic_synthesis_stream(self, client: 'OpenAI', critic_messages: List[Dict]) -> str:
+        """Stream O3 Critic response and collect full text"""
+        try:
+            print("🔮 O3 Critic synthesizing... ", end="", flush=True)
+
+            # Use streaming API
+            stream = await asyncio.to_thread(
                 client.chat.completions.create,
                 model="o3",
                 messages=critic_messages,
                 max_completion_tokens=16384,  # More tokens for synthesis
-                temperature=1.0
+                temperature=1.0,
+                stream=True
             )
-            return response.choices[0].message.content
+
+            chunks = []
+            chunk_count = 0
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    content = chunk.choices[0].delta.content
+                    chunks.append(content)
+                    chunk_count += 1
+                    # Print progress indicator every 50 chunks
+                    if chunk_count % 50 == 0:
+                        print(".", end="", flush=True)
+
+            print(" ✓")
+            return "".join(chunks)
         except Exception as e:
-            return f"ERROR: Critic synthesis failed - {str(e)}"
+            print(f" ✗ ({e})")
+            raise
 
     def _format_response(self, o3_plan: str, deepseek_plan: str, final_plan: str) -> str:
         """
