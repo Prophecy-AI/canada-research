@@ -153,6 +153,31 @@ jobs:
 
           ./RUN_AGENT_V5_KAGGLE.sh
 
+      - name: Summarize agent logs with GPT-5
+        if: always() && github.event.inputs.dry_run == 'false'
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GPT_SUMMARY_MODEL: gpt-5.1
+        run: |
+          cd ${{ github.workspace }}/mle-bench
+          source venv/bin/activate
+
+          RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
+
+          if [ -z "$RUN_GROUP" ]; then
+            echo "No run group found; skipping log summarization."
+            exit 0
+          fi
+
+          echo "RUN_GROUP=$RUN_GROUP" >> $GITHUB_ENV
+
+          python scripts/summarize_logs.py \
+            --run-group "$RUN_GROUP" \
+            --output-dir "runs/$RUN_GROUP/log_reviews" \
+            --output-zip "runs/$RUN_GROUP/log_reviews.zip" \
+            --model "${GPT_SUMMARY_MODEL:-gpt-5}" \
+            --reasoning-effort high
+
       - name: Upload results
         if: always() && github.event.inputs.dry_run == 'false'
         uses: actions/upload-artifact@v4
@@ -178,6 +203,15 @@ jobs:
           path: |
             ${{ github.workspace }}/mle-bench/runs/*/*_grading_report.json
             ${{ github.workspace }}/mle-bench/runs/*/results.json
+          retention-days: 90
+
+      - name: Upload log summaries
+        if: always() && github.event.inputs.dry_run == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-log-summaries-${{ github.ref_name }}-run${{ github.run_number }}
+          path: ${{ github.workspace }}/mle-bench/runs/*/log_reviews.zip
+          if-no-files-found: warn
           retention-days: 90
 
       - name: Display results summary
