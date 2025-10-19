@@ -38,6 +38,32 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
     scipy>=1.11.0 \
     && conda clean -afy
 
+# Install build tools for LightGBM CUDA compilation
+# Need CMake 3.28+ (base image has 3.16)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    git \
+    wget \
+    ripgrep \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install newer CMake (3.28+ required by LightGBM)
+RUN wget -qO- https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3.28.3-linux-x86_64.tar.gz | tar -xz -C /opt && \
+    ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
+    cmake --version
+
+# Build LightGBM from source with CUDA support
+# Uses CUDA 11.8 toolkit from base image
+# scikit-build-core (LightGBM 4.0+) runs cmake with -DUSE_CUDA=ON via config-settings
+RUN conda run -n ${CONDA_ENV_NAME} bash -c " \
+    export PATH=/usr/local/cuda-11.8/bin:\$PATH && \
+    export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:\$LD_LIBRARY_PATH && \
+    pip install --no-binary lightgbm --no-cache-dir \
+        --config-settings=cmake.define.USE_CUDA=ON \
+        'lightgbm>=4.0.0' \
+    " && \
+    conda clean -afy
+
 # Install PyTorch with CUDA support for GPU
 RUN conda run -n ${CONDA_ENV_NAME} pip install \
     torch>=2.0.0 \
