@@ -190,45 +190,25 @@ Best: {best_score}
 - Round 1: Try multi-model bottleneck + comparison experiments. Round 2+: Double down on what worked."""
 
 
-WORKER_PROMPT = """You're a skilled ML engineer. Write train.py for this experiment.
+WORKER_PROMPT = """Write train.py. Use Bash to check {data_dir} structure first.
 
-Experiment spec: {spec}
-Data location: {data_dir}
+Spec: {spec}
+Data: {data_dir}
+EDA: {eda_context}
 
-EDA context: {eda_context}
-
-**Your task:**
-1. Explore {data_dir} using Bash tools (ls, zipinfo, head) to understand structure
+Steps:
+1. Bash: ls {data_dir} (see what files exist)
 2. Write train.py that:
-   - Loads data based on what you find (don't assume filenames!)
-   - Trains model using spec['strategy'] and ALL spec['hyperparameters']
-   - Calculates competition metric from EDA context (search for "Evaluation Metric:")
-   - Prints required output (see below)
-   - Exits
+   - Loads data (adapt to actual files/structure)
+   - Trains using spec strategy + ALL spec hyperparameters
+   - Calculates competition metric from EDA (find "Evaluation Metric:")
+   - Prints: VALIDATION_SCORE, VAL_LOSS, TRAIN_LOSS, TRAIN_TIME
+3. Respond "READY"
 
-**Required output format:**
-```
-VALIDATION_SCORE: {{primary_metric}}
-VAL_LOSS: {{val_loss}}
-TRAIN_LOSS: {{train_loss}}  
-TRAIN_TIME: {{seconds}}
-```
-
-**Key rules:**
-- Explore data structure FIRST - use ls, zipinfo, head to see what files exist
-- Don't hardcode paths/filenames - adapt to what you find
-- Use ALL hyperparameters from spec (epochs, lr, size, batch_size, split_pct, etc.)
-- Import sklearn.metrics at top of train.py
-- Convert tensors to float before printing (.item() or .numpy())
-- Don't save models or generate test predictions in train.py
-
-**Common strategies:**
-- fastai_vision: Fine-tune with fit_one_cycle
-- bottleneck_features: Extract features, train LogReg
-- gradient_boosting: LightGBM/XGBoost
-- transformer_features: Extract embeddings, train LogReg
-
-Respond "READY" when done.
+DO NOT:
+- Run/test train.py (orchestrator will run it)
+- Write explanations
+- Use hardcoded paths/hyperparameters
 
 Tools: Bash, Read, Write"""
 
