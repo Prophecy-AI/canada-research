@@ -208,7 +208,7 @@ class Orchestrator:
                 formatted_results.append(result)
                 
                 status_icon = "✓" if result['status'] == 'success' else "⚠️"
-                score_str = f"{result['score']:.4f}" if result.get('score') is not None else "N/A"
+                score_str = f"{result['score']:.8f}" if result.get('score') is not None else "N/A"
                 print(f"  {status_icon} {result['id']}: {result['status'].upper()} - Score: {score_str}")
                 
                 if result['status'] == 'success' and result['score'] is not None:
@@ -346,6 +346,15 @@ class Orchestrator:
             matches = re.findall(r"VALIDATION_SCORE:\s*(\d+\.?\d*)", output)
             score = float(matches[-1]) if matches else None
             
+            val_loss_matches = re.findall(r"VAL_LOSS:\s*(\d+\.?\d*)", output)
+            val_loss = float(val_loss_matches[-1]) if val_loss_matches else None
+            
+            train_loss_matches = re.findall(r"TRAIN_LOSS:\s*(\d+\.?\d*)", output)
+            train_loss = float(train_loss_matches[-1]) if train_loss_matches else None
+            
+            train_time_matches = re.findall(r"TRAIN_TIME:\s*(\d+\.?\d*)", output)
+            train_time = float(train_time_matches[-1]) if train_time_matches else None
+            
             if score is None:
                 print(f"\n  ⚠️ {exp_id}: No VALIDATION_SCORE found")
                 print(f"  Last 10 lines of output:")
@@ -360,11 +369,20 @@ class Orchestrator:
                     "hypothesis": exp.get('hypothesis')
                 }
             
-            print(f"\n  ✓ {exp_id}: VALIDATION_SCORE: {score:.6f}")
+            metrics_str = f"VALIDATION_SCORE: {score:.8f}"
+            if val_loss is not None:
+                metrics_str += f", VAL_LOSS: {val_loss:.8f}"
+            if train_time is not None:
+                metrics_str += f", TIME: {train_time:.1f}s"
+            
+            print(f"\n  ✓ {exp_id}: {metrics_str}")
             return {
                 "id": exp_id,
                 "status": "success",
                 "score": score,
+                "val_loss": val_loss,
+                "train_loss": train_loss,
+                "train_time": train_time,
                 "output": output[-1000:] if len(output) > 1000 else output,
                 "model": exp.get('model'),
                 "hypothesis": exp.get('hypothesis'),
@@ -405,7 +423,8 @@ class Orchestrator:
         tools = ToolRegistry(str(plan_workspace))
         
         results_str = "\n".join([
-            f"{r['id']} ({r.get('model', '?')}): Score={r.get('score', 'N/A')}"
+            f"{r['id']} ({r.get('model', '?')}): Score={r.get('score', 'N/A')}, "
+            f"VAL_LOSS={r.get('val_loss', 'N/A')}, TRAIN_TIME={r.get('train_time', 'N/A')}s"
             for r in results
         ])
         
