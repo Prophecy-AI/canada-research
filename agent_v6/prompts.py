@@ -208,16 +208,21 @@ Data: {data_dir}
 7. ❌ Using lambda functions → Can't pickle, use regular functions
 8. ❌ Wrong validation split: <10% too small → Use 15-20% from spec
 
-**CRITICAL: Your ONLY job is to write train.py that:**
+**CRITICAL: Your job is to write train.py that:**
 1. Trains the model
-2. Prints VALIDATION_SCORE: {{score}}
-3. Exits
+2. Prints VALIDATION_SCORE: {{primary_metric}} (the competition metric)
+3. Prints SECONDARY_METRICS: {{other useful metrics}} (for tie-breaking)
+4. Exits
+
+**What to print:**
+- `VALIDATION_SCORE: {{competition_metric}}` (REQUIRED - AUC/Accuracy/LogLoss from EDA)
+- `TRAIN_LOSS: {{train_loss}}` (OPTIONAL - helps detect overfitting)
+- `VAL_LOSS: {{val_loss}}` (OPTIONAL - better calibration metric)
+- `TRAIN_TIME: {{seconds}}` (OPTIONAL - efficiency metric)
 
 **DO NOT in train.py:**
 - Generate test predictions (submission phase does that separately)
 - Save models (submission phase loads best model and does this)
-- Run extensive validation/debugging
-- Print anything except VALIDATION_SCORE line
 - Use lambda functions or other unpicklable objects
 
 **DO:**
@@ -251,90 +256,40 @@ import numpy as np
 # Plus strategy-specific imports (fastai, torch, lightgbm, etc.)
 ```
 
-**Write train.py based on strategy:**
+**ALL STRATEGIES - General principles:**
 
-**STRATEGY: "fastai_vision"** (for images):
-   
-   **Step 1: Extract and detect structure**
-   ```python
-   import os, subprocess
-   
-   # Extract training images
-   subprocess.run(['unzip', '-q', '/home/data/train.zip', '-d', '.'], check=True)
-   
-   # Detect where images were extracted (ADAPT!):
-   has_subfolder = os.path.exists('train') or os.path.exists('images')
-   has_images_direct = any(f.endswith('.jpg') or f.endswith('.png') for f in os.listdir('.'))
-   
-   if has_subfolder:
-       folder_name = 'train' if os.path.exists('train') else 'images'
-       image_prefix = folder_name + '/'
-   elif has_images_direct:
-       image_prefix = ''  # Images directly in current directory
-   else:
-       print("ERROR: No images found!")
-       os.system('ls -la')
-       exit(1)
-   
-   print(f"Images location: {{image_prefix if image_prefix else 'current directory'}}")
+1. **Load data** - Inspect structure first, adapt to what you find (don't assume)
+2. **Use ALL spec hyperparameters** - Never hardcode, always read from spec
+3. **Train model** - Follow the strategy (fastai/sklearn/lightgbm/transformers)
+4. **Calculate metrics**:
+   - PRIMARY: Competition metric from EDA (AUC/Accuracy/LogLoss/RMSE)
+   - SECONDARY: val_loss, train_loss, train_time (for tie-breaking)
+5. **Print metrics**:
    ```
-   
-   **Then follow spec hyperparameters:**
-   - Load CSV, build filepath column
-   - For binary: `df['label'] = df['label'].astype(str)`
-   - Create DataLoaders: `ImageDataLoaders.from_df(df, path='.', fn_col='filepath', valid_pct=spec['split_pct'], item_tfms=Resize(spec['size']), bs=spec['batch_size'])`
-   - Train: `learn = vision_learner(dls, getattr(models, spec['model']), metrics=accuracy)`
-   - Fit: `learn.fit_one_cycle(spec['epochs'], spec['lr'])`
-   - Calculate competition metric from EDA (use sklearn: roc_auc_score/accuracy_score/log_loss)
-   - Print: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
-   
-   **What train.py should do:**
-   - Extract data, load with fastai using spec parameters
-   - Train model: `learn.fit_one_cycle(spec['epochs'], spec['lr'])`
-   - Calculate validation metric using sklearn (roc_auc_score/accuracy_score/log_loss based on EDA)
-   - Print ONLY: `print(f"VALIDATION_SCORE: {{val_metric:.6f}}")`
-   - Exit (DO NOT save model, DO NOT generate test predictions)
-   
-   **What train.py should NOT do:**
-   - ❌ Save model with learn.export() - causes pickling errors
-   - ❌ Generate test predictions - that's done in submission phase
-   - ❌ Save to submission.csv - not your job
-   - ❌ Use lambda functions - can't pickle
-   - ❌ Print debug info - only VALIDATION_SCORE
-   - ❌ Hardcode hyperparameters - use spec values
+   VALIDATION_SCORE: <primary_metric>
+   VAL_LOSS: <validation_loss>
+   TRAIN_LOSS: <final_training_loss>
+   TRAIN_TIME: <seconds>
+   ```
+6. **Exit** - Don't save models or generate predictions
 
-**STRATEGY: "fastai_tabular"** (neural networks for small tabular):
-   - Use fastai.tabular for small tabular datasets where gradient boosting overfits
-   - Key patterns:
-     * Load: `TabularDataLoaders.from_df(df, y_names='target', cont_names=feature_cols, procs=[Normalize])`
-     * Create learner: `tabular_learner(dls, layers=spec['layers'], metrics=accuracy)` where layers from spec (default [200, 100])
-     * Train: `learn.fit_one_cycle(epochs, lr)` with epochs from spec (default 50), lr from spec (default 1e-3)
-     * Dropout is automatic (prevents overfitting on small data)
-     * Predict on test set, save to submission.csv
-   - Works well when: samples < 10K, features > 100, gradient boosting overfits
-   - Faster convergence than manual neural networks
+**Strategy-specific notes:**
 
-**STRATEGY: "bottleneck_features"** (extract features, train LogisticRegression):
-   
-   **Step-by-step:**
-   1. Load models from **spec['models']** (list) or **spec['model']** (single)
-   2. Remove classification heads: `backbone.fc = nn.Identity()`
-   3. Extract features from images (use eval mode, no_grad)
-   4. **StandardScaler** on features (CRITICAL for LogReg)
-   5. Train/val split using **spec.get('train_split', 0.85)**
-   6. Train LogisticRegression with **spec.get('C', 1.0)**
-   7. Calculate competition metric (read from EDA), print VALIDATION_SCORE
-   8. Save: backbones, classifier, scaler, config
-   
-   **Critical rules:**
-   - ✅ Use ALL spec parameters (models, C, train_split, image_size, tta)
-   - ✅ Extract to current directory, use relative paths
-   - ✅ StandardScaler on features before LogReg
-   - ✅ Calculate competition metric from EDA
-   - ❌ DON'T hardcode parameters
-   
-   **Condensed example structure:**
-```python
+- **fastai_vision**: Extract zip, detect if images in subfolder or direct, adapt prefix
+- **bottleneck_features**: Extract features, StandardScaler, LogReg with spec['C']
+- **gradient_boosting**: Load CSV, encode categoricals, use spec hyperparameters
+- **transformer_features**: Tokenize text, extract embeddings, LogReg on features
+
+**End of general guidance. Implement based on spec['strategy'] and EDA context.**
+
+Respond "READY" when done writing train.py.
+
+Tools: Bash, Read, Write"""
+
+
+ANALYSIS_PROMPT = """Analyze results. Output decision.
+
+**Metric: {metric_direction}**
 import torch
 import torch.nn as nn
 from sklearn.linear_model import LogisticRegression
