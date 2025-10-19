@@ -33,6 +33,7 @@ class Orchestrator:
         self.best_score = None
         self.best_experiment = None
         self.eda_summary = ""
+        self.data_facts = {}
         self.round_num = 0
         self.round_history = []
         self.lower_is_better = False
@@ -103,16 +104,36 @@ class Orchestrator:
             f"Analyze the competition data in {self.data_dir}"
         )
         
-        if "LOWER is better" in self.eda_summary:
-            self.lower_is_better = True
-            self.best_score = float('inf')
-        elif "HIGHER is better" in self.eda_summary:
-            self.lower_is_better = False
-            self.best_score = 0.0
+        import re
+        import json
+        
+        json_match = re.search(r'DATA_STRUCTURE_FACTS:\s*\n?\s*(\{[^}]+\})', self.eda_summary, re.DOTALL)
+        if json_match:
+            try:
+                self.data_facts = json.loads(json_match.group(1))
+                print(f"\n✓ Parsed data structure facts: {self.data_facts}")
+                
+                metric_dir = self.data_facts.get('metric_direction', 'HIGHER')
+                self.lower_is_better = (metric_dir == 'LOWER')
+                self.best_score = float('inf') if self.lower_is_better else 0.0
+            except:
+                print("\n⚠️  Failed to parse DATA_STRUCTURE_FACTS JSON")
+                self.data_facts = {}
+                self.lower_is_better = False
+                self.best_score = 0.0
         else:
-            print("\n⚠️  Metric direction not specified in EDA, assuming HIGHER is better")
-            self.lower_is_better = False
-            self.best_score = 0.0
+            print("\n⚠️  No DATA_STRUCTURE_FACTS found in EDA")
+            self.data_facts = {}
+            
+            if "LOWER is better" in self.eda_summary:
+                self.lower_is_better = True
+                self.best_score = float('inf')
+            elif "HIGHER is better" in self.eda_summary:
+                self.lower_is_better = False
+                self.best_score = 0.0
+            else:
+                self.lower_is_better = False
+                self.best_score = 0.0
         
         print(f"→ Metric direction: {'LOWER is better' if self.lower_is_better else 'HIGHER is better'}")
 
@@ -253,7 +274,7 @@ class Orchestrator:
         workspace.mkdir(parents=True, exist_ok=True)
         
         try:
-            worker = Worker(exp, str(workspace), self.data_dir, self.eda_summary)
+            worker = Worker(exp, str(workspace), self.data_dir, self.eda_summary, self.data_facts)
             success = await worker.write_script()
             
             if not success:

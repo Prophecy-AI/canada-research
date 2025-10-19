@@ -7,11 +7,12 @@ from agent_v6.prompts import format_worker_prompt
 
 
 class Worker:
-    def __init__(self, experiment_spec: Dict, workspace_dir: str, data_dir: str, eda_context: str):
+    def __init__(self, experiment_spec: Dict, workspace_dir: str, data_dir: str, eda_context: str, data_facts: Dict = None):
         self.experiment_spec = experiment_spec
         self.workspace_dir = Path(workspace_dir)
         self.data_dir = Path(data_dir)
         self.eda_context = eda_context
+        self.data_facts = data_facts or {}
         
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
         
@@ -24,7 +25,8 @@ class Worker:
             spec=experiment_spec,
             data_dir=data_dir,
             workspace_dir=workspace_dir,
-            eda_context=eda_context
+            eda_context=eda_context,
+            data_facts=self.data_facts
         )
         
         self.agent = Agent(workspace_dir, system_prompt, tools)

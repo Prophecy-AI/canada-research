@@ -1,24 +1,36 @@
-EDA_PROMPT = """Analyze competition data. Write ONE eda.py, run ONCE, report findings.
+EDA_PROMPT = """Analyze competition data. Write ONE eda.py, run ONCE, report findings + structured facts.
 
 Competition: {competition_id}
 Data: {data_dir}
 Instructions: {instructions_path}
 
 **Task:**
-1. Read instructions
-2. Write comprehensive eda.py (data shape, types, target distribution, class balance, file formats)
+1. Read instructions, explore data structure
+2. Write eda.py that analyzes data
 3. Run it ONCE
-4. Report findings (MUST include ALL bullet points below):
-   - Data type (tabular/image/text/time-series)
-   - Dataset size and shape
-   - Target distribution (balanced/imbalanced)
-   - Key patterns or characteristics
-   - **CRITICAL - Evaluation metric with direction (REQUIRED):**
-     * Format: "**Evaluation Metric:** [metric_name] (HIGHER is better)" OR "**Evaluation Metric:** [metric_name] (LOWER is better)"
-     * Examples: "**Evaluation Metric:** AUC (HIGHER is better)" or "**Evaluation Metric:** Log Loss (LOWER is better)"
-     * This is REQUIRED for planning - do not skip!
+4. Report findings + structured facts
 
-NO model suggestions. NO iteration. ONE script, ONE run."""
+**Report must include:**
+- Data type, size, distribution, patterns
+- **Evaluation Metric:** [name] (HIGHER/LOWER is better)
+
+**At the END, output JSON with data structure facts (inspect files with ls/zipinfo):**
+```json
+DATA_STRUCTURE_FACTS:
+{{
+  "data_type": "image|tabular|text|audio",
+  "files_in_data_dir": ["train.csv", "train.zip", "test.zip", ...],
+  "train_data_format": "csv|zip|multiple_files",
+  "test_data_format": "csv|zip|multiple_files", 
+  "target_column": "exact_name_from_csv",
+  "metric_name": "AUC|Accuracy|LogLoss|RMSE|MAE",
+  "metric_direction": "HIGHER|LOWER"
+}}
+```
+
+Include ONLY fields relevant to this competition. Worker will use these facts for all file paths.
+
+NO model suggestions. ONE script, ONE run."""
 
 
 PLANNING_PROMPT = """You are an expert ML engineer. Analyze the dataset and design 2-3 experiments that will achieve the best performance.
@@ -190,25 +202,36 @@ Best: {best_score}
 - Round 1: Try multi-model bottleneck + comparison experiments. Round 2+: Double down on what worked."""
 
 
-WORKER_PROMPT = """Write train.py. Use Bash to check {data_dir} structure first.
+WORKER_PROMPT = """Write train.py. EDA discovered these facts about data structure:
+
+{data_facts}
 
 Spec: {spec}
-Data: {data_dir}
-EDA: {eda_context}
+Data dir: {data_dir}
 
-Steps:
-1. Bash: ls {data_dir} (see what files exist)
-2. Write train.py that:
-   - Loads data (adapt to actual files/structure)
-   - Trains using spec strategy + ALL spec hyperparameters
-   - Calculates competition metric from EDA (find "Evaluation Metric:")
-   - Prints: VALIDATION_SCORE, VAL_LOSS, TRAIN_LOSS, TRAIN_TIME
-3. Respond "READY"
+**Instructions:**
+1. Parse facts JSON in train.py - it contains actual filenames/columns discovered by EDA
+2. Use facts for ALL data loading (DON'T guess or use common patterns like 'train/')
+3. Train using spec['strategy'] and ALL spec['hyperparameters']
+4. Calculate facts['metric_name'] on validation set
+5. Print metrics, respond "READY"
 
-DO NOT:
-- Run/test train.py (orchestrator will run it)
-- Write explanations
-- Use hardcoded paths/hyperparameters
+**How to use facts (adapt this pattern to your situation):**
+If data_type is "image": Look for image-related facts (zip structure, etc.)
+If data_type is "tabular": Look for CSV names, target column
+If data_type is "text": Look for text columns
+
+Example pattern (ADAPT, don't copy):
+```python
+facts = {data_facts}  # This line is literal - copy the JSON
+
+# Then use it:
+files = facts.get('files_in_data_dir', [])
+target_col = facts.get('target_column', 'target')
+# etc - adapt to what's in facts
+```
+
+DON'T blindly copy patterns. READ the facts and use them.
 
 Tools: Bash, Read, Write"""
 
@@ -628,14 +651,16 @@ def format_planning_prompt(competition_id: str, context: str, round_num: int, be
     )
 
 
-def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_context: str) -> str:
+def format_worker_prompt(spec: dict, data_dir: str, workspace_dir: str, eda_context: str, data_facts: dict = None) -> str:
     import json
     spec_str = json.dumps(spec, indent=2)
+    facts_str = json.dumps(data_facts or {}, indent=2)
     return WORKER_PROMPT.format(
         spec=spec_str,
         data_dir=data_dir,
         workspace_dir=workspace_dir,
-        eda_context=eda_context
+        eda_context=eda_context,
+        data_facts=facts_str
     )
 
 
