@@ -4,7 +4,7 @@ ResearchAgent - Main agentic loop for Agent V5
 import json
 import os
 import time
-from typing import List, Dict, AsyncGenerator, Any
+from typing import List, Dict, AsyncGenerator, Any, Optional
 
 from openai import AsyncOpenAI
 
@@ -38,6 +38,7 @@ class ResearchAgent:
         self.tools = ToolRegistry(workspace_dir)
         self.process_registry = BashProcessRegistry()  # Registry for background bash processes
         self.start_time = start_time if start_time is not None else time.time()
+        self.last_response_id: Optional[str] = None
         self._register_core_tools()
         self.openai_client = AsyncOpenAI(api_key=os.environ["OPENAI_API_KEY"])
         self.run = with_session(session_id)(self.run)
@@ -87,57 +88,6 @@ class ResearchAgent:
             tool_defs.append(tool_def)
         return tool_defs
 
-    def _build_openai_history(self) -> List[Dict[str, Any]]:
-        """Convert internal conversation history to OpenAI Responses input list."""
-        items: List[Dict[str, Any]] = []
-
-        for message in self.conversation_history:
-            role = message.get("role")
-
-            if role == "user":
-                user_content = message.get("content", "")
-                if isinstance(user_content, str) and user_content:
-                    items.append({
-                        "role": "user",
-                        "content": user_content
-                    })
-                elif isinstance(user_content, list):
-                    # Legacy support: flatten tool-result lists
-                    flattened = []
-                    for item in user_content:
-                        if item.get("type") == "tool_result":
-                            flattened.append(f"[Tool Result]: {item.get('content', '')}")
-                    if flattened:
-                        items.append({
-                            "role": "user",
-                            "content": "\n".join(flattened)
-                        })
-            elif role == "assistant":
-                raw_output = message.get("raw_output")
-                if raw_output:
-                    items.extend(raw_output)
-                else:
-                    # Fallback: synthesize a text message if raw output missing
-                    content_parts = message.get("content", [])
-                    combined = "".join(
-                        part.get("text", "")
-                        for part in content_parts
-                        if part.get("type") == "text"
-                    )
-                    if combined:
-                        items.append({
-                            "role": "assistant",
-                            "content": combined
-                        })
-            elif role == "tool":
-                for result in message.get("content", []):
-                    items.append({
-                        "type": "function_call_output",
-                        "call_id": result.get("tool_use_id"),
-                        "output": result.get("content", "")
-                    })
-        return items
-
     @staticmethod
     def _parse_tool_arguments(arguments: str) -> Dict[str, Any]:
         """Parse tool call arguments from JSON string."""
@@ -161,24 +111,32 @@ class ResearchAgent:
             "content": user_message
         })
 
+        pending_inputs: List[Dict[str, Any]] = [{
+            "role": "user",
+            "content": user_message
+        }]
+        previous_response_id = self.last_response_id
         turn_index = 0
 
         while True:
             turn_index += 1
             log(f"→ API call (turn {turn_index})")
 
-            openai_input = self._build_openai_history()
             tools = self._build_openai_tools()
 
             streamed_text_started = False
             streamed_text_buffer = ""
 
-            async with self.openai_client.responses.stream(
-                model="gpt-5",
-                input=openai_input,
-                instructions=self.system_prompt,
-                tools=tools,
-            ) as stream:
+            request_kwargs: Dict[str, Any] = {
+                "model": "gpt-5",
+                "input": pending_inputs,
+                "instructions": self.system_prompt,
+                "tools": tools,
+            }
+            if previous_response_id:
+                request_kwargs["previous_response_id"] = previous_response_id
+
+            async with self.openai_client.responses.stream(**request_kwargs) as stream:
                 async for event in stream:
                     if event.type == "response.output_text.delta":
                         if not streamed_text_started:
@@ -193,6 +151,10 @@ class ResearchAgent:
 
             response_dict = final_response.model_dump(mode="python")
             output_items = response_dict.get("output", [])
+            response_id = response_dict.get("id")
+            if isinstance(response_id, str):
+                self.last_response_id = response_id
+                previous_response_id = response_id
 
             tool_calls = []
             assistant_content: List[Dict[str, Any]] = []
@@ -276,5 +238,14 @@ class ResearchAgent:
                 "role": "tool",
                 "content": tool_results
             })
+
+            pending_inputs = [
+                {
+                    "type": "function_call_output",
+                    "call_id": result["tool_use_id"],
+                    "output": result["content"]
+                }
+                for result in tool_results
+            ]
 
         yield {"type": "done"}
