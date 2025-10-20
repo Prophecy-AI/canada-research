@@ -21,11 +21,6 @@ ARG CONDA_ENV_NAME=agent
 # Copy requirements first (for Docker layer caching)
 COPY mle-bench/agents/agent_v6_kaggle/requirements.txt ${AGENT_DIR}/requirements.txt
 
-# Fix protobuf version conflict (google-genai requires 3.x, base image may have 4.x)
-RUN conda run -n ${CONDA_ENV_NAME} pip uninstall -y protobuf && \
-    conda run -n ${CONDA_ENV_NAME} pip install 'protobuf>=3.20.2,<4.0.0' && \
-    conda clean -afy
-
 # Install agent dependencies
 RUN conda run -n ${CONDA_ENV_NAME} pip install -r ${AGENT_DIR}/requirements.txt && \
     conda clean -afy
