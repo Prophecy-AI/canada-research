@@ -18,24 +18,9 @@ RUN mkdir -p ${LOGS_DIR} ${CODE_DIR} ${AGENT_DIR}
 
 ARG CONDA_ENV_NAME=agent
 
-# Copy requirements first (for Docker layer caching)
-COPY mle-bench/agents/agent_v6_kaggle/requirements.txt ${AGENT_DIR}/requirements.txt
-
-# Install agent dependencies
-RUN conda run -n ${CONDA_ENV_NAME} pip install -r ${AGENT_DIR}/requirements.txt && \
-    conda clean -afy
-
-# Pre-install common ML packages to save time during competition (WITHOUT lightgbm - built separately)
-RUN conda run -n ${CONDA_ENV_NAME} pip install \
-    xgboost>=2.0.0 \
-    catboost>=1.2.0 \
-    scikit-learn>=1.3.0 \
-    pandas>=2.0.0 \
-    numpy>=1.24.0 \
-    matplotlib>=3.7.0 \
-    seaborn>=0.12.0 \
-    scipy>=1.11.0 \
-    && conda clean -afy
+# ============================================================================
+# LAYER 1: System dependencies (most stable, rarely changes)
+# ============================================================================
 
 # Install build tools for LightGBM CUDA compilation
 # Need CMake 3.28+ (base image has 3.16)
@@ -54,17 +39,21 @@ RUN wget -qO- https://github.com/Kitware/CMake/releases/download/v3.28.3/cmake-3
     ln -sf /opt/cmake-3.28.3-linux-x86_64/bin/cmake /usr/local/bin/cmake && \
     cmake --version
 
-# Build LightGBM from source with CUDA support
-# Uses CUDA 11.8 toolkit from base image
-# scikit-build-core (LightGBM 4.0+) runs cmake with -DUSE_CUDA=ON via config-settings
-RUN conda run -n ${CONDA_ENV_NAME} bash -c " \
-    export PATH=/usr/local/cuda-11.8/bin:\$PATH && \
-    export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:\$LD_LIBRARY_PATH && \
-    pip install --no-binary lightgbm --no-cache-dir \
-        --config-settings=cmake.define.USE_CUDA=ON \
-        'lightgbm>=4.0.0' \
-    " && \
-    conda clean -afy
+# ============================================================================
+# LAYER 2: Heavy ML packages (stable, slow to install)
+# ============================================================================
+
+# Pre-install common ML packages to save time during competition (WITHOUT lightgbm - built separately)
+RUN conda run -n ${CONDA_ENV_NAME} pip install \
+    xgboost>=2.0.0 \
+    catboost>=1.2.0 \
+    scikit-learn>=1.3.0 \
+    pandas>=2.0.0 \
+    numpy>=1.24.0 \
+    matplotlib>=3.7.0 \
+    seaborn>=0.12.0 \
+    scipy>=1.11.0 \
+    && conda clean -afy
 
 # Install PyTorch with CUDA support for GPU
 RUN conda run -n ${CONDA_ENV_NAME} pip install \
@@ -72,6 +61,11 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
     torchvision>=0.15.0 \
     torchaudio>=2.0.0 \
     --index-url https://download.pytorch.org/whl/cu118 \
+    && conda clean -afy
+
+# Install TensorFlow with GPU support (optional, for flexibility)
+RUN conda run -n ${CONDA_ENV_NAME} pip install \
+    tensorflow>=2.13.0 \
     && conda clean -afy
 
 # ------------------------------------------------------------------
@@ -83,10 +77,32 @@ RUN conda run -n ${CONDA_ENV_NAME} \
         cuml=24.04 python=${PYTHON_VERSION} cudatoolkit=11.8 && \
     conda clean -afy
 
-# Install TensorFlow with GPU support (optional, for flexibility)
-RUN conda run -n ${CONDA_ENV_NAME} pip install \
-    tensorflow>=2.13.0 \
-    && conda clean -afy
+# Build LightGBM from source with CUDA support (slowest, but stable)
+# Uses CUDA 11.8 toolkit from base image
+# scikit-build-core (LightGBM 4.0+) runs cmake with -DUSE_CUDA=ON via config-settings
+RUN conda run -n ${CONDA_ENV_NAME} bash -c " \
+    export PATH=/usr/local/cuda-11.8/bin:\$PATH && \
+    export LD_LIBRARY_PATH=/usr/local/cuda-11.8/lib64:\$LD_LIBRARY_PATH && \
+    pip install --no-binary lightgbm --no-cache-dir \
+        --config-settings=cmake.define.USE_CUDA=ON \
+        'lightgbm>=4.0.0' \
+    " && \
+    conda clean -afy
+
+# ============================================================================
+# LAYER 3: Agent dependencies (changes occasionally)
+# ============================================================================
+
+# Copy requirements.txt (changes occasionally when adding new agent deps)
+COPY mle-bench/agents/agent_v6_kaggle/requirements.txt ${AGENT_DIR}/requirements.txt
+
+# Install agent dependencies
+RUN conda run -n ${CONDA_ENV_NAME} pip install -r ${AGENT_DIR}/requirements.txt && \
+    conda clean -afy
+
+# ============================================================================
+# LAYER 4: Agent code (changes most frequently)
+# ============================================================================
 
 # Copy agent files (including symlinked directories)
 # Build context is canada-research root, so paths are relative to that
