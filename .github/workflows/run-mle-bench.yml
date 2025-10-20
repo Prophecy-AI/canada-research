@@ -121,7 +121,7 @@ jobs:
 
           source venv/bin/activate
           echo "Installing mlebench (non-editable mode to avoid import conflicts)..."
-          pip install --force-reinstall --no-cache-dir . --quiet
+          pip install --no-cache-dir .
 
           echo "✅ Python environment ready"
           echo "   Python: $(which python)"
