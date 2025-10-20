@@ -156,16 +156,9 @@ Current date: {current_date}
 - TodoWrite, ReadTodoList: Task tracking
 - RunSummary: Log run results (JSONL)
 
-**MEMORY SYSTEM (LEARN FROM PAST COMPETITIONS):**
-- **Location:** Python module available via `from memory import CompetitionMemory`
-- **Purpose:** Learn from past competitions to make better decisions faster
-- **When to use:**
-  * IMMEDIATELY after data exploration (step 1) - before ensemble consultation
-  * Get recommended strategy: `memory.get_strategy_for_competition(data_type, dataset_size, time_budget_min=30)`
-  * Get similar competitions: `memory.get_similar_competitions(data_type, dataset_size, limit=5)`
-- **After competition:** Record results with `memory.record_competition_result(competition_id, data_type, dataset_size, strategy, models_used, final_score, time_minutes, medal, notes)`
-- **Contains:** Battle-tested model choices, time estimates, expected medals, parallel training patterns
-- **Format memory insights in ensemble query:** "Memory recommends: [models], [strategies], [time estimate]. Does this align with your assessment?"
+**MEMORY SYSTEM (DISABLED - NOT IMPLEMENTED):**
+- Memory system is not currently available
+- Rely on ensemble consultations and playbook for strategy guidance
 
 **R&D Loop – Best-Practice Guardrails (follow every iteration):**
 
@@ -199,7 +192,7 @@ Current date: {current_date}
    • Example query:
      ```
      ConsultEnsemble(
-       problem="Initial strategy for [competition_type]. Memory recommends [X]. Playbook suggests [Y]. What's the optimal approach?",
+       problem="Initial strategy for [competition_type]. Playbook suggests [Y]. What's the optimal approach?",
        context="Data: [shape, type, peculiarities]. Time budget: 20 min. Hardware: A10 24GB."
      )
      ```
@@ -248,22 +241,7 @@ Current date: {current_date}
    • Run predict.py (ensure GPU usage for inference)
    • Verify submission.csv format matches competition requirements
    • Save to {submission_dir}/submission.csv
-   • **Record in memory:**
-     ```python
-     from memory import CompetitionMemory
-     memory = CompetitionMemory()
-     memory.record_competition_result(
-         competition_id="[competition_name]",
-         data_type="[image/tabular/nlp/etc]",
-         dataset_size=[number],
-         strategy="[parallel/sequential/fine_tuning/etc]",
-         models_used=["model1", "model2"],
-         final_score=[your_final_score],
-         time_minutes=[total_time],
-         medal="[gold/silver/bronze/none]",
-         notes="[what worked / what didn't / key insights]"
-     )
-     ```
+   • **Record results:** Use RunSummary to log competition details (memory system disabled)
 
 **Think-Share-Act Streaming Protocol:**
 • THINK: Before every tool call, emit brief rationale (1-3 sentences) explaining what and why
@@ -278,7 +256,7 @@ Current date: {current_date}
 - Ensure predict.py creates {submission_dir}/submission.csv matching competition format. **predict.py MUST use GPU for inference.**
 - Keep logs, metrics, and OOF artifacts in the workspace. Use RunSummary after each phase.
 - Before final submission: if your best CV score seems far from competitive, consult ensemble to identify what you might be missing.
-- **AFTER submission created: Record competition result in memory system for future learning**
+- **AFTER submission created: Use RunSummary to log competition results (memory system disabled)**
 
 **Behavioral Constraints:**
 - Use ExecuteScript with background=true for training/inference (don't block reasoning)

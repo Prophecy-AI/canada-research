@@ -10,6 +10,7 @@ Extends ResearchAgent from agent_v5 with:
 """
 import os
 import time
+import asyncio
 from typing import List, Dict, AsyncGenerator, Any, Optional
 
 from openai import AsyncOpenAI
@@ -237,18 +238,34 @@ class IDEAgent:
             if previous_response_id:
                 request_kwargs["previous_response_id"] = previous_response_id
 
-            async with self.openai_client.responses.stream(**request_kwargs) as stream:
-                async for event in stream:
-                    if event.type == "response.output_text.delta":
-                        if not streamed_text_started:
-                            streamed_text_started = True
-                            yield {"type": "text_start"}
-                        text = event.delta
-                        if text:
-                            streamed_text_buffer += text
-                            yield {"type": "text_delta", "text": text}
+            # Retry API calls with exponential backoff
+            max_retries = 3
+            for attempt in range(max_retries):
+                try:
+                    async with self.openai_client.responses.stream(**request_kwargs) as stream:
+                        async for event in stream:
+                            if event.type == "response.output_text.delta":
+                                if not streamed_text_started:
+                                    streamed_text_started = True
+                                    yield {"type": "text_start"}
+                                text = event.delta
+                                if text:
+                                    streamed_text_buffer += text
+                                    yield {"type": "text_delta", "text": text}
 
-                final_response = await stream.get_final_response()
+                        final_response = await stream.get_final_response()
+                    break  # Success, exit retry loop
+
+                except Exception as api_error:
+                    error_msg = str(api_error)
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt  # 1s, 2s, 4s
+                        log(f"✗ API error (attempt {attempt + 1}/{max_retries}): {error_msg}", 2)
+                        log(f"  Retrying in {wait_time}s...", 2)
+                        await asyncio.sleep(wait_time)
+                    else:
+                        log(f"✗ API error after {max_retries} attempts: {error_msg}", 2)
+                        raise  # Give up after max retries
 
             response_dict = final_response.model_dump(mode="python")
             output_items = response_dict.get("output", [])
