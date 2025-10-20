@@ -178,6 +178,52 @@ jobs:
             --model "${GPT_SUMMARY_MODEL:-gpt-5}" \
             --reasoning-effort high
 
+      - name: Display log summaries
+        if: always() && github.event.inputs.dry_run == 'false'
+        run: |
+          cd ${{ github.workspace }}/mle-bench
+
+          RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
+
+          if [ -z "$RUN_GROUP" ]; then
+            echo "No run group found; skipping summary display."
+            exit 0
+          fi
+
+          REVIEWS_DIR="runs/$RUN_GROUP/log_reviews"
+
+          if [ ! -d "$REVIEWS_DIR" ]; then
+            echo "⚠️  No log reviews directory found at $REVIEWS_DIR"
+            exit 0
+          fi
+
+          echo ""
+          echo "=========================================="
+          echo "Agent Log Summaries"
+          echo "=========================================="
+          echo "Run group: $RUN_GROUP"
+          echo ""
+
+          # Display summaries for each competition
+          for run_dir in "$REVIEWS_DIR"/*; do
+            if [ -d "$run_dir" ]; then
+              RUN_NAME=$(basename "$run_dir")
+              SUMMARY_FILE="$run_dir/gpt-summary.txt"
+
+              if [ -f "$SUMMARY_FILE" ]; then
+                echo "────────────────────────────────────────"
+                echo "Competition: $RUN_NAME"
+                echo "────────────────────────────────────────"
+                cat "$SUMMARY_FILE"
+                echo ""
+              fi
+            fi
+          done
+
+          echo "=========================================="
+          echo "Download 'agent-log-summaries' artifact for full details"
+          echo "=========================================="
+
       - name: Upload results
         if: always() && github.event.inputs.dry_run == 'false'
         uses: actions/upload-artifact@v4

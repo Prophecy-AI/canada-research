@@ -220,7 +220,7 @@ def summarize_runs(
         target_dir.mkdir(parents=True, exist_ok=True)
 
         # Copy raw log so users get full context.
-        shutil.copyfile(log_path, target_dir / "full_log")
+        shutil.copyfile(log_path, target_dir / "full_log.txt")
 
         log_text = log_path.read_text(errors="replace")
         try:
@@ -242,7 +242,7 @@ def summarize_runs(
             )
             print(f"[error] Summary failed for {run_dir.name}: {err}", file=sys.stderr)
 
-        (target_dir / "gpt-summary").write_text(summary_text)
+        (target_dir / "gpt-summary.txt").write_text(summary_text)
         summaries.append(LogSummary(run_dir.name, log_path, summary_text))
 
     return summaries
