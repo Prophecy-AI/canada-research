@@ -10,12 +10,7 @@ echo "=========================================="
 echo ""
 
 # Prompt for machine number
-read -p "Which GPU machine is this? (1 or 2 or 3 or 4): " MACHINE_NUM
-
-if [ "$MACHINE_NUM" != "1" ] && [ "$MACHINE_NUM" != "2" ] && [ "$MACHINE_NUM" != "3" ] && [ "$MACHINE_NUM" != "4" ]; then
-    echo "❌ ERROR: Please enter 1 or 2 or 3 or 4"
-    exit 1
-fi
+read -p "Which GPU machine is this? (1-8): " MACHINE_NUM
 
 RUNNER_NAME="gpu-runner-$MACHINE_NUM"
 RUNNER_LABELS="gpu,gpu-$MACHINE_NUM"
@@ -185,8 +180,8 @@ echo ""
 echo "Next steps:"
 echo "1. Go to: https://github.com/Prophecy-AI/canada-research/settings/actions/runners"
 echo "2. Verify you see: $RUNNER_NAME (Idle)"
-echo "3. Repeat this script on the other GPU machine"
-echo "4. Add ANTHROPIC_API_KEY to GitHub repo secrets"
+echo "3. Repeat this script on the other GPU machines (up to 7 total)"
+echo "4. Add ANTHROPIC_API_KEY and OPENAI_API_KEY to GitHub repo secrets"
 echo "5. Test a workflow run!"
 echo ""
 echo "To check runner status:"

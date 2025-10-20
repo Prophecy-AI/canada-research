@@ -56,7 +56,7 @@ class BashTool(BaseTool):
                     },
                     "background": {
                         "type": "boolean",
-                        "description": "REQUIRED: Explicitly choose execution mode. If true, run command in background and return shell_id immediately. Use ReadBashOutput(shell_id) to monitor progress and KillShell(shell_id) to stop it. Perfect for long-running tasks like model training. If false, command blocks until completion (max 120s timeout)."
+                        "description": "REQUIRED: Explicitly choose execution mode. If true, run command in background and return shell_id immediately. Use ReadBashOutput(shell_id='{shell_id}') to monitor progress and KillShell(shell_id='{shell_id}') to stop it. Perfect for long-running tasks like model training. If false, command blocks until completion (max 120s timeout)."
                     }
                 },
                 "required": ["command", "background"]
@@ -83,7 +83,7 @@ class BashTool(BaseTool):
             env = os.environ.copy()
             env['PYTHONUNBUFFERED'] = '1'
 
-            # Foreground: allocate PTY via util-linux 'script' for unbuffered output
+            # Allocate pseudo-TTY via util-linux 'script' for real-time flushing
             shell_id = f"bash_{uuid.uuid4().hex[:8]}"
             log_dir = os.path.join(self.workspace_dir, ".pty_logs")
             os.makedirs(log_dir, exist_ok=True)
@@ -172,7 +172,7 @@ class BashTool(BaseTool):
                 process=process,
                 command=command,
                 start_time=time.time(),
-                master_fd=-1  # not used in script wrapper but reserved
+                master_fd=-1
             )
 
             # Register in registry
