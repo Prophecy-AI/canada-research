@@ -1,5 +1,5 @@
 anthropic
-openai
+openai>=1.0.0
 # Updated google-genai with flexible protobuf support
 google-genai
 # xai-sdk requires protobuf >= 5.29.4
