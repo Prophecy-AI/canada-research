@@ -45,5 +45,10 @@ def log_tool_call(message):
     print(f"📥 INPUT (what LLM sent):", flush=True)
     print(json.dumps(message['tool_input'], indent=2), flush=True)
     print(f"\n📤 OUTPUT (what LLM received):", flush=True)
-    print(message['tool_output'], flush=True)
+    # Support both 'tool_output' (agent_v5) and 'result' (agent_v6)
+    output = message.get('tool_output') or message.get('result', {})
+    if isinstance(output, dict):
+        print(json.dumps(output, indent=2), flush=True)
+    else:
+        print(output, flush=True)
     print(f"{'='*80}\n", flush=True)
