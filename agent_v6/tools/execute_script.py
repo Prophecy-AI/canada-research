@@ -6,11 +6,14 @@ Key features from Operand Quant:
 - Resource monitoring (CPU, memory)
 - Output streaming
 - Convergence detection (optional)
+- TTY emulation for unbuffered output
 """
 import os
 import asyncio
 import time
 import psutil
+import shlex
+import uuid
 from typing import Dict, Optional
 from pathlib import Path
 
@@ -109,23 +112,38 @@ class ExecuteScriptTool(BaseTool):
 
             # Build command
             if interpreter in ["python", "python3"]:
-                command = [interpreter, abs_path] + args
+                command_parts = [interpreter, abs_path] + args
             elif interpreter in ["bash", "sh"]:
-                command = [interpreter, abs_path] + args
+                command_parts = [interpreter, abs_path] + args
             else:
                 return {
                     "content": f"Unknown interpreter: {interpreter}",
                     "is_error": True
                 }
 
+            # Join command for script wrapper
+            command_str = " ".join(shlex.quote(part) for part in command_parts)
+
             # Prepare environment
             env = os.environ.copy()
             env.update(env_vars)
             env["PYTHONUNBUFFERED"] = "1"  # Ensure immediate output
 
-            # Start process
-            process = await asyncio.create_subprocess_exec(
-                *command,
+            # Create log directory for typescript files
+            log_dir = os.path.join(self.workspace_dir, ".pty_logs")
+            os.makedirs(log_dir, exist_ok=True)
+
+            # Generate unique shell ID for this execution
+            shell_id = f"script_{uuid.uuid4().hex[:8]}"
+            typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
+
+            # Wrap with script -q -c for TTY emulation (unbuffered output, progress bars work)
+            # This matches agent_v5's BashTool behavior
+            wrapped_cmd = f'script -q -c {shlex.quote(command_str)} {shlex.quote(typescript_path)}'
+
+            # Start process with TTY emulation
+            process = await asyncio.create_subprocess_shell(
+                wrapped_cmd,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.STDOUT,  # Merge stderr into stdout
                 cwd=self.workspace_dir,
@@ -135,8 +153,10 @@ class ExecuteScriptTool(BaseTool):
             # Track process
             self.processes[process.pid] = {
                 "process": process,
-                "command": " ".join(command),
+                "command": command_str,
                 "script_path": script_path,
+                "shell_id": shell_id,
+                "typescript_path": typescript_path,
                 "started_at": time.time(),
                 "output_buffer": [],
                 "total_output_lines": 0,
@@ -148,18 +168,20 @@ class ExecuteScriptTool(BaseTool):
 
             # Track in workspace
             if self.workspace_state:
-                self.workspace_state.track_process_started(process.pid, " ".join(command))
+                self.workspace_state.track_process_started(process.pid, command_str)
 
             return {
                 "content": (
                     f"✓ Started background process (PID: {process.pid})\n"
                     f"Script: {script_path}\n"
-                    f"Command: {' '.join(command)}\n\n"
+                    f"Command: {command_str}\n"
+                    f"Shell ID: {shell_id}\n\n"
+                    f"✓ TTY emulation enabled (unbuffered output, progress bars work)\n\n"
                     f"Use CheckProcessTool(pid={process.pid}) to monitor progress.\n"
                     f"Use InterruptProcessTool(pid={process.pid}) to stop."
                 ),
                 "is_error": False,
-                "debug_summary": f"Started {script_path} (PID {process.pid})"
+                "debug_summary": f"Started {script_path} (PID {process.pid}, TTY enabled)"
             }
 
         except Exception as e:
