@@ -121,7 +121,7 @@ class TimeoutManager:
 
     def start_task(self, task_name: str, estimated_duration: float, max_duration: float):
         """
-        Start tracking a new task.
+        Start tracking a new task with estimated duration.
 
         Args:
             task_name: Name of the task (e.g., "train_complex_model")
@@ -140,6 +140,10 @@ class TimeoutManager:
             last_output_time=time.time()
         )
         self.register_activity()
+
+        # Log task start for debugging
+        from debug import log
+        log(f"⏱️  Started task: {task_name} (est: {self._format_duration(estimated_duration)}, max: {self._format_duration(max_duration)})")
 
     def complete_task(self):
         """Mark the current task as completed"""
@@ -238,3 +242,69 @@ class TimeoutManager:
             )
 
         return None
+
+    def parse_estimate_result(self, estimate_result: str) -> Optional[Dict]:
+        """
+        Parse EstimateTaskDuration tool output to extract durations.
+
+        Args:
+            estimate_result: The text output from EstimateTaskDuration tool
+
+        Returns:
+            {"task_name": str, "min": float, "typical": float, "max": float} or None
+        """
+        import re
+
+        # Look for duration estimates in format "12m 30s" or "1h 30m"
+        # Example output:
+        # ⏱️ Task Duration Estimate: train_complex_model
+        # 📊 Estimated Duration:
+        #    ⚡ Best case:  12m 0s
+        #    📈 Typical:    30m 0s
+        #    ⚠️  Worst case: 1h 30m
+
+        # Extract task name
+        task_match = re.search(r'Task Duration Estimate:\s*(\w+)', estimate_result)
+        if not task_match:
+            return None
+
+        task_name = task_match.group(1)
+
+        # Extract durations
+        def parse_duration(text: str) -> Optional[float]:
+            """Parse '1h 30m 45s' format to seconds"""
+            hours = minutes = seconds = 0
+
+            h_match = re.search(r'(\d+)h', text)
+            m_match = re.search(r'(\d+)m', text)
+            s_match = re.search(r'(\d+)s', text)
+
+            if h_match:
+                hours = int(h_match.group(1))
+            if m_match:
+                minutes = int(m_match.group(1))
+            if s_match:
+                seconds = int(s_match.group(1))
+
+            if hours == 0 and minutes == 0 and seconds == 0:
+                return None
+
+            return hours * 3600 + minutes * 60 + seconds
+
+        typical_match = re.search(r'Typical:\s*(.+?)(?:\n|$)', estimate_result)
+        max_match = re.search(r'Worst case:\s*(.+?)(?:\n|$)', estimate_result)
+
+        if not typical_match or not max_match:
+            return None
+
+        typical_duration = parse_duration(typical_match.group(1))
+        max_duration = parse_duration(max_match.group(1))
+
+        if typical_duration is None or max_duration is None:
+            return None
+
+        return {
+            "task_name": task_name,
+            "typical": typical_duration,
+            "max": max_duration
+        }

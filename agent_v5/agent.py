@@ -279,6 +279,23 @@ class ResearchAgent:
                 tool_results = []
                 for tool_use in tool_uses:
                     result = await self.tools.execute(tool_use["name"], tool_use["input"])
+
+                    # If EstimateTaskDuration was called, register the task with TimeoutManager
+                    if tool_use["name"] == "EstimateTaskDuration" and not result.get("is_error"):
+                        estimate = self.timeout_manager.parse_estimate_result(result["content"])
+                        if estimate:
+                            # Start tracking this task
+                            self.timeout_manager.start_task(
+                                task_name=estimate["task_name"],
+                                estimated_duration=estimate["typical"],
+                                max_duration=estimate["max"]
+                            )
+
+                    # If ReadBashOutput shows COMPLETED status, mark task as complete
+                    if tool_use["name"] == "ReadBashOutput" and not result.get("is_error"):
+                        if "Status: COMPLETED" in result["content"] or "Status: FAILED" in result["content"]:
+                            self.timeout_manager.complete_task()
+
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tool_use["id"],
