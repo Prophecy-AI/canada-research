@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """
-Summarize agent logs with a high-reasoning GPT model.
+Summarize agent logs with Claude Sonnet.
 
 This script collects `agent.log` files extracted from competition containers,
-optionally chunks them, feeds them to the configured OpenAI model with high
-reasoning effort, and stores both the raw log and the generated summary in a
-directory structure suitable for artifact upload:
+optionally chunks them, feeds them to the configured Anthropic Claude model,
+and stores both the raw log and the generated summary in a directory structure
+suitable for artifact upload:
 
 <output_dir>/
   <run_id>/
-    full_log
-    gpt-summary
+    full_log.txt
+    claude-summary.txt
 
 Finally, the directory is zipped so GitHub Actions can upload it as a single
 artifact.
@@ -26,16 +26,15 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Sequence
 
-from openai import OpenAI
+from anthropic import Anthropic
 
 
 # Defaults can be overridden through CLI flags or environment.
-DEFAULT_MODEL = os.getenv("GPT_SUMMARY_MODEL", "gpt-5")
+DEFAULT_MODEL = os.getenv("CLAUDE_SUMMARY_MODEL", "claude-sonnet-4-5-20250929")
 DEFAULT_OUTPUT_DIR = "log_reviews"
 DEFAULT_ZIP_NAME = "log_reviews.zip"
 MAX_CHARS_PER_CALL = int(os.getenv("LOG_SUMMARY_MAX_CHARS_PER_CALL", "12000"))
-MAX_OUTPUT_TOKENS = int(os.getenv("LOG_SUMMARY_MAX_OUTPUT_TOKENS", "1500"))
-REASONING_EFFORT = os.getenv("LOG_SUMMARY_REASONING_EFFORT", "high")
+MAX_OUTPUT_TOKENS = int(os.getenv("LOG_SUMMARY_MAX_OUTPUT_TOKENS", "8000"))
 
 
 SYSTEM_PROMPT = """You are an expert reviewer of autonomous Kaggle agent runs.
@@ -80,54 +79,45 @@ def chunk_text(text: str, chunk_size: int) -> Iterable[str]:
 
 
 def call_model(
-    client: OpenAI,
+    client: Anthropic,
     *,
     model: str,
     system_prompt: str,
     user_prompt: str,
-    reasoning_effort: str,
     max_output_tokens: int,
 ) -> str:
-    response = client.responses.create(
+    response = client.messages.create(
         model=model,
-        input=[
-            {
-                "role": "system",
-                "content": [{"type": "input_text", "text": system_prompt}],
-            },
+        max_tokens=max_output_tokens,
+        system=system_prompt,
+        messages=[
             {
                 "role": "user",
-                "content": [{"type": "input_text", "text": user_prompt}],
+                "content": user_prompt,
             },
         ],
-        reasoning={"effort": reasoning_effort},
-        max_output_tokens=max_output_tokens,
+        temperature=0,  # Deterministic responses for consistency
     )
-    if hasattr(response, "output_text") and response.output_text:
-        return response.output_text
 
-    # Fallback for SDKs that expose structured response items.
-    if getattr(response, "output", None):
-        parts = []
-        for item in response.output:
-            for content in getattr(item, "content", []) or []:
-                text = getattr(content, "text", None)
-                if text:
-                    parts.append(text)
-        if parts:
-            return "\n".join(parts)
+    # Extract text from response content blocks
+    text_parts = []
+    for block in response.content:
+        if hasattr(block, "text"):
+            text_parts.append(block.text)
+
+    if text_parts:
+        return "\n".join(text_parts)
 
     raise RuntimeError("Model response did not contain any text content.")
 
 
 def summarize_log(
-    client: OpenAI,
+    client: Anthropic,
     *,
     model: str,
     competition_name: str,
     log_text: str,
     chunk_size: int,
-    reasoning_effort: str,
     max_output_tokens: int,
 ) -> str:
     if len(log_text) <= chunk_size:
@@ -141,7 +131,6 @@ def summarize_log(
             model=model,
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
-            reasoning_effort=reasoning_effort,
             max_output_tokens=max_output_tokens,
         )
 
@@ -157,7 +146,6 @@ def summarize_log(
             model=model,
             system_prompt=SYSTEM_PROMPT,
             user_prompt=user_prompt,
-            reasoning_effort=reasoning_effort,
             max_output_tokens=max_output_tokens,
         )
         fragment_summaries.append(f"Chunk {idx} summary:\n{fragment_summary}")
@@ -175,7 +163,6 @@ def summarize_log(
         model=model,
         system_prompt=SYSTEM_PROMPT,
         user_prompt=combined_prompt,
-        reasoning_effort=reasoning_effort,
         max_output_tokens=max_output_tokens,
     )
 
@@ -199,14 +186,13 @@ def summarize_runs(
     *,
     model: str,
     chunk_size: int,
-    reasoning_effort: str,
     max_output_tokens: int,
 ) -> list[LogSummary]:
-    api_key = os.getenv("OPENAI_API_KEY")
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        raise EnvironmentError("OPENAI_API_KEY is required for log summarization.")
+        raise EnvironmentError("ANTHROPIC_API_KEY is required for log summarization.")
 
-    client = OpenAI(api_key=api_key)
+    client = Anthropic(api_key=api_key)
     summaries: list[LogSummary] = []
 
     for run_dir in collect_run_dirs(run_group_dir):
@@ -230,7 +216,6 @@ def summarize_runs(
                 competition_name=competition_name,
                 log_text=log_text,
                 chunk_size=chunk_size,
-                reasoning_effort=reasoning_effort,
                 max_output_tokens=max_output_tokens,
             )
         except Exception as err:  # noqa: BLE001
@@ -242,7 +227,7 @@ def summarize_runs(
             )
             print(f"[error] Summary failed for {run_dir.name}: {err}", file=sys.stderr)
 
-        (target_dir / "gpt-summary.txt").write_text(summary_text)
+        (target_dir / "claude-summary.txt").write_text(summary_text)
         summaries.append(LogSummary(run_dir.name, log_path, summary_text))
 
     return summaries
@@ -261,7 +246,7 @@ def zip_output_directory(output_dir: Path, output_zip: Path) -> Path:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Summarize agent logs with GPT.")
+    parser = argparse.ArgumentParser(description="Summarize agent logs with Claude.")
     parser.add_argument(
         "--run-group",
         required=True,
@@ -285,7 +270,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--model",
         default=DEFAULT_MODEL,
-        help=f"OpenAI model to use (default: {DEFAULT_MODEL}).",
+        help=f"Anthropic model to use (default: {DEFAULT_MODEL}).",
     )
     parser.add_argument(
         "--chunk-size",
@@ -298,11 +283,6 @@ def parse_args() -> argparse.Namespace:
         type=int,
         default=MAX_OUTPUT_TOKENS,
         help=f"Max output tokens per call (default: {MAX_OUTPUT_TOKENS}).",
-    )
-    parser.add_argument(
-        "--reasoning-effort",
-        default=REASONING_EFFORT,
-        help=f"Reasoning effort to request from the model (default: {REASONING_EFFORT}).",
     )
     return parser.parse_args()
 
@@ -333,7 +313,6 @@ def main() -> None:
         output_dir,
         model=args.model,
         chunk_size=args.chunk_size,
-        reasoning_effort=args.reasoning_effort,
         max_output_tokens=args.max_output_tokens,
     )
 

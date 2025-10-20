@@ -153,11 +153,11 @@ jobs:
 
           ./RUN_AGENT_V5_KAGGLE.sh
 
-      - name: Summarize agent logs with GPT-5
+      - name: Summarize agent logs with Claude
         if: always() && github.event.inputs.dry_run == 'false'
         env:
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GPT_SUMMARY_MODEL: gpt-5
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_SUMMARY_MODEL: claude-sonnet-4-5-20250929
         run: |
           cd ${{ github.workspace }}/mle-bench
           source venv/bin/activate
@@ -175,8 +175,7 @@ jobs:
             --run-group "$RUN_GROUP" \
             --output-dir "runs/$RUN_GROUP/log_reviews" \
             --output-zip "runs/$RUN_GROUP/log_reviews.zip" \
-            --model "${GPT_SUMMARY_MODEL:-gpt-5}" \
-            --reasoning-effort high
+            --model "${CLAUDE_SUMMARY_MODEL}"
 
       - name: Display log summaries
         if: always() && github.event.inputs.dry_run == 'false'
@@ -208,7 +207,7 @@ jobs:
           for run_dir in "$REVIEWS_DIR"/*; do
             if [ -d "$run_dir" ]; then
               RUN_NAME=$(basename "$run_dir")
-              SUMMARY_FILE="$run_dir/gpt-summary.txt"
+              SUMMARY_FILE="$run_dir/claude-summary.txt"
 
               if [ -f "$SUMMARY_FILE" ]; then
                 echo "────────────────────────────────────────"
