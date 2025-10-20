@@ -105,6 +105,15 @@ fi
 
 echo "✅ ANTHROPIC_API_KEY is set"
 
+# Ensure Gemini is configured for Oracle consultations
+if [ -z "$GEMINI_API_KEY" ]; then
+    echo "❌ ERROR: GEMINI_API_KEY not set"
+    echo "   Please run: export GEMINI_API_KEY=your-key-here"
+    exit 1
+fi
+
+echo "✅ GEMINI_API_KEY is set"
+
 # Check if mlebench is installed
 if ! python -c "import mlebench" 2>/dev/null; then
     echo ""

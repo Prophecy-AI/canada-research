@@ -1,10 +1,10 @@
 """
-Oracle tool - Consult OpenAI o3 + DeepSeek R1 for expert guidance with multi-model ensemble + critic
+Oracle tool - Consult OpenAI o3 + Gemini 2.5 Pro for expert guidance with multi-model ensemble + critic
 """
 import os
 import json
 import asyncio
-from typing import Dict, Callable, List, Tuple
+from typing import Dict, Callable, List
 from .base import BaseTool
 
 
@@ -13,7 +13,7 @@ class OracleTool(BaseTool):
     Consult the Oracle (multi-model ensemble) for expert guidance when stuck or confused
 
     Architecture:
-    1. Query both O3 and DeepSeek-R1 in parallel
+    1. Query OpenAI O3 and Gemini 2.5 Pro in parallel
     2. O3 Critic compares, synthesizes, and returns unified optimal plan
     """
 
@@ -37,7 +37,7 @@ class OracleTool(BaseTool):
         return {
             "name": "Oracle",
             "description": (
-                "Consult the wise Oracle (multi-model ensemble: O3 + DeepSeek-R1 + O3 Critic) when stuck, "
+                "Consult the wise Oracle (multi-model ensemble: O3 + Gemini 2.5 Pro + O3 Critic) when stuck, "
                 "confused about results, or need expert strategic guidance. Full conversation history is automatically included. "
                 "Use when: CV/leaderboard mismatch detected, stuck after multiple failed iterations, "
                 "major strategic decision points, debugging complex issues, or need validation of approach. "
@@ -67,7 +67,7 @@ class OracleTool(BaseTool):
         Execute oracle consultation with multi-model ensemble + critic
 
         Architecture:
-        1. Query O3 and DeepSeek-R1 in parallel
+        1. Query O3 and Gemini 2.5 Pro in parallel
         2. O3 Critic synthesizes both plans into optimal unified plan
 
         Args:
@@ -77,89 +77,86 @@ class OracleTool(BaseTool):
             Dict with oracle's synthesized analysis and recommendations
         """
         try:
-            # Import OpenAI client
             from openai import OpenAI
+            from google import genai
+            from google.genai import types
 
             query = input["query"]
-
-            # Get current conversation history
             conversation_history = self.get_conversation_history()
 
-            # Initialize OpenAI client for O3
             openai_api_key = os.environ.get("OPENAI_API_KEY")
             if not openai_api_key:
                 return {
                     "content": "Error: OPENAI_API_KEY environment variable not set. Cannot consult Oracle.",
-                    "is_error": True
+                    "is_error": True,
                 }
 
-            # Initialize DeepSeek client (OpenAI-compatible)
-            deepseek_api_key = os.environ.get("DEEPSEEK_API_KEY")
-            if not deepseek_api_key:
+            gemini_api_key = os.environ.get("GEMINI_API_KEY")
+            if not gemini_api_key:
                 return {
-                    "content": "Error: DEEPSEEK_API_KEY environment variable not set. Cannot consult Oracle.\n"
-                              "Get your API key at: https://platform.deepseek.com/api_keys",
-                    "is_error": True
+                    "content": (
+                        "Error: GEMINI_API_KEY environment variable not set. Cannot consult Oracle.\n"
+                        "Visit https://aistudio.google.com/ to create an API key."
+                    ),
+                    "is_error": True,
                 }
 
             openai_client = OpenAI(api_key=openai_api_key)
-            deepseek_client = OpenAI(
-                api_key=deepseek_api_key,
-                base_url="https://api.deepseek.com"  # DeepSeek's base URL
-            )
+            gemini_client = genai.Client(api_key=gemini_api_key)
 
-            # Convert conversation history to messages format
             messages = self._build_messages(conversation_history, query)
 
-            # Step 1: Query both models in parallel
-            print("🔮 Oracle: Consulting O3 and DeepSeek-R1 in parallel...")
-            o3_plan, deepseek_plan = await asyncio.gather(
+            print("🔮 Oracle: Consulting O3 and Gemini 2.5 Pro in parallel...")
+            o3_plan, gemini_plan = await asyncio.gather(
                 self._query_o3(openai_client, messages),
-                self._query_deepseek_r1(deepseek_client, messages)
+                self._query_gemini(gemini_client, messages, query, types),
             )
 
-            # Check for errors in parallel queries
-            if o3_plan.startswith("ERROR:") and deepseek_plan.startswith("ERROR:"):
+            if o3_plan.startswith("ERROR:") and gemini_plan.startswith("ERROR:"):
                 return {
-                    "content": f"Both models failed:\n\nO3: {o3_plan}\n\nDeepSeek-R1: {deepseek_plan}",
-                    "is_error": True
+                    "content": f"Both experts failed:\n\nExpert A: {o3_plan}\n\nExpert B: {gemini_plan}",
+                    "is_error": True,
                 }
 
-            # Step 2: O3 Critic synthesizes both plans
-            print("🔮 Oracle: O3 Critic synthesizing optimal plan...")
-            final_plan = await self._critic_synthesis(openai_client, messages, o3_plan, deepseek_plan, query)
+            if o3_plan.startswith("ERROR:") and not gemini_plan.startswith("ERROR:"):
+                return {
+                    "content": self._format_single_model_response("Expert B", gemini_plan),
+                    "is_error": False,
+                }
+            if gemini_plan.startswith("ERROR:") and not o3_plan.startswith("ERROR:"):
+                return {
+                    "content": self._format_single_model_response("Expert A", o3_plan),
+                    "is_error": False,
+                }
 
-            # Format final response
-            response_content = self._format_response(o3_plan, deepseek_plan, final_plan)
+            print("🔮 Oracle: O3 Critic synthesizing optimal plan...")
+            final_plan = await self._critic_synthesis(openai_client, messages, o3_plan, gemini_plan, query)
+
+            response_content = self._format_response(o3_plan, gemini_plan, final_plan)
 
             return {
                 "content": response_content,
                 "is_error": False,
-                "debug_summary": f"Oracle (O3+DeepSeek+Critic): {query[:100]}..."
+                "debug_summary": f"Oracle (O3+Gemini+Critic): {query[:100]}...",
             }
 
         except Exception as e:
             error_msg = str(e)
 
-            # Provide helpful error messages
-            if "model" in error_msg.lower() and ("o3" in error_msg.lower() or "deepseek" in error_msg.lower()):
+            if "model" in error_msg.lower() and ("o3" in error_msg.lower() or "gemini" in error_msg.lower()):
                 return {
-                    "content": (
-                        f"Error: Model not available. "
-                        f"Original error: {error_msg}"
-                    ),
-                    "is_error": True
+                    "content": f"Error: Model not available. Original error: {error_msg}",
+                    "is_error": True,
                 }
-            elif "authentication" in error_msg.lower() or "api" in error_msg.lower():
+            if "authentication" in error_msg.lower() or "api" in error_msg.lower():
                 return {
-                    "content": f"Error: API authentication failed. Check OPENAI_API_KEY. Error: {error_msg}",
-                    "is_error": True
+                    "content": f"Error: API authentication failed. Check API keys. Error: {error_msg}",
+                    "is_error": True,
                 }
-            else:
-                return {
-                    "content": f"Error consulting Oracle: {error_msg}",
-                    "is_error": True
-                }
+            return {
+                "content": f"Error consulting Oracle: {error_msg}",
+                "is_error": True,
+            }
 
     def _build_messages(self, conversation_history: List[Dict], query: str) -> List[Dict]:
         """
@@ -379,45 +376,79 @@ class OracleTool(BaseTool):
         except Exception as e:
             return f"ERROR: O3 failed - {str(e)}"
 
-    async def _query_deepseek_r1(self, client: 'OpenAI', messages: List[Dict]) -> str:
+    async def _query_gemini(
+        self,
+        client: 'genai.Client',
+        messages: List[Dict],
+        query: str,
+        types,
+    ) -> str:
         """
-        Query DeepSeek-R1 model (reasoning mode with Chain of Thought)
+        Query Gemini 2.5 Pro via the google-genai SDK.
 
         Args:
-            client: OpenAI client instance configured for DeepSeek API
-                   (base_url="https://api.deepseek.com")
-            messages: Conversation messages
+            client: Gemini client instance.
+            messages: Conversation history converted to OpenAI-style messages.
+            query: Original query posed to the Oracle.
+            types: google.genai types module (passed to avoid import at top-level).
 
         Returns:
-            DeepSeek-R1's response text or error message
-
-        Note:
-            - Model name is "deepseek-reasoner" (reasoning mode of DeepSeek-V3.2-Exp)
-            - Generates Chain of Thought (CoT) before final answer
-            - Requires DEEPSEEK_API_KEY environment variable
-            - Get API key at: https://platform.deepseek.com/api_keys
+            Gemini's response text or error message.
         """
         try:
-            # DeepSeek-R1 reasoning model
-            # API: https://api.deepseek.com
-            # Model: deepseek-reasoner (generates CoT reasoning)
+            # Gemini expects a single string prompt; stitch prior context plus question.
+            serialized_history = self._render_history_for_partner(messages, query)
+
             response = await asyncio.to_thread(
-                client.chat.completions.create,
-                model="deepseek-reasoner",  # Reasoning mode (R1)
-                messages=messages,
-                max_completion_tokens=8192,
-                temperature=1.0
+                client.models.generate_content,
+                model="gemini-2.5-pro",
+                contents=serialized_history,
+                config=types.GenerateContentConfig(
+                    thinking_config=types.ThinkingConfig(thinking_budget=-1)
+                ),
             )
-            return response.choices[0].message.content
+
+            # google-genai responses expose .text for convenience.
+            if getattr(response, "text", None):
+                return response.text
+
+            # Fall back to assembling text from candidates.
+            for candidate in getattr(response, "candidates", []) or []:
+                parts = getattr(candidate, "content", None)
+                if not parts:
+                    continue
+                assembled = []
+                for part in parts.parts if hasattr(parts, "parts") else parts:
+                    text = getattr(part, "text", None)
+                    if text:
+                        assembled.append(text)
+                if assembled:
+                    return "\n".join(assembled)
+
+            return "ERROR: Gemini 2.5 Pro returned no text content."
         except Exception as e:
-            return f"ERROR: DeepSeek-R1 failed - {str(e)}"
+            return f"ERROR: Gemini 2.5 Pro failed - {str(e)}"
+
+    def _render_history_for_partner(self, messages: List[Dict], query: str) -> str:
+        """
+        Render the conversation history into a plain-text transcript suitable for Gemini prompts.
+        """
+        lines: List[str] = [
+            "You are a Kaggle Grandmaster consultant. Review the transcript and answer the final query."
+        ]
+        for msg in messages:
+            role = msg.get("role", "assistant").upper()
+            content = msg.get("content", "")
+            lines.append(f"{role}: {content}")
+        lines.append(f"FINAL QUERY: {query}")
+        return "\n\n".join(lines)
 
     async def _critic_synthesis(
         self,
         client: 'OpenAI',
         base_messages: List[Dict],
         o3_plan: str,
-        deepseek_plan: str,
+        gemini_plan: str,
         original_query: str
     ) -> str:
         """
@@ -427,7 +458,7 @@ class OracleTool(BaseTool):
             client: OpenAI client instance
             base_messages: Original conversation context
             o3_plan: O3's plan
-            deepseek_plan: DeepSeek-R1's plan
+            gemini_plan: Gemini 2.5 Pro's plan
             original_query: Original oracle query
 
         Returns:
@@ -448,13 +479,13 @@ class OracleTool(BaseTool):
                     f"4. Resolve any contradictions with evidence-based reasoning\n"
                     f"5. Return the unified plan that maximizes chances of success\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"PLAN A (OpenAI O3):\n"
+                    f"PLAN A (Expert A):\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
                     f"{o3_plan}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"PLAN B (DeepSeek-R1):\n"
+                    f"PLAN B (Expert B):\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-                    f"{deepseek_plan}\n\n"
+                    f"{gemini_plan}\n\n"
                     f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                     f"Provide your SYNTHESIZED OPTIMAL PLAN:\n"
                     f"- Start with a brief comparison (which plan is stronger and why)\n"
@@ -475,13 +506,28 @@ class OracleTool(BaseTool):
         except Exception as e:
             return f"ERROR: Critic synthesis failed - {str(e)}"
 
-    def _format_response(self, o3_plan: str, deepseek_plan: str, final_plan: str) -> str:
+    def _format_single_model_response(self, model_name: str, plan: str) -> str:
+        """
+        Format response when only one model provides guidance.
+        """
+        return (
+            "🔮 **ORACLE CONSULTATION (Single Model)**\n\n"
+            f"Only {model_name} returned a valid plan for this query.\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🧠 **PLAN ({model_name})**\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{plan}\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "Follow the guidance above or try consulting the Oracle again once other models are available."
+        )
+
+    def _format_response(self, o3_plan: str, gemini_plan: str, final_plan: str) -> str:
         """
         Format the final Oracle response with all three plans
 
         Args:
             o3_plan: O3's plan
-            deepseek_plan: DeepSeek-R1's plan
+            gemini_plan: Gemini 2.5 Pro's plan
             final_plan: Synthesized plan from O3 critic
 
         Returns:
@@ -491,15 +537,15 @@ class OracleTool(BaseTool):
             "🔮 **ORACLE CONSULTATION (Multi-Model Ensemble)**\n\n"
             "The Oracle consulted two reasoning models in parallel, then synthesized their insights:\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "📊 **PLAN A: OpenAI O3 Analysis**\n"
+            "📊 **PLAN A: Sub-Oracle A Analysis**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"{o3_plan}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "🧠 **PLAN B: DeepSeek-R1 Analysis**\n"
+            "🧠 **PLAN B: Sub-Oracle B Analysis**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"{deepseek_plan}\n\n"
+            f"{gemini_plan}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "✨ **SYNTHESIZED OPTIMAL PLAN (O3 Critic)**\n"
+            "✨ **SYNTHESIZED OPTIMAL PLAN (Oracle Critic)**\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"{final_plan}\n\n"
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
