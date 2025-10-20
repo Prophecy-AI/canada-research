@@ -173,10 +173,19 @@ If issues arise, rollback is simple:
 
 1. ✅ `/Users/Yifan/canada-research/agent_v5/agent.py` - Main agent (148 lines modified)
 2. ✅ `/Users/Yifan/canada-research/agent_v5/tools/registry.py` - Tool registry (48 lines added)
+3. ✅ `/Users/Yifan/canada-research/mle-bench/environment/requirements.txt` - Updated dependency (1 line changed)
 
 **Total changes:** ~200 lines modified/added
 
-**Syntax validated:** ✅ Both files pass `python -m py_compile`
+**Dependency Change:**
+```diff
+- anthropic==0.34.1
++ google-genai==1.0.1
+```
+
+**Syntax validated:** ✅ All files pass `python -m py_compile`
+
+**Docker rebuild required:** ⚠️ Yes - requirements.txt changed, need to rebuild Docker image
 
 ## Migration Complete! 🎉
 
