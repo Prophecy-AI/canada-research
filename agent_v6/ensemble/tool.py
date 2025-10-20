@@ -285,7 +285,7 @@ class EnsembleTool(BaseTool):
         Per OpenAI docs:
         - reasoning: {effort: "high"} for maximum thinking
         - text: {verbosity: "high"} for detailed output
-        - max_output_tokens for length control
+        - max_output_tokens: 2048 (reduced to control cost/time)
         """
         try:
             response = await client.responses.create(
@@ -294,7 +294,7 @@ class EnsembleTool(BaseTool):
                 instructions=messages[0]["content"],  # System prompt as instructions
                 reasoning={"effort": "high"},
                 text={"verbosity": "high"},
-                max_output_tokens=8192
+                max_output_tokens=2048  # Reduced from 8192
             )
             return response.output_text
         except Exception as e:
@@ -325,10 +325,10 @@ class EnsembleTool(BaseTool):
                 model="claude-opus-4-1-20250805",
                 system=system_msg,
                 messages=conversation_msgs,
-                max_tokens=16384,  # Must be > budget_tokens (10000)
+                max_tokens=8096,  # Reduced from 16384, must be > budget_tokens
                 thinking={
                     "type": "enabled",
-                    "budget_tokens": 10000
+                    "budget_tokens": 2048  # Reduced from 10000
                 }
             )
 
@@ -454,14 +454,25 @@ class EnsembleTool(BaseTool):
 
 Original Problem: {original_problem}
 
-You received responses from {len(valid_responses)} expert models. Synthesize their insights into a SINGLE OPTIMAL PLAN.
+You received responses from {len(valid_responses)} expert perspectives. Your task:
 
-Tasks:
-1. Compare all expert responses critically
-2. Identify common themes and unique insights
-3. Resolve any contradictions with evidence-based reasoning
-4. Synthesize the best elements into ONE unified recommendation
-5. Be specific, actionable, and grounded in the expert inputs
+1. Create a SHORT PARAGRAPH summary for EACH expert perspective (label as "Perspective 1", "Perspective 2", etc - do NOT reveal model names)
+2. Then synthesize into ONE unified optimal plan
+
+Format your response EXACTLY like this:
+
+**Expert Perspectives:**
+
+Perspective 1: [2-3 sentence summary of their key recommendation and reasoning]
+
+Perspective 2: [2-3 sentence summary of their key recommendation and reasoning]
+
+Perspective 3: [2-3 sentence summary of their key recommendation and reasoning]
+
+Perspective 4: [2-3 sentence summary of their key recommendation and reasoning]
+
+**Synthesized Optimal Plan:**
+[Your unified recommendation - be specific, actionable, resolve contradictions, and provide concrete next steps]
 
 """
 
@@ -469,7 +480,7 @@ Tasks:
             for i, (model_name, response) in enumerate(valid_responses.items(), 1):
                 synthesis_prompt += f"""
 {'='*60}
-EXPERT {i}:
+EXPERT PERSPECTIVE {i}:
 {'='*60}
 {response}
 
@@ -478,11 +489,7 @@ EXPERT {i}:
             synthesis_prompt += f"""
 {'='*60}
 
-Provide your SYNTHESIZED OPTIMAL PLAN:
-- Start with brief comparison of expert responses
-- Highlight areas of agreement and disagreement
-- Present the unified recommendation
-- Be specific and actionable
+Now provide your response in the exact format specified above.
 """
 
             # Query O3 with high effort reasoning
@@ -507,24 +514,12 @@ Provide your SYNTHESIZED OPTIMAL PLAN:
         errors: Dict[str, str],
         synthesis: str
     ) -> str:
-        """Format final ensemble response with all expert inputs and synthesis"""
+        """Format final ensemble response - synthesis only (no full expert responses)"""
 
-        output = ["🔮 **ENSEMBLE CONSULTATION (Multi-Model Reasoning)**\n"]
-        output.append(f"Consulted {len(valid_responses)} frontier models, synthesized by O3.\n")
-
-        # Add each expert response
-        for i, (model_name, response) in enumerate(valid_responses.items(), 1):
-            output.append("\n" + "="*70)
-            output.append(f"📊 **EXPERT {i}: **")
-            output.append("="*70)
-            output.append(response)
-
-        # Add synthesis
-        output.append("\n" + "="*70)
-        output.append("✨ **SYNTHESIZED OPTIMAL PLAN (Oracle Critic)**")
+        output = ["🔮 **ENSEMBLE CONSULTATION**\n"]
+        output.append(f"Consulted {len(valid_responses)} expert perspectives, synthesized by O3.\n")
         output.append("="*70)
         output.append(synthesis)
-        output.append("\n" + "="*70)
-        output.append("\n**Ensemble Consultation Complete.** Follow the synthesized optimal plan above.")
+        output.append("="*70)
 
         return "\n".join(output)

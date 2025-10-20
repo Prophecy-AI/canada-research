@@ -92,15 +92,11 @@ async def test_ensemble_basic_consultation():
     # Verify response contains expected sections
     content = result["content"]
 
-    # Should contain multiple expert responses
-    assert "EXPERT" in content, "Response should contain expert sections"
+    # Should contain perspective summaries
+    assert "Perspective" in content, "Response should contain perspective summaries"
 
-    # Should contain synthesis
-    assert "SYNTHESIZED" in content or "OPTIMAL PLAN" in content, "Response should contain O3 synthesis"
-
-    # Should mention at least one model name
-    model_names = ["GPT-5", "Claude", "Grok", "Gemini"]
-    assert any(name in content for name in model_names), "Response should mention model names"
+    # Should contain synthesis/plan
+    assert "Synthesized" in content or "Plan" in content, "Response should contain synthesized plan"
 
     print("\n✅ Test passed - Ensemble consultation successful!")
 

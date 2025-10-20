@@ -23,7 +23,7 @@ class WriteTool(BaseTool):
                 "properties": {
                     "file_path": {
                         "type": "string",
-                        "description": "Absolute path to file"
+                        "description": "Path to file (workspace-relative like 'analysis.py' or 'data/output.csv')"
                     },
                     "content": {
                         "type": "string",
