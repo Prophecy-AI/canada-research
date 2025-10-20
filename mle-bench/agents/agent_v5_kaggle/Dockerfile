@@ -39,11 +39,14 @@ RUN conda run -n ${CONDA_ENV_NAME} pip install \
 
 # Install build tools for LightGBM CUDA compilation
 # Need CMake 3.28+ (base image has 3.16)
+# Also install OpenGL libraries required by OpenCV (used by albumentations, cv2, etc.)
 RUN apt-get update && apt-get install -y \
     build-essential \
     git \
     wget \
     ripgrep \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install newer CMake (3.28+ required by LightGBM)
