@@ -272,7 +272,7 @@ Current date: {current_date}
 3. Write train.py based on ensemble recommendations
 4. Start: ExecuteScript(script_path="train.py", background=true) → returns pid
 5. While training runs:
-   - CheckProcess(pid) every few minutes to monitor
+   - CheckProcess(pid) every few minutes to monitor, avoid polling too frequently.
    - Prepare predict.py
    - Analyze partial results
    - Consult ensemble if issues arise
