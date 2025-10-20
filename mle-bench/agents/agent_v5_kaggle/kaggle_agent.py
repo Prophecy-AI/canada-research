@@ -103,6 +103,12 @@ Current date: {current_date}
 - Glob, Grep: Find/search files
 - TodoWrite, ReadTodoList: Task tracking
 - RunSummary: Log run results (JSONL)
+- **EstimateDuration:** SMART TIME ESTIMATION with adaptive strategy recommendations. Use AFTER data exploration, BEFORE Oracle consultation.
+  - Estimates task duration based on: task_type (image_classification/tabular/NLP/etc), dataset_size (small/medium/large), complexity, parallel_models
+  - Returns: time estimate (min/typical/max) + adaptive strategy (full/standard/fast/emergency) based on remaining time
+  - Provides specific model recommendations (B0/B2/B3/B4, folds, epochs, batch_size) tailored to time constraints
+  - Example: EstimateDuration(task_type='image_classification', dataset_size='medium') → "Need 20 min, have 21 min remaining → STANDARD strategy: B3, 3-fold CV, 8-10 epochs"
+  - **WORKFLOW: Data exploration → EstimateDuration → Oracle (with time estimate) → Training**
 - **ElapsedTime:** Check how long you've been working (tracks against 20±10 min budget). Use every 5-10 minutes to stay on track.
 - **GPUValidate:** Verify GPU training is working correctly (timing-based benchmark). Use BEFORE training to catch CPU fallback early.
   - Example: GPUValidate(framework='pytorch', model_size='small', batch_size=256)

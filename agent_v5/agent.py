@@ -22,6 +22,7 @@ from agent_v5.tools.run_summary import RunSummaryTool
 from agent_v5.tools.cohort import CohortDefinitionTool
 from agent_v5.tools.oracle import OracleTool
 from agent_v5.tools.elapsed_time import ElapsedTimeTool
+from agent_v5.tools.estimate_duration import EstimateDurationTool
 import time
 
 
@@ -57,6 +58,7 @@ class ResearchAgent:
         self.tools.register(ListBashProcessesTool(self.workspace_dir, self.process_registry))
         self.tools.register(OracleTool(self.workspace_dir, lambda: self.conversation_history))
         self.tools.register(ElapsedTimeTool(self.workspace_dir, self.start_time))
+        self.tools.register(EstimateDurationTool(self.workspace_dir, self.start_time, total_budget_min=30.0))
 
     async def cleanup(self) -> None:
         """
