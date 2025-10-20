@@ -225,7 +225,8 @@ node_modules/
 unique-bonbon-472921-q8-7fc568e0f2a7.json
 .specstory/
 outputs/
-workspace/
+# Agent runtime workspaces (root-level only, not source code dirs like agent_v6/workspace/)
+/workspace/
 mle-bench/.git
 
 # GitHub Actions Runner
