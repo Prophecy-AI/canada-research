@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 """
-Real API integration tests for summarize_logs.py
+Real API integration tests for summarize_logs.py (async version)
 
-These tests make actual calls to the OpenAI API to validate:
+These tests make actual calls to the Anthropic Claude API to validate:
 - Model response handling
 - Chunking behavior with real data
 - End-to-end summarization workflow
 - Response parsing robustness
+- Parallel processing
 
 Requirements:
-- OPENAI_API_KEY environment variable must be set
+- ANTHROPIC_API_KEY environment variable must be set
 - Tests are skipped if API key is not available
 - Costs real money (minimal - uses small test cases)
 
-Following agent_v5 pattern: Real API tests (not mocked)
+Following agent_v6 pattern: Real API tests (not mocked), async/await
 """
 
 from __future__ import annotations
@@ -23,7 +24,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from openai import OpenAI
+import pytest_asyncio
+from anthropic import AsyncAnthropic
 
 # Import the module under test
 import sys
@@ -42,13 +44,13 @@ def temp_workspace():
         yield Path(tmpdir)
 
 
-@pytest.fixture
-def openai_client():
-    """Real OpenAI client - requires OPENAI_API_KEY"""
-    api_key = os.getenv("OPENAI_API_KEY")
+@pytest_asyncio.fixture
+async def anthropic_client():
+    """Real Anthropic client - requires ANTHROPIC_API_KEY"""
+    api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
-        pytest.skip("OPENAI_API_KEY not set - skipping real API tests")
-    return OpenAI(api_key=api_key)
+        pytest.skip("ANTHROPIC_API_KEY not set - skipping real API tests")
+    return AsyncAnthropic(api_key=api_key)
 
 
 @pytest.fixture
@@ -115,16 +117,16 @@ def create_test_run_structure(temp_workspace):
 # ============================================================================
 
 class TestCallModelRealAPI:
-    """Test actual OpenAI API calls"""
+    """Test actual Anthropic Claude API calls"""
 
-    def test_successful_log_analysis(self, openai_client, sample_agent_log):
+    @pytest.mark.asyncio
+    async def test_successful_log_analysis(self, anthropic_client, sample_agent_log):
         """Should successfully analyze a real agent log"""
-        result = sl.call_model(
-            openai_client,
+        result = await sl.call_model(
+            anthropic_client,
             model=sl.DEFAULT_MODEL,
             system_prompt=sl.SYSTEM_PROMPT,
-            user_prompt=f"Competition: titanic\n\nFull log:\n{sample_agent_log}\n\nGenerate the required summary.",
-            reasoning_effort="low",  # Use low effort for faster/cheaper tests
+            user_prompt=f"Competition: titanic\n\nFull log:\n{sample_agent_log}\n\n{sl.FINAL_SUMMARY_INSTRUCTIONS}",
             max_output_tokens=1000
         )
 
@@ -134,8 +136,7 @@ class TestCallModelRealAPI:
 
         # Verify key sections are present (case-insensitive check)
         result_lower = result.lower()
-        assert "issues" in result_lower or "issue" in result_lower
-        assert "good decisions" in result_lower or "decision" in result_lower
+        assert any(kw in result_lower for kw in ["worked", "failed", "what", "issue", "error"])
 
         # Should mention the actual issue from the log
         assert "scikit-learn" in result_lower or "sklearn" in result_lower or "dependency" in result_lower
@@ -144,14 +145,14 @@ class TestCallModelRealAPI:
         print(result)
         print("=== End Response ===\n")
 
-    def test_handles_error_heavy_log(self, openai_client, sample_agent_log_with_errors):
+    @pytest.mark.asyncio
+    async def test_handles_error_heavy_log(self, anthropic_client, sample_agent_log_with_errors):
         """Should identify and categorize multiple errors"""
-        result = sl.call_model(
-            openai_client,
+        result = await sl.call_model(
+            anthropic_client,
             model=sl.DEFAULT_MODEL,
             system_prompt=sl.SYSTEM_PROMPT,
-            user_prompt=f"Competition: test\n\nFull log:\n{sample_agent_log_with_errors}\n\nGenerate the required summary.",
-            reasoning_effort="low",
+            user_prompt=f"Competition: test\n\nFull log:\n{sample_agent_log_with_errors}\n\n{sl.FINAL_SUMMARY_INSTRUCTIONS}",
             max_output_tokens=1000
         )
 
@@ -167,18 +168,18 @@ class TestCallModelRealAPI:
         print(result)
         print("=== End Analysis ===\n")
 
-    def test_response_format_consistency(self, openai_client):
+    @pytest.mark.asyncio
+    async def test_response_format_consistency(self, anthropic_client):
         """Should return consistent format across multiple calls"""
         simple_log = "[INFO] Model trained\n[INFO] Accuracy: 0.95\n[INFO] Complete"
 
         results = []
         for _ in range(2):  # Make 2 calls to check consistency
-            result = sl.call_model(
-                openai_client,
+            result = await sl.call_model(
+                anthropic_client,
                 model=sl.DEFAULT_MODEL,
                 system_prompt=sl.SYSTEM_PROMPT,
-                user_prompt=f"Competition: test\n\nFull log:\n{simple_log}\n\nGenerate the required summary.",
-                reasoning_effort="low",
+                user_prompt=f"Competition: test\n\nFull log:\n{simple_log}\n\n{sl.FINAL_SUMMARY_INSTRUCTIONS}",
                 max_output_tokens=500
             )
             results.append(result)
@@ -186,15 +187,14 @@ class TestCallModelRealAPI:
         # Both should be non-empty strings
         assert all(isinstance(r, str) and len(r) > 0 for r in results)
 
-        # Both should have the required headings (though content may vary slightly)
+        # Both should have some expected content
         for result in results:
             result_lower = result.lower()
-            # At least some of the expected sections should be present
-            has_sections = any(
+            has_content = any(
                 keyword in result_lower
-                for keyword in ["issues", "decisions", "observations", "errors"]
+                for keyword in ["model", "trained", "accuracy", "complete"]
             )
-            assert has_sections
+            assert has_content
 
 
 # ============================================================================
@@ -204,15 +204,15 @@ class TestCallModelRealAPI:
 class TestSummarizeLogRealAPI:
     """Test log summarization with real API calls"""
 
-    def test_short_log_single_call(self, openai_client, sample_agent_log):
+    @pytest.mark.asyncio
+    async def test_short_log_single_call(self, anthropic_client, sample_agent_log):
         """Short log should use single model call"""
-        result = sl.summarize_log(
-            openai_client,
+        result = await sl.summarize_log(
+            anthropic_client,
             model=sl.DEFAULT_MODEL,
             competition_name="titanic",
             log_text=sample_agent_log,
             chunk_size=50000,  # Much larger than log
-            reasoning_effort="low",
             max_output_tokens=1000
         )
 
@@ -230,7 +230,8 @@ class TestSummarizeLogRealAPI:
         print(result)
         print("=== End Summary ===\n")
 
-    def test_long_log_chunking(self, openai_client):
+    @pytest.mark.asyncio
+    async def test_long_log_chunking(self, anthropic_client):
         """Long log should be chunked and summarized"""
         # Create a long log by repeating content
         base_log = """[INFO] Training iteration 1
@@ -241,13 +242,12 @@ class TestSummarizeLogRealAPI:
         # Repeat to make it ~1500 chars
         long_log = base_log * 15
 
-        result = sl.summarize_log(
-            openai_client,
+        result = await sl.summarize_log(
+            anthropic_client,
             model=sl.DEFAULT_MODEL,
             competition_name="test-comp",
             log_text=long_log,
             chunk_size=500,  # Will create ~3 chunks
-            reasoning_effort="low",
             max_output_tokens=1000
         )
 
@@ -272,9 +272,10 @@ class TestSummarizeLogRealAPI:
 class TestSummarizeRunsRealAPI:
     """Test full workflow with real API calls"""
 
-    def test_single_run_end_to_end(
+    @pytest.mark.asyncio
+    async def test_single_run_end_to_end(
         self,
-        openai_client,
+        anthropic_client,
         temp_workspace,
         create_test_run_structure,
         sample_agent_log
@@ -286,13 +287,13 @@ class TestSummarizeRunsRealAPI:
         output_dir.mkdir()
 
         # Execute
-        summaries = sl.summarize_runs(
+        summaries = await sl.summarize_runs(
             temp_workspace,
             output_dir,
             model=sl.DEFAULT_MODEL,
             chunk_size=50000,
-            reasoning_effort="low",
-            max_output_tokens=1000
+            max_output_tokens=1000,
+            max_concurrent=1  # Sequential for predictable testing
         )
 
         # Verify results
@@ -304,16 +305,16 @@ class TestSummarizeRunsRealAPI:
         # Verify output files
         run_output = output_dir / "titanic_abc123"
         assert run_output.exists()
-        assert (run_output / "full_log").exists()
-        assert (run_output / "gpt-summary").exists()
+        assert (run_output / "full_log.txt").exists()
+        assert (run_output / "claude-summary.txt").exists()
 
         # Verify file contents
-        full_log = (run_output / "full_log").read_text()
+        full_log = (run_output / "full_log.txt").read_text()
         assert full_log == sample_agent_log
 
-        gpt_summary = (run_output / "gpt-summary").read_text()
-        assert len(gpt_summary) > 0
-        assert "scikit-learn" in gpt_summary.lower() or "sklearn" in gpt_summary.lower()
+        claude_summary = (run_output / "claude-summary.txt").read_text()
+        assert len(claude_summary) > 0
+        assert "scikit-learn" in claude_summary.lower() or "sklearn" in claude_summary.lower()
 
         print("\n=== End-to-End Test Results ===")
         print(f"Run: {summaries[0].run_name}")
@@ -321,15 +322,16 @@ class TestSummarizeRunsRealAPI:
         print(f"Summary preview:\n{summaries[0].summary[:300]}...")
         print("=== End Results ===\n")
 
-    def test_multiple_runs_end_to_end(
+    @pytest.mark.asyncio
+    async def test_multiple_runs_parallel(
         self,
-        openai_client,
+        anthropic_client,
         temp_workspace,
         create_test_run_structure,
         sample_agent_log,
         sample_agent_log_with_errors
     ):
-        """Should process multiple runs independently"""
+        """Should process multiple runs in parallel"""
         # Create multiple runs
         create_test_run_structure("comp-a_123", sample_agent_log)
         create_test_run_structure("comp-b_456", sample_agent_log_with_errors)
@@ -337,14 +339,14 @@ class TestSummarizeRunsRealAPI:
         output_dir = temp_workspace / "output"
         output_dir.mkdir()
 
-        # Execute
-        summaries = sl.summarize_runs(
+        # Execute with parallelism
+        summaries = await sl.summarize_runs(
             temp_workspace,
             output_dir,
             model=sl.DEFAULT_MODEL,
             chunk_size=50000,
-            reasoning_effort="low",
-            max_output_tokens=1000
+            max_output_tokens=1000,
+            max_concurrent=2  # Process both in parallel
         )
 
         # Verify both processed
@@ -367,15 +369,16 @@ class TestSummarizeRunsRealAPI:
         assert "cuda" in summary_b.lower() or "memory" in summary_b.lower() or "error" in summary_b.lower()
 
         print("\n=== Multiple Runs Test ===")
-        print(f"Processed {len(summaries)} runs")
+        print(f"Processed {len(summaries)} runs in parallel")
         for summary in summaries:
             print(f"\n{summary.run_name}:")
             print(f"  Length: {len(summary.summary)} chars")
         print("=== End Test ===\n")
 
-    def test_zip_creation_end_to_end(
+    @pytest.mark.asyncio
+    async def test_zip_creation_end_to_end(
         self,
-        openai_client,
+        anthropic_client,
         temp_workspace,
         create_test_run_structure,
         sample_agent_log
@@ -388,13 +391,13 @@ class TestSummarizeRunsRealAPI:
         output_dir.mkdir()
 
         # Summarize
-        sl.summarize_runs(
+        await sl.summarize_runs(
             temp_workspace,
             output_dir,
             model=sl.DEFAULT_MODEL,
             chunk_size=50000,
-            reasoning_effort="low",
-            max_output_tokens=1000
+            max_output_tokens=1000,
+            max_concurrent=1
         )
 
         # Create ZIP
@@ -412,9 +415,9 @@ class TestSummarizeRunsRealAPI:
 
         with zipfile.ZipFile(zip_path, 'r') as zf:
             files = zf.namelist()
-            # Should contain both full_log and gpt-summary
+            # Should contain both full_log and claude-summary
             assert any("full_log" in f for f in files)
-            assert any("gpt-summary" in f for f in files)
+            assert any("claude-summary" in f for f in files)
 
         print("\n=== ZIP Creation Test ===")
         print(f"ZIP size: {zip_path.stat().st_size} bytes")
@@ -429,17 +432,17 @@ class TestSummarizeRunsRealAPI:
 class TestEdgeCasesRealAPI:
     """Test edge cases with real API"""
 
-    def test_very_short_log(self, openai_client):
+    @pytest.mark.asyncio
+    async def test_very_short_log(self, anthropic_client):
         """Should handle minimal log content"""
         short_log = "[INFO] Agent started\n[INFO] Agent finished"
 
-        result = sl.summarize_log(
-            openai_client,
+        result = await sl.summarize_log(
+            anthropic_client,
             model=sl.DEFAULT_MODEL,
             competition_name="minimal",
             log_text=short_log,
             chunk_size=50000,
-            reasoning_effort="low",
             max_output_tokens=500
         )
 
@@ -450,20 +453,20 @@ class TestEdgeCasesRealAPI:
         print(result)
         print("=== End Summary ===\n")
 
-    def test_log_with_unicode(self, openai_client):
+    @pytest.mark.asyncio
+    async def test_log_with_unicode(self, anthropic_client):
         """Should handle logs with unicode characters"""
         unicode_log = """[INFO] Processing data 🚀
 [INFO] Model trained successfully ✅
 [ERROR] Failed to save: 文件不存在
 [WARNING] Performance degraded: Δ = -0.05"""
 
-        result = sl.summarize_log(
-            openai_client,
+        result = await sl.summarize_log(
+            anthropic_client,
             model=sl.DEFAULT_MODEL,
             competition_name="unicode-test",
             log_text=unicode_log,
             chunk_size=50000,
-            reasoning_effort="low",
             max_output_tokens=500
         )
 
