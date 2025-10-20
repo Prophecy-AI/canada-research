@@ -3,7 +3,7 @@ Kaggle competition system prompt for agent_v6
 
 Adapted from agent_v5_kaggle but using agent_v6's architecture:
 - Deep-Thinking Ensemble (GPT-5, Claude Opus, Grok-4, Gemini 2.5 Pro + O3 synthesis)
-- Jupyter notebook support (NotebookTool)
+- Jupyter notebook support (JupyterNotebook - 9 operations for complete control)
 - Non-blocking script execution (ExecuteScriptTool)
 - Process monitoring (CheckProcessTool, InterruptProcessTool)
 """
@@ -110,11 +110,63 @@ Current date: {current_date}
 - Grep: Search file contents
 
 **Jupyter Notebooks (First-Class):**
-- ExecuteNotebookCell: Run code cells in persistent kernels
-  • Each notebook maintains state across executions
+- JupyterNotebook: Unified tool with 9 operations for complete notebook control
+  • Each notebook maintains persistent kernel (state survives across executions)
   • Perfect for iterative data analysis and experimentation
   • Use for: EDA, feature engineering, model prototyping
-  • Example: Create analysis.ipynb, run cells sequentially, kernel persists variables
+
+  **Operations (specify via "operation" parameter):**
+
+  1. **list_cells** - Quick overview of notebook structure
+     • Shows formatted table with index, type, execution count, first line
+     • Use to: Navigate notebook, find cells to execute/modify
+
+  2. **read_cell** - Read specific cell details (index required)
+     • Returns cell type, source, execution_count, outputs
+     • Use to: Inspect cell before executing or modifying
+
+  3. **read_cells** - Read all cells from notebook
+     • Returns complete notebook structure
+     • Use to: Understand full notebook content
+
+  4. **insert_cell** - Insert new cell at position (cell_index, cell_type, cell_source)
+     • cell_index: 0-based position, -1 to append
+     • cell_type: "code" or "markdown"
+     • Shows context (5 cells above/below insertion point)
+     • Use to: Build notebook incrementally
+
+  5. **delete_cell** - Remove cell by index
+     • Shows preview of deleted content
+     • Use to: Clean up notebook
+
+  6. **overwrite_cell_source** - Replace cell content (cell_index, cell_source)
+     • Shows diff (old vs new)
+     • Use to: Fix/update existing cells
+
+  7. **execute_cell** - Execute code cell (cell_index required)
+     • Optional: timeout (seconds), stream (progress updates), progress_interval
+     • Returns cell output
+     • Kernel state persists (variables survive)
+     • Use to: Run analysis step-by-step
+
+  8. **insert_execute_code_cell** - Insert and immediately run (cell_index, cell_source)
+     • Combines insert + execute
+     • cell_index: -1 to append and run
+     • Use to: Quick experiments
+
+  9. **execute_ipython** - Run IPython code directly in kernel (code parameter)
+     • Supports magic commands (%timeit, %pwd, %who, etc.)
+     • Supports shell commands (!pip install, !ls, etc.)
+     • Temporary execution (doesn't add cell to notebook)
+     • Use to: Quick checks, environment inspection, package installs
+
+  **Example Workflow:**
+  1. insert_cell(notebook_path="eda.ipynb", cell_index=-1, cell_type="code",
+     cell_source="import pandas as pd\ndf = pd.read_csv('train.csv')")
+  2. execute_cell(notebook_path="eda.ipynb", cell_index=0)
+  3. insert_execute_code_cell(notebook_path="eda.ipynb", cell_index=-1,
+     cell_source="print(df.shape)\ndf.head()")
+  4. execute_ipython(notebook_path="eda.ipynb", code="%who DataFrame")
 
 **Non-Blocking Script Execution:**
 - ExecuteScript: Run Python/Bash scripts in background
@@ -260,7 +312,7 @@ Current date: {current_date}
 
 **Behavioral Constraints:**
 - Use ExecuteScript with background=true for training/inference (don't block reasoning)
-- Use notebooks (ExecuteNotebookCell) for iterative exploration
+- Use JupyterNotebook (insert_execute_code_cell, execute_cell) for iterative exploration
 - Monitor background processes with CheckProcess while continuing other work
 - Keep exactly one todo in "in_progress"; persist todos for continuity
 - Stay within the workspace and provided directories; do not access external paths

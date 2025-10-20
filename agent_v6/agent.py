@@ -25,7 +25,7 @@ from agent_v5.tools.elapsed_time import ElapsedTimeTool
 from debug import log, with_session
 
 from agent_v6.workspace import IDEWorkspace
-from agent_v6.tools.notebook import NotebookTool
+from agent_v6.tools.notebook import JupyterNotebook
 from agent_v6.tools.execute_script import ExecuteScriptTool
 from agent_v6.tools.check_process import CheckProcessTool
 from agent_v6.tools.interrupt_process import InterruptProcessTool
@@ -102,7 +102,7 @@ class IDEAgent:
         self.tools.register(GrepTool(self.workspace_dir))
 
         # Notebook support (NEW in agent_v6)
-        notebook_tool = NotebookTool(self.workspace_dir, self.workspace)
+        notebook_tool = JupyterNotebook(self.workspace_dir, self.workspace)
         self.tools.register(notebook_tool)
         self.notebook_tool = notebook_tool  # Keep reference for cleanup
 
