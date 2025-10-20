@@ -37,33 +37,103 @@ MAX_CHARS_PER_CALL = int(os.getenv("LOG_SUMMARY_MAX_CHARS_PER_CALL", "12000"))
 MAX_OUTPUT_TOKENS = int(os.getenv("LOG_SUMMARY_MAX_OUTPUT_TOKENS", "8000"))
 
 
-SYSTEM_PROMPT = """You are an expert reviewer of autonomous Kaggle agent runs.
-- You inspect raw execution logs and extract actionable intelligence.
-- Always be concrete and reference log snippets if helpful.
-- Organize the final response with the following top-level headings:
-  Issues, Good Decisions, Bad Decisions, Environment Errors, Missing Dependencies,
-  Other Observations, and Recommended Next Actions.
-- If a section has nothing to report, write `None`.
-- Treat missing or truncated logs as a critical issue."""
+SYSTEM_PROMPT = """You are an expert reviewer of autonomous Kaggle agent runs with a specific mission:
+**Extract structured insights to improve future agent performance.**
 
-CHUNK_SUMMARY_INSTRUCTIONS = """Summarize this log fragment. Focus on:
-- Failures, stack traces, or suspicious warnings.
-- Successful actions and their impact on score or workflow.
-- Configuration or environment notes (missing dependencies, CUDA/S3 issues, etc.).
-- Anything that should propagate into the final run summary."""
+Your analysis will be used to:
+1. Identify what worked and what failed
+2. Update the agent's strategy playbook (kaggle_competition_strategy.txt)
+3. Improve system prompts and error handling
+4. Build competition memory for future similar tasks
 
-FINAL_SUMMARY_INSTRUCTIONS = """You are composing the final report for the entire run.
-Synthesize the provided fragment summaries into a single concise report using the
-required headings:
-- Issues
-- Good Decisions
-- Bad Decisions
-- Environment Errors
-- Missing Dependencies
-- Other Observations
-- Recommended Next Actions
+You will receive:
+- Full agent execution logs (code, tool calls, outputs, errors)
+- Final grading results (score, medal status, thresholds)
 
-Highlight severity and confidence. If information is inconclusive, say so."""
+You must produce a **structured analysis** following the exact format specified in the final summary instructions."""
+
+CHUNK_SUMMARY_INSTRUCTIONS = """Summarize this log fragment concisely. Focus on:
+- Agent's actions and decisions
+- Code generated and executed
+- Tool usage patterns
+- Errors and issues encountered (with timestamps)
+- Results and outcomes
+- GPU/CPU utilization metrics if present
+- Oracle consultations if any
+Keep it brief. This is one part of a larger log."""
+
+FINAL_SUMMARY_INSTRUCTIONS = """Now synthesize all chunks into a cohesive run report following this EXACT structure:
+
+## COMPETITION: [competition_name]
+**Medal Achieved:** [gold/silver/bronze/none - extract from grading results]
+**Score:** [X.XX] (Gold: X.XX | Silver: X.XX | Bronze: X.XX | Median: X.XX)
+**Time Budget:** [estimate target from logs] → [calculate actual from timestamps] ([±Z min])
+
+---
+
+### ✅ WHAT WORKED
+- Strategy choice: [e.g., "EfficientNet-B2 aligned with playbook ✓"]
+- Resource usage: [e.g., "GPU 85%, all 36 cores used ✓"]
+- CV strategy: [e.g., "3-fold StratifiedKFold appropriate ✓"]
+- Code quality: [e.g., "Clean implementation, minimal bugs ✓"]
+- [List 3-5 specific things that went well with evidence from logs]
+
+### ❌ WHAT FAILED
+- Technical issues: [e.g., "OpenCV libGL missing - wasted 8 min debugging"]
+- Strategy misalignments: [e.g., "Used 5-fold CV (should be 3 for speed)"]
+- Bugs: [e.g., "Label encoding bug - predictions in wrong order"]
+- Oracle failures: [e.g., "Oracle suggested X but made score worse"]
+- [List all failures with timestamps and impact]
+
+### ⚡ EFFICIENCY ANALYSIS
+- **GPU utilization:** [X%] (target 70-90%) - extract from nvidia-smi output if present
+- **CPU utilization:** [n_jobs setting, num_workers] - check if all 36 cores used
+- **Time breakdown:** [Train: X min | Debug: Y min | Inference: Z min] - calculate from timestamps
+- **Bottlenecks:** [e.g., "num_workers=4 caused CPU bottleneck, should be 30-36"]
+- **Resource underutilization:** [List any inefficiencies like small batch sizes]
+
+### 🎯 SCORE ANALYSIS
+- **CV/LB alignment:** [CV X.XX vs LB Y.YY] → [Good/Mismatch/Unknown]
+- **Medal gap:** [Calculate: score - threshold] from gold → [Realistic/Unrealistic to close]
+- **Improvement potential:** [High/Medium/Low]
+- **Reasoning:** [Why agent scored this way - what was the fundamental issue or success factor?]
+- **Score context:** [e.g., "Above/below median by X.XX"]
+
+### 🔮 ORACLE CONSULTATIONS
+- **Count:** [X times - count from logs]
+- **Quality:** [Helpful/Neutral/Harmful - analyze before/after metrics]
+- **Examples:**
+  - [Turn X: Oracle suggested [Y] → outcome [Z]]
+  - [Turn Y: Oracle advice on [topic] → [result]]
+- **Self-awareness:** [Did Oracle acknowledge prior mistakes? Did it repeat bad advice?]
+- **Net impact:** [Did Oracle consultations help or hurt overall?]
+
+### 💡 LESSONS LEARNED (Add to playbook)
+1. [e.g., "Install libgl1-mesa-glx in Dockerfile to avoid OpenCV libGL.so.1 errors"]
+2. [e.g., "For 30-min budget, parallel training (3 small models) > 1 large model"]
+3. [e.g., "batch_size=32 on A10 24GB = severe underutilization, use 128-256"]
+4. [e.g., "albumentations requires cv2 which needs OpenGL libraries in Docker"]
+[List 3-7 concrete, actionable lessons with specific technical details]
+
+### 🔄 WHAT TO TRY NEXT TIME
+- [e.g., "Try parallel LightGBM + ResNet ensemble for diversity bonus"]
+- [e.g., "Use StratifiedGroupKFold instead of GroupKFold (better for this data structure)"]
+- [e.g., "Add MixUp augmentation (playbook says +1-2% for image tasks)"]
+- [e.g., "Reduce to 2 folds to save time if single model estimated >25 min"]
+[List 3-5 specific alternative approaches that could have worked better]
+
+---
+
+**CRITICAL GUIDELINES:**
+- Be brutally honest about failures - this is for learning, not vanity
+- Use specific evidence from logs (exact timestamps, error messages, code snippets)
+- Calculate time estimates from log timestamps (e.g., "Training started 12:34:56, ended 12:47:23 = 12.5 min")
+- Extract GPU/CPU metrics from any nvidia-smi, top, htop, or monitoring output
+- Analyze grading results mathematically (score vs each threshold, gap calculations)
+- Identify alignment/misalignment with kaggle_competition_strategy.txt patterns
+- Call out when Oracle advice helped vs when it caused regression
+- Focus on actionable insights that can update system prompts or playbook
+- If information is missing, say "Unknown" rather than guessing"""
 
 
 @dataclass
@@ -195,6 +265,23 @@ def summarize_runs(
     client = Anthropic(api_key=api_key)
     summaries: list[LogSummary] = []
 
+    # Load grading report from run group level (shared across all competitions)
+    grading_data = None
+    grading_report_files = list(run_group_dir.glob("*_grading_report.json"))
+    if not grading_report_files:
+        # Fallback to results.json
+        results_path = run_group_dir / "results.json"
+        if results_path.exists():
+            grading_report_files = [results_path]
+
+    if grading_report_files:
+        try:
+            import json
+            grading_data = json.loads(grading_report_files[0].read_text(errors="replace"))
+            print(f"[info] Loaded grading report: {grading_report_files[0].name}", file=sys.stderr)
+        except Exception as e:
+            print(f"[warn] Failed to parse grading report: {e}", file=sys.stderr)
+
     for run_dir in collect_run_dirs(run_group_dir):
         log_path = run_dir / "logs" / "agent.log"
         if not log_path.exists():
@@ -209,12 +296,27 @@ def summarize_runs(
         shutil.copyfile(log_path, target_dir / "full_log.txt")
 
         log_text = log_path.read_text(errors="replace")
+
+        # Append grading results for this specific competition
+        grading_text = ""
+        if grading_data and "competition_reports" in grading_data:
+            # Find the grading report for this specific competition
+            for comp_report in grading_data["competition_reports"]:
+                if comp_report.get("competition_id") == competition_name:
+                    import json
+                    grading_json = json.dumps(comp_report, indent=2)
+                    grading_text = f"\n\n{'='*80}\nGRADING RESULTS FOR {competition_name}:\n{'='*80}\n{grading_json}\n{'='*80}\n"
+                    break
+
+        # Combine log text with grading results
+        combined_log_text = log_text + grading_text
+
         try:
             summary_text = summarize_log(
                 client,
                 model=model,
                 competition_name=competition_name,
-                log_text=log_text,
+                log_text=combined_log_text,
                 chunk_size=chunk_size,
                 max_output_tokens=max_output_tokens,
             )

@@ -153,6 +153,65 @@ jobs:
 
           ./RUN_AGENT_V5_KAGGLE.sh
 
+      - name: Upload results
+        if: always() && github.event.inputs.dry_run == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mle-bench-results-${{ github.ref_name }}-run${{ github.run_number }}
+          path: ${{ github.workspace }}/mle-bench/runs/
+          retention-days: 30
+
+      - name: Upload agent logs
+        if: always() && github.event.inputs.dry_run == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-logs-${{ github.ref_name }}-run${{ github.run_number }}
+          path: ${{ github.workspace }}/mle-bench/runs/*/*/agentic.log
+          retention-days: 90
+          if-no-files-found: warn
+
+      - name: Upload grading report
+        if: always() && github.event.inputs.dry_run == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: grading-report-${{ github.ref_name }}-run${{ github.run_number }}
+          path: |
+            ${{ github.workspace }}/mle-bench/runs/*/*_grading_report.json
+            ${{ github.workspace }}/mle-bench/runs/*/results.json
+          retention-days: 90
+
+      - name: Display results summary
+        if: always() && github.event.inputs.dry_run == 'false'
+        run: |
+          cd ${{ github.workspace }}/mle-bench
+
+          RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
+
+          if [ -n "$RUN_GROUP" ]; then
+            echo ""
+            echo "=========================================="
+            echo "Results Summary"
+            echo "=========================================="
+            echo "Run group: $RUN_GROUP"
+            echo ""
+
+            GRADING_REPORT=$(find "runs/$RUN_GROUP/" -name "*_grading_report.json" -o -name "results.json" | head -1)
+
+            if [ -n "$GRADING_REPORT" ]; then
+              echo "Grading Results:"
+              cat "$GRADING_REPORT" | head -50
+            else
+              echo "⚠️  Grading results not found"
+              echo "Files in run directory:"
+              ls -la "runs/$RUN_GROUP/"
+            fi
+
+            echo ""
+            echo "Download artifacts above to see full results"
+          else
+            echo "⚠️  No results found"
+          fi
+
       - name: Summarize agent logs with Claude
         if: always() && github.event.inputs.dry_run == 'false'
         env:
@@ -163,7 +222,7 @@ jobs:
           source venv/bin/activate
 
           echo "Installing anthropic package for log summarization..."
-          pip install anthropic
+          pip install --no-cache-dir anthropic
 
           RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
 
@@ -180,6 +239,15 @@ jobs:
             --output-dir "runs/$RUN_GROUP/log_reviews" \
             --output-zip "runs/$RUN_GROUP/log_reviews.zip" \
             --model "${CLAUDE_SUMMARY_MODEL}"
+
+      - name: Upload log summaries
+        if: always() && github.event.inputs.dry_run == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-log-summaries-${{ github.ref_name }}-run${{ github.run_number }}
+          path: ${{ github.workspace }}/mle-bench/runs/*/log_reviews.zip
+          if-no-files-found: warn
+          retention-days: 90
 
       - name: Display log summaries
         if: always() && github.event.inputs.dry_run == 'false'
@@ -226,74 +294,6 @@ jobs:
           echo "=========================================="
           echo "Download 'agent-log-summaries' artifact for full details"
           echo "=========================================="
-
-      - name: Upload results
-        if: always() && github.event.inputs.dry_run == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mle-bench-results-${{ github.ref_name }}-run${{ github.run_number }}
-          path: ${{ github.workspace }}/mle-bench/runs/
-          retention-days: 30
-
-      - name: Upload agent logs
-        if: always() && github.event.inputs.dry_run == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-logs-${{ github.ref_name }}-run${{ github.run_number }}
-          path: ${{ github.workspace }}/mle-bench/runs/*/*/agentic.log
-          retention-days: 90
-          if-no-files-found: warn
-
-      - name: Upload grading report
-        if: always() && github.event.inputs.dry_run == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: grading-report-${{ github.ref_name }}-run${{ github.run_number }}
-          path: |
-            ${{ github.workspace }}/mle-bench/runs/*/*_grading_report.json
-            ${{ github.workspace }}/mle-bench/runs/*/results.json
-          retention-days: 90
-
-      - name: Upload log summaries
-        if: always() && github.event.inputs.dry_run == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-log-summaries-${{ github.ref_name }}-run${{ github.run_number }}
-          path: ${{ github.workspace }}/mle-bench/runs/*/log_reviews.zip
-          if-no-files-found: warn
-          retention-days: 90
-
-      - name: Display results summary
-        if: always() && github.event.inputs.dry_run == 'false'
-        run: |
-          cd ${{ github.workspace }}/mle-bench
-
-          RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
-
-          if [ -n "$RUN_GROUP" ]; then
-            echo ""
-            echo "=========================================="
-            echo "Results Summary"
-            echo "=========================================="
-            echo "Run group: $RUN_GROUP"
-            echo ""
-
-            GRADING_REPORT=$(find "runs/$RUN_GROUP/" -name "*_grading_report.json" -o -name "results.json" | head -1)
-
-            if [ -n "$GRADING_REPORT" ]; then
-              echo "Grading Results:"
-              cat "$GRADING_REPORT" | head -50
-            else
-              echo "⚠️  Grading results not found"
-              echo "Files in run directory:"
-              ls -la "runs/$RUN_GROUP/"
-            fi
-
-            echo ""
-            echo "Download artifacts above to see full results"
-          else
-            echo "⚠️  No results found"
-          fi
 
       - name: Cleanup Docker
         if: always()
