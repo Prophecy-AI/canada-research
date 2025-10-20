@@ -107,7 +107,9 @@ class CheckProcessTool(BaseTool):
             }
 
         except Exception as e:
+            error_msg = str(e) if str(e) else f"{type(e).__name__}"
             return {
-                "content": f"Error checking process: {str(e)}",
-                "is_error": True
+                "content": f"Error checking process: {error_msg}",
+                "is_error": True,
+                "debug_summary": f"Failed to check process: {error_msg}"
             }

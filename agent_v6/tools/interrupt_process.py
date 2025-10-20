@@ -76,23 +76,35 @@ class InterruptProcessTool(BaseTool):
                 }
 
             # Stop process
-            if force:
-                # Force kill
-                process.kill()
-                await asyncio.wait_for(process.wait(), timeout=5.0)
-                message = f"✓ Killed process {pid} (forced)"
-            else:
-                # Try graceful shutdown first
-                process.terminate()
-
-                try:
-                    await asyncio.wait_for(process.wait(), timeout=5.0)
-                    message = f"✓ Terminated process {pid} (graceful)"
-                except asyncio.TimeoutError:
-                    # Graceful shutdown failed, force kill
+            try:
+                if force:
+                    # Force kill
                     process.kill()
                     await asyncio.wait_for(process.wait(), timeout=5.0)
-                    message = f"✓ Killed process {pid} (force after timeout)"
+                    message = f"✓ Killed process {pid} (forced)"
+                else:
+                    # Try graceful shutdown first
+                    process.terminate()
+
+                    try:
+                        await asyncio.wait_for(process.wait(), timeout=5.0)
+                        message = f"✓ Terminated process {pid} (graceful)"
+                    except asyncio.TimeoutError:
+                        # Graceful shutdown failed, force kill
+                        process.kill()
+                        await asyncio.wait_for(process.wait(), timeout=5.0)
+                        message = f"✓ Killed process {pid} (force after timeout)"
+            except ProcessLookupError:
+                # Process already dead
+                message = f"✓ Process {pid} already stopped"
+            except Exception as proc_err:
+                # Other process errors (e.g., permissions, zombie)
+                err_msg = str(proc_err) if str(proc_err) else type(proc_err).__name__
+                return {
+                    "content": f"Failed to stop process {pid}: {err_msg}",
+                    "is_error": True,
+                    "debug_summary": f"Process stop failed: {err_msg}"
+                }
 
             # Update status
             proc_info["status"] = "killed"
@@ -108,7 +120,9 @@ class InterruptProcessTool(BaseTool):
             }
 
         except Exception as e:
+            error_msg = str(e) if str(e) else f"{type(e).__name__}"
             return {
-                "content": f"Error stopping process: {str(e)}",
-                "is_error": True
+                "content": f"Error stopping process: {error_msg}",
+                "is_error": True,
+                "debug_summary": f"Failed to stop {pid}: {error_msg}"
             }
