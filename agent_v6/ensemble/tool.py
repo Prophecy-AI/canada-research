@@ -203,7 +203,7 @@ class EnsembleTool(BaseTool):
             return {
                 "content": response_content,
                 "is_error": False,
-                "debug_summary": f"Ensemble ({len(valid_responses)}/4 models): {problem[:100]}..."
+                "debug_summary": f"Ensemble ({len(valid_responses)}/4 models): {problem}"
             }
 
         except Exception as e:
@@ -262,9 +262,6 @@ class EnsembleTool(BaseTool):
                     if item.get("type") == "tool_result":
                         tool_name = item.get("tool_name", "tool")
                         tool_output = item.get("content", "")
-                        # Truncate large outputs
-                        if len(tool_output) > 1000:
-                            tool_output = tool_output[:1000] + "... [truncated]"
                         formatted.append(f"[{tool_name}]: {tool_output}")
                 if formatted:
                     messages.append({"role": "user", "content": "\n".join(formatted)})
