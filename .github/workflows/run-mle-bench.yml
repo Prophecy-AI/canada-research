@@ -134,7 +134,9 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-          IMAGE_TAG: agent_v5_kaggle:run-${{ github.run_id }}
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
+          IMAGE_TAG: agent_v6_kaggle:run-${{ github.run_id }}
+          AGENT_ID: agent_v6_kaggle
           RUN_ID: ${{ github.run_id }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
           REBUILD_IMAGE: ${{ github.event.inputs.rebuild_image }}
@@ -144,6 +146,7 @@ jobs:
 
           echo "Starting MLE-Bench with:"
           echo "  Working directory: $(pwd)"
+          echo "  AGENT: agent_v6_kaggle (Operand Quant)"
           echo "  IMAGE_TAG: $IMAGE_TAG"
           echo "  RUN_ID: $RUN_ID"
           echo "  DRY_RUN: $DRY_RUN"
@@ -310,7 +313,7 @@ jobs:
           echo ""
           echo "Cleaning up Docker images..."
 
-          docker image rm agent_v5_kaggle:run-${{ github.run_id }} 2>/dev/null || true
+          docker image rm agent_v6_kaggle:run-${{ github.run_id }} 2>/dev/null || true
           docker container prune -f
           docker image prune -f
 

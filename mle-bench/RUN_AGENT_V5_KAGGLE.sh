@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and run agent_v5_kaggle
+# Build and run Kaggle agent (agent-agnostic)
 # Must be run from the mle-bench directory
 #
 # Production-grade CI/CD implementation with:
@@ -86,7 +86,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "=========================================="
-echo "Agent V5 Kaggle - Build & Run"
+echo "Kaggle Agent - Build & Run"
 echo "=========================================="
 echo "Working directory: $(pwd)"
 echo "Docker image: $IMAGE_TAG"
@@ -177,23 +177,23 @@ else
     echo ""
 fi
 
-# Build agent_v5_kaggle image
-echo "Building agent_v5_kaggle image..."
+# Build agent image (uses AGENT_ID for agent-agnostic builds)
+echo "Building ${AGENT_ID} image..."
 echo $(pwd)
 if [ "$DRY_RUN" = "true" ]; then
     echo "🔍 DRY RUN: Would build Docker image with:"
     echo "   Tag: $IMAGE_TAG"
     echo "   Context: .. (canada-research root, to resolve symlinks)"
-    echo "   Dockerfile: mle-bench/agents/agent_v5_kaggle/Dockerfile"
+    echo "   Dockerfile: mle-bench/agents/${AGENT_ID}/Dockerfile"
     echo "   Platform: linux/amd64"
 else
     # Build from parent directory (canada-research) to resolve symlinks
-    # The symlinks in agent_v5_kaggle/ point to ../../../agent_v5, etc.
+    # The symlinks in agent dirs point to ../../../agent_v5, ../../../agent_v6, etc.
     cd ..
     echo $(pwd)
     #cat debug.py
-    docker build --platform=linux/amd64 -t "$IMAGE_TAG" -t "agent_v5_kaggle:latest" \
-      -f mle-bench/agents/agent_v5_kaggle/Dockerfile \
+    docker build --platform=linux/amd64 -t "$IMAGE_TAG" -t "${AGENT_ID}:latest" \
+      -f "mle-bench/agents/${AGENT_ID}/Dockerfile" \
       . \
       --build-arg SUBMISSION_DIR=$SUBMISSION_DIR \
       --build-arg LOGS_DIR=$LOGS_DIR \
