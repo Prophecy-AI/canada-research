@@ -3,6 +3,7 @@ Bash tool for executing shell commands
 """
 import asyncio
 import os
+import shlex
 import uuid
 import time
 import pty
@@ -89,7 +90,8 @@ class BashTool(BaseTool):
             os.makedirs(log_dir, exist_ok=True)
             typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
 
-            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+            # Properly quote command and typescript_path to prevent shell injection and parsing errors
+            wrapped_cmd = f'script -q -c {shlex.quote(command)} {shlex.quote(typescript_path)}'
 
             process = await asyncio.create_subprocess_shell(
                 wrapped_cmd,
@@ -157,7 +159,8 @@ class BashTool(BaseTool):
             os.makedirs(log_dir, exist_ok=True)
             typescript_path = os.path.join(log_dir, f"{shell_id}.typescript")
 
-            wrapped_cmd = f'script -q -c "{command}" "{typescript_path}"'
+            # Properly quote command and typescript_path to prevent shell injection and parsing errors
+            wrapped_cmd = f'script -q -c {shlex.quote(command)} {shlex.quote(typescript_path)}'
 
             process = await asyncio.create_subprocess_shell(
                 wrapped_cmd,
