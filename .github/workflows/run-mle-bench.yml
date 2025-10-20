@@ -157,7 +157,7 @@ jobs:
         if: always() && github.event.inputs.dry_run == 'false'
         env:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          GPT_SUMMARY_MODEL: gpt-5.1
+          GPT_SUMMARY_MODEL: gpt-5
         run: |
           cd ${{ github.workspace }}/mle-bench
           source venv/bin/activate
