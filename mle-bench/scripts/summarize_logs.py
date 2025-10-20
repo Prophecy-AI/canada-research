@@ -261,11 +261,12 @@ async def summarize_one_run(
     model: str,
     chunk_size: int,
     max_output_tokens: int,
+    progress: tuple[int, int] = None,  # (current, total)
 ) -> LogSummary | None:
     """Summarize a single run (async)"""
     log_path = run_dir / "logs" / "agent.log"
     if not log_path.exists():
-        print(f"[warn] No agent.log found for {run_dir.name}, skipping.", file=sys.stderr)
+        print(f"  [warn] No agent.log found for {run_dir.name}, skipping.", file=sys.stderr)
         return None
 
     competition_name = infer_competition_name(run_dir)
@@ -288,8 +289,11 @@ async def summarize_one_run(
 
     combined_log_text = log_text + grading_text
 
+    # Progress indicator
+    progress_str = f"[{progress[0]}/{progress[1]}]" if progress else ""
+
     try:
-        print(f"[info] Summarizing {competition_name}...", file=sys.stderr)
+        print(f"  {progress_str} {competition_name}...", file=sys.stderr, flush=True)
         summary_text = await summarize_log(
             client,
             model=model,
@@ -298,7 +302,7 @@ async def summarize_one_run(
             chunk_size=chunk_size,
             max_output_tokens=max_output_tokens,
         )
-        print(f"[info] ✓ {competition_name} complete", file=sys.stderr)
+        print(f"  {progress_str} ✓ {competition_name}", file=sys.stderr, flush=True)
     except Exception as err:
         summary_text = (
             "Failed to generate summary.\n"
@@ -306,7 +310,7 @@ async def summarize_one_run(
             f"Run: {run_dir.name}\n"
             f"Error: {err}"
         )
-        print(f"[error] Summary failed for {run_dir.name}: {err}", file=sys.stderr)
+        print(f"  {progress_str} ✗ {run_dir.name}: {err}", file=sys.stderr, flush=True)
 
     (target_dir / "claude-summary.txt").write_text(summary_text)
     return LogSummary(run_dir.name, log_path, summary_text)
@@ -344,14 +348,23 @@ async def summarize_runs(
             print(f"[warn] Failed to parse grading report: {e}", file=sys.stderr)
 
     run_dirs = collect_run_dirs(run_group_dir)
-    print(f"[info] Processing {len(run_dirs)} competitions with concurrency={max_concurrent}", file=sys.stderr)
+    total = len(run_dirs)
+    print(f"\nSummarizing {total} competitions (concurrency={max_concurrent})...\n", file=sys.stderr)
+
+    import time
+    start_time = time.time()
+
+    # Track progress
+    completed = 0
+    completed_lock = asyncio.Lock()
 
     # Process runs with concurrency limit
     semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def limited_summarize(run_dir: Path):
+    async def limited_summarize(idx: int, run_dir: Path):
+        nonlocal completed
         async with semaphore:
-            return await summarize_one_run(
+            result = await summarize_one_run(
                 client,
                 run_dir,
                 output_dir,
@@ -359,9 +372,17 @@ async def summarize_runs(
                 model=model,
                 chunk_size=chunk_size,
                 max_output_tokens=max_output_tokens,
+                progress=(idx + 1, total)
             )
+            async with completed_lock:
+                completed += 1
+            return result
 
-    results = await asyncio.gather(*[limited_summarize(rd) for rd in run_dirs])
+    results = await asyncio.gather(*[limited_summarize(i, rd) for i, rd in enumerate(run_dirs)])
+
+    elapsed = time.time() - start_time
+    print(f"\n✓ Completed {completed}/{total} in {elapsed:.1f}s ({elapsed/total:.1f}s avg)\n", file=sys.stderr, flush=True)
+
     return [r for r in results if r is not None]
 
 
