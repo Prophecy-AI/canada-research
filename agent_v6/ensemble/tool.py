@@ -491,12 +491,12 @@ Now provide your response in the exact format specified above.
 
             # Query O3 with high effort reasoning
             response = await client.responses.create(
-                model="o3",
+                model="gpt-5",
                 input=[
                     {"role": "system", "content": "You are an expert synthesizer combining insights from multiple AI models into optimal unified recommendations."},
                     {"role": "user", "content": synthesis_prompt}
                 ],
-                reasoning={"effort": "high", "summary": "auto"},
+                reasoning={"effort": "medium", "summary": "auto"},
                 max_output_tokens=16384
             )
 
