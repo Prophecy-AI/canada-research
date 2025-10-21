@@ -65,6 +65,172 @@ Always print GPU usage:
   ```
 
 ────────────────────────────────────────────────────────────────────────────────
+SECTION 2A: TRAINING SMOKE TEST (RUN BEFORE FULL TRAINING)
+────────────────────────────────────────────────────────────────────────────────
+
+⚡ ALWAYS TEST 1 BATCH BEFORE LAUNCHING FULL TRAINING
+Problem: Agent launches 4-epoch training, hangs at initialization for 2 minutes, wastes time
+Real example: ranzcr-clip competition - 6 training attempts all hung during model init, zero actual training completed
+Solution: Run smoke test first (30 seconds) to validate entire pipeline
+
+Smoke Test Template (add to train.py):
+  ```python
+  # SMOKE TEST: Validate pipeline before full training
+  print("🔥 Running smoke test (1 batch)...")
+  model = create_model().cuda()
+  train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE,
+                           num_workers=0, shuffle=True)  # Start with 0 workers
+
+  # Test single forward pass
+  data, target = next(iter(train_loader))
+  data, target = data.cuda(), target.cuda()
+
+  with autocast():
+      output = model(data)
+      loss = criterion(output, target)
+
+  # Test backward pass
+  scaler.scale(loss).backward()
+
+  # Verify GPU usage
+  mem = torch.cuda.memory_allocated() / 1024**3
+  print(f"✓ Smoke test passed! GPU: {mem:.1f} GB, Loss: {loss.item():.4f}")
+  print("🚀 Starting full training...\n")
+  ```
+
+Why this catches failures early:
+  - DataLoader issues (JPEG decode errors, file I/O problems)
+  - Model initialization hangs (timm download, cache issues)
+  - GPU transfer failures (CUDA errors)
+  - Memory errors (OOM on first batch = reduce batch_size immediately)
+  - Library incompatibilities (albumentations, mixed precision errors)
+
+Action: ALWAYS run smoke test. If it fails or hangs >30 seconds, debug BEFORE launching full training.
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 2B: AGGRESSIVE TIMEOUT POLICY (KILL HUNG PROCESSES IMMEDIATELY)
+────────────────────────────────────────────────────────────────────────────────
+
+⚠️ PROCESS TIMEOUT - DON'T WATCH HUNG TRAINING
+Problem: Training process runs 120+ seconds with no output, agent keeps checking, wastes time
+Real example: ranzcr-clip - agent made 15+ CheckProcess calls watching hung processes (PIDs 352, 2730, 5107, 5514, 5854, 8250), wasted 10 minutes
+Solution: Kill after 60 seconds of no output, pivot to fallback immediately
+
+Timeout Rules:
+  - If process produces NO stdout/stderr output for 60 consecutive seconds → KILL
+  - If process shows initialization messages but no "Epoch 1" after 90 seconds → KILL
+  - If smoke test hangs >30 seconds → KILL
+
+  Don't wait to see if it recovers - it won't. Hung processes stay hung.
+
+Kill and Pivot Strategy:
+  ```bash
+  # After 60 sec with no output
+  kill -9 <PID>
+
+  # Immediately try fallback (in order):
+  # 1. Reduce complexity: num_workers=0, batch_size/2, epochs/2
+  # 2. If still hangs: Switch library (torchvision if albumentations failed)
+  # 3. If still hangs: Pivot to simple sklearn baseline (guarantee SOME model)
+  ```
+
+Time-Boxing Debugging:
+  - Single error: 5 minute max per issue
+  - After 5 min with no progress, switch approach entirely
+  - After 3 failed training attempts, pivot to simplest baseline that works
+  - After 15 min total debugging, launch parallel fallback baseline
+
+Examples of Productive Pivots:
+  - albumentations ImportError (3 min debugging) → switch to torchvision.transforms ✓
+  - DataLoader hangs with num_workers=12 (2 min) → try num_workers=0 ✓
+  - Model init hangs downloading weights (2 min) → use different model or cached weights ✓
+  - OOM errors (1 min) → reduce batch_size by 50% ✓
+
+Action: Set hard time limits. Kill hung processes aggressively. Pivot to working alternatives fast.
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 2C: MANDATORY SUBMISSION VERIFICATION (PREVENTS NULL SCORES)
+────────────────────────────────────────────────────────────────────────────────
+
+🔴 CRITICAL: ALWAYS VERIFY SUBMISSION FILE EXISTS BEFORE DECLARING SUCCESS
+Problem: Agent completes work but never creates submission.csv → null score (0 points)
+Real examples: leaf-classification (no submission), siim-isic (context overflow, no submission)
+Solution: MANDATORY verification checks before ending competition
+
+Submission Verification Checklist (RUN BEFORE EXITING):
+  ```python
+  import os, pandas as pd, numpy as np
+
+  # STEP 1: File exists
+  submission_path = '/home/submission/submission.csv'
+  if not os.path.exists(submission_path):
+      print("❌ CRITICAL: submission.csv not created!")
+      print("Creating emergency baseline...")
+      # Emergency baseline creation code here
+      raise AssertionError("Must create submission before exiting")
+
+  # STEP 2: File is readable
+  try:
+      df = pd.read_csv(submission_path)
+      print(f"✅ Submission file readable: {df.shape}")
+  except Exception as e:
+      print(f"❌ CRITICAL: Cannot read submission.csv: {e}")
+      raise
+
+  # STEP 3: Basic shape validation
+  print(f"Submission shape: {df.shape[0]} rows, {df.shape[1]} columns")
+  # Note: Don't assert row count - test set size varies
+  # Just verify file is not empty
+  if len(df) == 0:
+      print("❌ CRITICAL: Submission is empty!")
+      raise AssertionError("Submission has 0 rows")
+
+  # STEP 4: Check for NaN/inf values
+  if df.isnull().any().any():
+      print(f"⚠️  WARNING: Submission has NaN values")
+      print(df.isnull().sum())
+      # Fill NaNs with safe default (0.5 for probabilities)
+      df = df.fillna(0.5)
+      df.to_csv(submission_path, index=False)
+      print("✅ Filled NaN values with 0.5")
+
+  if np.isinf(df.select_dtypes(include=np.number)).any().any():
+      print(f"⚠️  WARNING: Submission has infinity values")
+      # Clip infinities
+      numeric_cols = df.select_dtypes(include=np.number).columns
+      df[numeric_cols] = df[numeric_cols].replace([np.inf, -np.inf], [1.0, 0.0])
+      df.to_csv(submission_path, index=False)
+      print("✅ Clipped infinity values")
+
+  print("✅ ✅ ✅ SUBMISSION VERIFIED SUCCESSFULLY ✅ ✅ ✅")
+  ```
+
+Emergency Baseline (if submission missing):
+  ```python
+  # Create minimal baseline - better than null score
+  import pandas as pd
+
+  # Load test data to get IDs
+  test_df = pd.read_csv('/home/data/test.csv')  # Adjust path
+
+  # Strategy 1: Predict class frequencies (for classification)
+  train_df = pd.read_csv('/home/data/train.csv')
+  target_col = 'target'  # Adjust column name
+  class_freq = train_df[target_col].value_counts(normalize=True)
+
+  # Create submission with most frequent class or 0.5 probabilities
+  submission = pd.DataFrame({'id': test_df['id']})
+  for col in class_freq.index:
+      submission[col] = class_freq[col]  # Or use 0.5 for binary
+
+  submission.to_csv('/home/submission/submission.csv', index=False)
+  print("✅ Emergency baseline created")
+  ```
+
+MANDATORY ACTION: Add verification code to END of predict.py or as separate verify_submission.py script.
+NEVER declare competition complete without running verification.
+
+────────────────────────────────────────────────────────────────────────────────
 SECTION 3: LIBRARY VERSION CONFLICTS
 ────────────────────────────────────────────────────────────────────────────────
 

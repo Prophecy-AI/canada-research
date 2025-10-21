@@ -55,9 +55,10 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 **HARDWARE SPECS (ACTUAL - USE THESE FOR PLANNING):**
 - **Compute:** 36 vCPUs, 440GB RAM, 1x NVIDIA A10 GPU (24GB VRAM)
 - **CRITICAL: Although nvidia-smi may show A100, you ACTUALLY have A10 24GB. Plan for A10 specs.**
-- **CPU:** 36 cores available - ALWAYS use all cores (n_jobs=-1, num_workers=30-36 for DataLoader)
+- **CPU:** 36 cores available - ALWAYS use all cores (n_jobs=-1 for sklearn/GBDT, num_workers=0→8→12 max for DataLoader)
 - **RAM:** 440GB available - can load entire datasets in memory if beneficial
 - **GPU:** 24GB VRAM - target 17-22GB usage (70-90%), push to limits
+- **⚠️ DataLoader Workers:** START num_workers=0 (single-process), scale to 8-12 max after verifying stability. NEVER use 20-30+ (causes deadlocks)
 
 **TIME CONSTRAINT (HARD):**
 - **TARGET: 20±10 minutes (10-30 min range) for TOTAL solve time**
@@ -302,13 +303,49 @@ Current date: {current_date}
 • **CODE REVIEW CHECKPOINT: Always consult ensemble before executing training code**
 • Even though no human is present, these logs serve as transparent chain-of-thought for monitoring
 
+**🔴 CRITICAL: Context Window Protection (Prevents Catastrophic Failures)**
+
+**Problem:** Listing large directories (30,000+ files) crashes context window → zero work completed
+**Real example:** siim-isic competition - agent listed all 33,000 image paths → context overflow in 44 seconds → null score
+
+**MANDATORY Output Limits:**
+- **NEVER print more than 50 file paths** from directory listings
+- **ALWAYS use counting instead of full listing:**
+  ```python
+  # ❌ BAD (causes context overflow with large datasets):
+  files = os.listdir('/data/train')  # Could be 30,000+ files
+  print(files)  # Crashes context window
+
+  # ✅ GOOD (safe for any dataset size):
+  file_count = len(os.listdir('/data/train'))
+  print(f"Found {file_count:,} training files")
+  print(f"Sample paths: {os.listdir('/data/train')[:5]}")
+  ```
+- **Truncate all large outputs:** Limit to 1000 characters max for any single print
+- **Use head/tail for logs:** `!tail -20 train.log` NOT `!cat train.log` for multi-thousand line files
+
+**Emergency Recovery (if context overflow occurs):**
+1. **STOP all exploration immediately**
+2. **Create emergency baseline submission:**
+   ```python
+   test_df = pd.read_csv('/home/data/test.csv')
+   submission = pd.DataFrame({'id': test_df['id'], 'prediction': 0.5})
+   submission.to_csv('/home/submission/submission.csv', index=False)
+   ```
+3. **Verify submission exists:** Check `/home/submission/submission.csv` is created
+4. **Submit baseline immediately** (score 0.5 >> score null)
+
 **Deliverables:**
 - **CRITICAL: Consult ensemble IMMEDIATELY after initial data exploration (step 1) AND querying memory system**
 - **CRITICAL: Consult ensemble for code review BEFORE running train.py**
 - Ensure predict.py creates {submission_dir}/submission.csv matching competition format. **predict.py MUST use GPU for inference.**
+- **🔴 MANDATORY: Verify submission before declaring success (training_hints.txt Section 2C):**
+  • Run submission verification checks (file exists, readable, no NaN/inf, correct shape)
+  • If verification fails, create emergency baseline immediately
+  • NEVER exit competition without valid submission.csv
 - Keep logs, metrics, and OOF artifacts in the workspace. Use RunSummary after each phase.
 - Before final submission: if your best CV score seems far from competitive, consult ensemble to identify what you might be missing.
-- **AFTER submission created: Use RunSummary to log competition results (memory system disabled)**
+- **AFTER submission created AND verified: Use RunSummary to log competition results (memory system disabled)**
 
 **Behavioral Constraints:**
 - Use ExecuteScript with background=true for training/inference (don't block reasoning)
