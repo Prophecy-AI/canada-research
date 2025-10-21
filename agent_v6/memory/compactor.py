@@ -23,7 +23,7 @@ class MemoryCompactor:
         self,
         keep_recent: int = 20,
         compression_ratio: float = 0.25,
-        model: str = "o3"
+        model: str = "gpt-5"
     ):
         """
         Initialize memory compactor

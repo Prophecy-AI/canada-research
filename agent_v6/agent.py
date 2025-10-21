@@ -172,22 +172,66 @@ class IDEAgent:
         except:
             return {"raw_arguments": arguments}
 
+    def _estimate_token_count(self) -> int:
+        """
+        Estimate total token count of conversation history
+        Uses rough approximation: 1 token ~= 4 characters
+        """
+        total_chars = 0
+        for msg in self.conversation_history:
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                total_chars += len(content)
+            elif isinstance(content, list):
+                for item in content:
+                    if isinstance(item, dict):
+                        total_chars += len(str(item))
+                    else:
+                        total_chars += len(str(item))
+            else:
+                total_chars += len(str(content))
+
+        # 1 token ~= 4 characters (rough approximation)
+        return total_chars // 4
+
     async def _maybe_compact_memory(self) -> None:
-        """Auto-compact memory if threshold exceeded"""
+        """
+        Auto-compact memory if threshold exceeded
+
+        Triggers compaction when:
+        1. Token count exceeds 150k tokens (context window protection), OR
+        2. Message count exceeds threshold (quality degradation)
+        """
         if not self.memory_compactor:
             return
 
-        if self.memory_compactor.should_compact(self.conversation_history):
-            log(f"→ Compacting memory ({len(self.conversation_history)} messages)")
+        estimated_tokens = self._estimate_token_count()
+        should_compact_tokens = estimated_tokens > 150_000
+        should_compact_messages = self.memory_compactor.should_compact(self.conversation_history)
+
+        if should_compact_tokens or should_compact_messages:
+            reason = []
+            if should_compact_tokens:
+                reason.append(f"{estimated_tokens:,} tokens > 150k limit")
+            if should_compact_messages:
+                reason.append(f"{len(self.conversation_history)} messages")
+
+            log(f"→ Compacting memory ({', '.join(reason)})")
             savings = self.memory_compactor.estimate_token_savings(self.conversation_history)
-            log(f"  Estimated savings: ~{savings} tokens")
+            log(f"  Estimated savings: ~{savings:,} tokens")
 
             self.conversation_history = await self.memory_compactor.compact(
                 self.conversation_history,
                 self.system_prompt
             )
 
-            log(f"✓ Memory compacted to {len(self.conversation_history)} messages", 1)
+            # CRITICAL: Clear response ID cache after compaction
+            # The conversation structure has completely changed (summary + recent messages)
+            # so the old response_id points to invalid state in OpenAI's cache
+            self.last_response_id = None
+
+            new_token_count = self._estimate_token_count()
+            log(f"✓ Memory compacted: {len(self.conversation_history)} messages, ~{new_token_count:,} tokens", 1)
 
     async def run(self, user_message: str) -> AsyncGenerator[Dict, None]:
         """
