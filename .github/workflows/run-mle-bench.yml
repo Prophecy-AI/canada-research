@@ -16,7 +16,7 @@ on:
         default: 'custom-set.txt'
 
       custom_competitions:
-        description: 'Custom competitions (one per line, overrides competition_set if provided)'
+        description: 'Custom competitions (comma-separated, e.g. "aerial-cactus-identification,cifar-10-classification", overrides competition_set if provided)'
         required: false
         type: string
 
@@ -95,8 +95,11 @@ jobs:
           cd mle-bench/experiments/splits
 
           if [ -n "${{ github.event.inputs.custom_competitions }}" ]; then
-            echo "Using custom competitions list:"
-            echo "${{ github.event.inputs.custom_competitions }}" | tee custom-set.txt
+            echo "Using custom competitions list (comma-separated):"
+            echo "${{ github.event.inputs.custom_competitions }}"
+
+            # Convert comma-separated to newline-separated
+            echo "${{ github.event.inputs.custom_competitions }}" | tr ',' '\n' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' | grep -v '^$' > custom-set.txt
           else
             COMP_FILE=$(echo "${{ github.event.inputs.competition_set }}" | awk '{print $1}')
             echo "Using competition set: $COMP_FILE"
