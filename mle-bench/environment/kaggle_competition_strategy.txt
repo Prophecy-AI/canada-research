@@ -163,28 +163,54 @@ IMAGE CLASSIFICATION
 Examples: aerial-cactus-identification, aptos2019-blindness-detection,
 cassava-leaf-disease-classification, histopathologic-cancer-detection
 
-Model: EfficientNet-B0 or ResNet-34 (best speed/accuracy balance)
+**Recommended Approach: fastai (10-15 min to working baseline)**
 
-Strategy:
-  - Use pretrained from timm/torchvision
-  - Resize to 128x128 or 224x224 (upscale if needed like aerial-cactus 32x32)
-  - 3-fold StratifiedKFold CV
-  - Train 3-5 epochs
+Why fastai first:
+  - Faster implementation (less boilerplate than PyTorch)
+  - Automatic DataLoader setup (prevents initialization hangs)
+  - Built-in lr_find(), fit_one_cycle(), mixed precision
+  - ResNet-34/50 pretrained models work well out of the box
+
+Strategy (fastai):
+  - `from fastai.vision.all import *`
+  - Create DataBlock with StratifiedKFold splitter
+  - `vision_learner(dls, resnet34)` or `resnet50`
+  - Use `learn.lr_find()` to find optimal learning rate
+  - Train with `learn.fit_one_cycle(8, lr_max=3e-3)`
+  - Export with `learn.export('model.pkl')`
+  - Typical time: 10-15 min for full 3-fold CV baseline
+
+Alternative (custom PyTorch):
+  - Use when ensemble recommends specific architecture (EfficientNetV2, ConvNeXt, etc.)
+  - Or when very custom training loop/loss needed
+  - Model: EfficientNet-B0 or ResNet-34 from timm/torchvision
+  - Resize to 224x224, 3-fold StratifiedKFold CV, train 3-5 epochs
   - Basic augmentations: HorizontalFlip, VerticalFlip, RandomRotate90
-  - Strong baseline quickly, often achieves high scores without extensive tuning
+  - Typical time: 30-45 min (more setup than fastai)
 
 IMAGE SEGMENTATION
 ------------------
 Examples: google-research-identify-contrails-reduce-global-warming,
 hubmap-kidney-segmentation, tgs-salt-identification-challenge
 
-Model: U-Net with EfficientNet-B0 or ResNet-34 backbone
+**Recommended Approach: fastai (15-20 min to working baseline)**
 
-Strategy:
-  - Train on smaller tiles (256x256 or 512x512) to manage memory/speed
-  - 3-fold CV
-  - Train 5-10 epochs
-  - Basic geometric augmentations (flips, rotations)
+Why fastai first:
+  - Built-in U-Net implementation with pretrained backbones
+  - Same benefits as classification (automatic setup, lr_find, etc.)
+
+Strategy (fastai):
+  - `from fastai.vision.all import *`
+  - Create DataBlock with `SegmentationBlock`
+  - `unet_learner(dls, resnet34)` with pretrained backbone
+  - Train on tiles (256x256 or 512x512) for speed
+  - 3-fold CV, 5-10 epochs
+  - Use `learn.lr_find()` and `learn.fit_one_cycle()`
+
+Alternative (custom PyTorch U-Net):
+  - Use when specific architecture modifications needed
+  - U-Net with EfficientNet-B0 or ResNet-34 backbone
+  - Same tiling/CV strategy as fastai
   - For inference: use overlapping tiles, predict center region if edge effects
 
 OBJECT DETECTION
@@ -206,13 +232,26 @@ TABULAR & TIME SERIES
 Examples: new-york-city-taxi-fare-prediction, ventilator-pressure-prediction,
 tabular-playground-series-may-2022
 
-Model: LightGBM (fastest, most memory-efficient GBDT)
+**Recommended Approach: LightGBM (5-10 min to working baseline)**
 
-Strategy:
+Why LightGBM first:
+  - Fastest GBDT (faster than XGBoost/CatBoost for large datasets)
+  - Works well with default parameters (minimal tuning needed)
+  - GPU support (10-50x speedup with device='gpu')
+  - Built-in early stopping prevents overfitting
+
+Strategy (LightGBM):
   - Time series: transform to tabular (lag features, rolling windows)
   - Minimal feature engineering: date features (day/month), simple interactions
   - 3-fold CV (TimeSeriesSplit for time-ordered data - MANDATORY)
   - Default parameters + early stopping (finds optimal trees automatically)
+  - GPU: Set device='gpu' in params for 10-50x speedup
+  - Typical time: 5-10 min for baseline
+
+Ensemble for improvement:
+  - Add XGBoost (stability, slightly slower but very consistent)
+  - Add CatBoost (handles high-cardinality categoricals better)
+  - Weighted average or stacking: +1-3% over single model
 
 FASTAI RAPID PROTOTYPING
 ------------------------

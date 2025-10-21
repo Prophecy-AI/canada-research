@@ -252,20 +252,130 @@ Solution: Loss calculation MUST be inside autocast():
   ```
 
 ────────────────────────────────────────────────────────────────────────────────
-SECTION 3A: FASTAI & KERAS QUICK START OPTIONS
+SECTION 3A: FASTAI VISION - DEFAULT APPROACH FOR IMAGE TASKS
 ────────────────────────────────────────────────────────────────────────────────
 
-FASTAI (vision/tabular rapid baselines)
+⚡ HIGHLY RECOMMENDED: START WITH FASTAI VISION FOR IMAGE CLASSIFICATION/SEGMENTATION
+Why default choice:
+  - Faster to working baseline (10-15 min vs 30+ min custom PyTorch)
+  - Handles DataLoader setup automatically (prevents hangs like ranzcr-clip failure)
+  - Built-in learning rate finder, one-cycle scheduler, mixed precision
+  - Fewer failure modes (proven defaults that work out of the box)
+  - Easy to export to PyTorch state_dict for ensembling later
+
+FASTAI VISION TEMPLATE (Image Classification):
+  ```python
+  from fastai.vision.all import *
+
+  # Define data block with CV folds
+  dblock = DataBlock(
+      blocks=(ImageBlock, CategoryBlock),
+      get_items=get_image_files,
+      get_y=parent_label,
+      splitter=RandomSplitter(valid_pct=0.2),  # Or use IndexSplitter for custom folds
+      item_tfms=Resize(224),
+      batch_tfms=aug_transforms(size=224, min_scale=0.75)  # Standard augmentations
+  )
+
+  # Create dataloaders
+  dls = dblock.dataloaders(train_path, bs=128)  # Auto-tunes num_workers
+
+  # Create learner with pretrained model
+  learn = vision_learner(dls, resnet34, metrics=accuracy)  # Or resnet50, efficientnet_b0
+
+  # Find optimal learning rate
+  learn.lr_find()
+
+  # Train with one-cycle policy (automatic scheduling)
+  learn.fit_one_cycle(8, lr_max=3e-3)
+
+  # Export for inference or ensemble
+  learn.export('model.pkl')
+  # OR extract PyTorch model: learn.model.state_dict()
+  ```
+
+When to use custom PyTorch instead:
+  - After fastai baseline works, and you need very specific architecture not in fastai
+  - Need multi-GPU distributed training (fastai has this, but PyTorch DDP may be easier)
+  - Very custom loss functions or training loops (rare)
+  - Otherwise: STAY WITH FASTAI - it's faster and more reliable
+
+FASTAI TABULAR (optional - LightGBM usually better)
   When to use:
-    - Need a strong image or tabular baseline in <30 minutes with minimal boilerplate.
-    - Want automatic learning-rate finder, fit-one-cycle scheduling, and callback stack before diving into custom PyTorch.
+    - Want neural network on tabular before ensembling with GBDT
   How to run:
-    - Images: `from fastai.vision.all import *`; create `DataBlock` → `Learner` (resnet34/resnet50) → `learn.fit_one_cycle(epochs)`.
-    - Tabular: `fastai.tabular.all` with `TabularPandas` + `TabularLearner` gives competitive baselines prior to LightGBM tuning.
-    - Export: `learn.export()` or `learn.model.state_dict()` so you can ensemble with later PyTorch models.
+    - `from fastai.tabular.all import *`; use `TabularPandas` + `TabularLearner`
+    - Gives competitive baselines, but LightGBM usually faster/better for pure tabular
   Tips:
-    - Fastai auto-augments aggressively; trim augmentations if GPU <60% or time budget tight.
-    - Review normalization/categorical encoders to ensure they match Kaggle CV split (fit on train folds only).
+    - Review categorical encoders to ensure they match Kaggle CV split (fit on train folds only)
+
+────────────────────────────────────────────────────────────────────────────────
+SECTION 3B: LIGHTGBM - DEFAULT APPROACH FOR TABULAR TASKS
+────────────────────────────────────────────────────────────────────────────────
+
+⚡ HIGHLY RECOMMENDED: START WITH LIGHTGBM FOR TABULAR COMPETITIONS
+Why default choice:
+  - Fastest GBDT library (faster than XGBoost/CatBoost for large datasets)
+  - Works well with default parameters (less tuning needed)
+  - GPU support via tree_method='gpu_hist' (10-50x speedup)
+  - Built-in early stopping (prevents overfitting automatically)
+  - Handles missing values, categorical features automatically
+
+LIGHTGBM TEMPLATE (Tabular Classification/Regression):
+  ```python
+  import lightgbm as lgb
+  from sklearn.model_selection import StratifiedKFold
+
+  # Default params work well, minimal tuning needed
+  params = {
+      'objective': 'binary',  # or 'multiclass', 'regression'
+      'metric': 'auc',        # match competition metric
+      'boosting_type': 'gbdt',
+      'num_leaves': 31,
+      'learning_rate': 0.05,
+      'feature_fraction': 0.9,
+      'device': 'gpu',        # GPU acceleration
+      'gpu_platform_id': 0,
+      'gpu_device_id': 0,
+      'n_jobs': -1            # Use all CPU cores
+  }
+
+  # K-fold CV (use StratifiedKFold for classification)
+  kf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+  oof_preds = np.zeros(len(X_train))
+
+  for fold, (train_idx, val_idx) in enumerate(kf.split(X_train, y_train)):
+      X_tr, X_val = X_train.iloc[train_idx], X_train.iloc[val_idx]
+      y_tr, y_val = y_train.iloc[train_idx], y_train.iloc[val_idx]
+
+      train_data = lgb.Dataset(X_tr, label=y_tr)
+      val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
+
+      # Train with early stopping
+      model = lgb.train(
+          params,
+          train_data,
+          num_boost_round=10000,
+          valid_sets=[train_data, val_data],
+          callbacks=[lgb.early_stopping(stopping_rounds=50), lgb.log_evaluation(100)]
+      )
+
+      # Save model
+      model.save_model(f'lgb_fold{fold}.txt')
+
+      # OOF predictions
+      oof_preds[val_idx] = model.predict(X_val)
+
+  # Evaluate OOF score
+  print(f"OOF AUC: {roc_auc_score(y_train, oof_preds):.5f}")
+  ```
+
+When to use XGBoost/CatBoost instead:
+  - XGBoost: Need stability/reproducibility (slightly slower but very consistent)
+  - CatBoost: Many high-cardinality categorical features (handles better than LightGBM)
+  - Ensemble: Use all three (LightGBM + XGBoost + CatBoost) for diversity bonus
+
+Action: Start with LightGBM, add XGBoost/CatBoost for ensemble if time permits.
 
 KERAS / TENSORFLOW (text & multi-input flexibility)
   When to use:

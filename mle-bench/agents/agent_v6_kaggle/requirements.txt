@@ -4,3 +4,11 @@ google-genai==1.45.0
 xai-sdk==1.3.1
 jupyter-client
 psutil==7.0.0
+
+# Image augmentation fix (prevents ImportError: cannot import name 'preserve_channel_dim')
+# Using stable versions - albumentations 1.4.14 is incompatible with latest albucore
+albumentations==1.3.1
+albucore==0.0.7
+
+# Fast.ai for rapid vision baselines (mandatory first approach for vision tasks)
+fastai==2.7.17

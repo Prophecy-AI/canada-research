@@ -61,12 +61,12 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
 - **⚠️ DataLoader Workers:** START num_workers=0 (single-process), scale to 8-12 max after verifying stability. NEVER use 20-30+ (causes deadlocks)
 
 **TIME CONSTRAINT (HARD):**
-- **TARGET: 20±10 minutes (10-30 min range) for TOTAL solve time**
-- **EFFICIENCY IS CRITICAL:** Faster = better. Aim for 15-25 min if possible.
-- **Exception:** May reach 40 min for extreme cases (>100GB dataset, mandatory large ensemble, or exceptionally complex task)
-- **DEFAULT STRATEGY:** 2-3 CV folds × 6-8 epochs = ~15 min training + 5 min inference
-- **PLANNING RULE:** Before starting training, estimate time (folds × epochs × min_per_epoch). If >30 min estimated, reduce strategy.
-- **MONITORING RULE:** If training exceeds 25 min, consider killing and using partial models (unless on track to finish by 35-40 min)
+- **TARGET: 30±15 minutes (15-45 min range) for TOTAL solve time**
+- **EFFICIENCY IS CRITICAL:** Faster = better. Aim for 20-30 min if possible.
+- **Exception:** May reach 60 min for extreme cases (>100GB dataset, mandatory large ensemble, or exceptionally complex task)
+- **DEFAULT STRATEGY:** 2-3 CV folds × 6-8 epochs = ~20 min training + 5 min inference
+- **PLANNING RULE:** Before starting training, estimate time (folds × epochs × min_per_epoch). If >45 min estimated, reduce strategy.
+- **MONITORING RULE:** If training exceeds 35 min, consider killing and using partial models (unless on track to finish by 50-60 min)
 
 **GPU MANDATE (NEVER TRAIN ON CPU):**
 - **ALL training MUST use GPU** (PyTorch: .cuda()/.to('cuda'), XGBoost: tree_method='gpu_hist', etc.)
@@ -81,12 +81,18 @@ def create_kaggle_system_prompt(instructions_path: str, data_dir: str, submissio
   • Universal workflow principles (fast experimentation, rigorous CV strategies)
   • Domain-specific architectures and tactics:
     - Tabular: LightGBM (fastest), XGBoost, CatBoost. Minimal feature engineering for speed.
-    - Image Classification: EfficientNet-B0/B2 (20-30 min), B3/B4 (40-60 min), ResNet-34 baseline. MixUp/CutMix.
-    - Image Segmentation: U-Net + EfficientNet-B0/ResNet-34 backbone, 256x256 tiles, 5-10 epochs
+    - **Image Classification: RECOMMENDED - Consider fastai vision for rapid prototyping (training_hints.txt Section 3A)**
+      • fastai.vision_learner with resnet34/resnet50 baseline (10-15 min to working model)
+      • Handles DataLoader automatically (prevents initialization hangs)
+      • Built-in lr_find(), fit_one_cycle(), mixed precision
+      • Can use custom PyTorch if ensemble recommends specific architecture (EfficientNetV2, ConvNeXt, etc.)
+    - **Image Segmentation: RECOMMENDED - Consider fastai vision for rapid prototyping**
+      • fastai unet_learner with resnet34 backbone
+      • Can use custom U-Net + PyTorch if specific architecture needed
     - Object Detection: YOLOv5s/v8n (fast), PointPillars (3D). Fine-tune 5-10 epochs.
     - NLP: distilbert (fastest), DeBERTa (stronger). Train 1-2 epochs only. max_length=128/256.
     - Time Series: Transform to tabular + LightGBM. Lag/rolling features. TimeSeriesSplit CV.
-    - Audio: Mel-spectrogram → EfficientNet-B0/ResNet (treat as image classification)
+    - Audio: Mel-spectrogram → fastai vision (treat as image classification)
   • Advanced techniques: Stacking, pseudo-labeling, TTA, rule-based post-processing
   • Common pitfalls: Data leakage (target leakage, train-test contamination), overfitting to public LB
 - **Why critical:** This playbook contains battle-tested strategies from hundreds of winning solutions
@@ -184,8 +190,8 @@ Current date: {current_date}
 **Deep-Thinking Ensemble (Operand Quant Architecture):**
 - ConsultEnsemble: Get expert advice from 4 frontier AI models + O3 synthesis
   • When to use:
-    - MANDATORY: After initial data exploration (step 1) - before any coding
-    - MANDATORY: Before starting training - code review + strategy validation
+    - RECOMMENDED: After initial data exploration (step 1) - before any coding
+    - RECOMMENDED: Before starting training - for code review + strategy validation
     - During training (every 5-10 min): Share logs, GPU usage, time elapsed - get critique
     - After training: Share results, get improvement suggestions
     - When stuck: CV/leaderboard mismatch, bugs, poor performance
@@ -253,9 +259,20 @@ Current date: {current_date}
 
 4) **Baseline Implementation** (Write train.py, predict.py)
    • **USE NOTEBOOKS for prototyping, then convert to scripts**
+   • **MANDATORY: Read /home/training_hints.txt** - Contains critical failure prevention patterns:
+     - **FASTAI VISION (Section 3A)** - Recommended for image tasks (10-15 min vs 30+ min PyTorch), use custom if ensemble recommends
+     - **LIGHTGBM (Section 3B)** - Default for tabular tasks (fastest GBDT), use XGBoost/CatBoost if ensemble recommends
+     - Library version conflicts (albumentations, timm, mixed precision)
+     - Batch size pitfalls, label encoding errors, data leakage patterns
+     - Model sizing guide, GPU validation checklist
+     - **SMOKE TEST pattern (Section 2A)** - ALWAYS include 1-batch validation before full training
+     - **Timeout policy (Section 2B)** - Kill hung processes after 60 sec, pivot to fallback
+   • **FOR IMAGE TASKS: Use fastai.vision_learner by default** - faster, fewer bugs, handles DataLoader automatically
+   • **FOR TABULAR TASKS: Use LightGBM by default** - fastest, works well with defaults, add XGBoost/CatBoost for ensemble
    • Write train.py implementing ensemble-recommended strategy
+   • **CRITICAL: Include smoke test at start of train.py** (validates pipeline in 30 sec before full training)
    • Include: GPU usage, resource monitoring, progress logging, OOF predictions
-   • **MANDATORY CODE REVIEW:** Before running train.py, consult ensemble:
+   • **RECOMMENDED CODE REVIEW:** Before running train.py, consider consulting ensemble:
      ```
      ConsultEnsemble(
        problem="Code review: Is this train.py implementation optimal?",
@@ -269,6 +286,11 @@ Current date: {current_date}
    • **Monitor actively while it runs:**
      - Every 5-10 minutes: `CheckProcess(pid=...)` to see logs, GPU usage, progress
      - Continue other work: prepare predict.py, analyze initial results, plan iterations
+   • **AGGRESSIVE TIMEOUT POLICY (training_hints.txt Section 2B):**
+     - If process produces NO output for 120 consecutive seconds → KILL immediately
+     - If no "Epoch 1" message after 180 seconds → KILL and pivot to fallback
+     - Don't watch hung processes - they never recover
+     - After killing: Try simpler config (num_workers=0, batch_size/2) or pivot to sklearn baseline
    • **Consult ensemble during training:**
      ```
      ConsultEnsemble(
@@ -276,7 +298,7 @@ Current date: {current_date}
        context="Logs: [paste recent output]. GPU: 85% util. Time elapsed: 12 min. Expected finish: 18 min."
      )
      ```
-   • **Interrupt if needed:** `InterruptProcess(pid=...)` if convergence detected or timeout
+   • **Interrupt if needed:** `InterruptProcess(pid=...)` if convergence detected, timeout, or hung process
 
 6) **Results Analysis & Iteration**
    • Analyze OOF scores, validation metrics, training curves
@@ -336,8 +358,8 @@ Current date: {current_date}
 4. **Submit baseline immediately** (score 0.5 >> score null)
 
 **Deliverables:**
-- **CRITICAL: Consult ensemble IMMEDIATELY after initial data exploration (step 1) AND querying memory system**
-- **CRITICAL: Consult ensemble for code review BEFORE running train.py**
+- **RECOMMENDED: Consult ensemble after initial data exploration (step 1) AND querying memory system**
+- **RECOMMENDED: Consult ensemble for code review before running train.py**
 - Ensure predict.py creates {submission_dir}/submission.csv matching competition format. **predict.py MUST use GPU for inference.**
 - **🔴 MANDATORY: Verify submission before declaring success (training_hints.txt Section 2C):**
   • Run submission verification checks (file exists, readable, no NaN/inf, correct shape)
