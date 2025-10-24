@@ -599,5 +599,5 @@ class KaggleAgent(ResearchAgent):
         super()._register_core_tools()
 
         # Register Kaggle-specific tool: GPUValidate
-        from .tools.gpu_validate import GPUValidateTool
+        from tools.gpu_validate import GPUValidateTool
         self.tools.register(GPUValidateTool(self.workspace_dir))
