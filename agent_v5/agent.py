@@ -94,7 +94,7 @@ class ResearchAgent:
 
             try:
                 response = self.gemini_client.models.generate_content(
-                    model="gemini-2.5-pro-002",
+                    model="gemini-2.5-pro",
                     contents=contents,
                     config=types.GenerateContentConfig(
                         system_instruction=self.system_prompt,
