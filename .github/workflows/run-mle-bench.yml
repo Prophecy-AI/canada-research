@@ -39,7 +39,6 @@ on:
           - gpu-5
           - gpu-6
           - gpu-7
-          - gpu-8
         default: 'any'
 
 jobs:
@@ -126,7 +125,7 @@ jobs:
           # Activate venv and install mlebench in NON-EDITABLE mode
           source venv/bin/activate
           echo "Installing mlebench (non-editable mode to avoid import conflicts)..."
-          pip install --no-cache-dir .
+          pip install --force-reinstall --no-cache-dir . --quiet
 
           echo "✅ Python environment ready"
           echo "   Python: $(which python)"
@@ -138,8 +137,7 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          IMAGE_TAG: agent_v5_kaggle:run-${{ github.run_id }}
+          IMAGE_TAG: agent_v6:run-${{ github.run_id }}
           RUN_ID: ${{ github.run_id }}
           DRY_RUN: ${{ github.event.inputs.dry_run }}
         run: |
@@ -159,81 +157,7 @@ jobs:
           # Run the script (foreground execution with trap handlers)
           # Logs will stream in real-time
           # Ctrl+C or cancellation will trigger cleanup automatically
-          ./RUN_AGENT_V5_KAGGLE.sh
-
-      - name: Summarize agent logs with Claude
-        if: always() && github.event.inputs.dry_run == 'false'
-        env:
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          CLAUDE_SUMMARY_MODEL: claude-sonnet-4-5-20250929
-        run: |
-          cd ${{ github.workspace }}/mle-bench
-          source venv/bin/activate
-
-          echo "Installing anthropic package for log summarization..."
-          pip install anthropic
-
-          RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
-
-          if [ -z "$RUN_GROUP" ]; then
-            echo "No run group found; skipping log summarization."
-            exit 0
-          fi
-
-          echo "RUN_GROUP=$RUN_GROUP" >> $GITHUB_ENV
-
-          echo "Running log summarization with Claude..."
-          python scripts/summarize_logs.py \
-            --run-group "$RUN_GROUP" \
-            --output-dir "runs/$RUN_GROUP/log_reviews" \
-            --output-zip "runs/$RUN_GROUP/log_reviews.zip" \
-            --model "${CLAUDE_SUMMARY_MODEL}"
-
-      - name: Display log summaries
-        if: always() && github.event.inputs.dry_run == 'false'
-        run: |
-          cd ${{ github.workspace }}/mle-bench
-
-          RUN_GROUP=$(ls -t runs/ 2>/dev/null | head -1)
-
-          if [ -z "$RUN_GROUP" ]; then
-            echo "No run group found; skipping summary display."
-            exit 0
-          fi
-
-          REVIEWS_DIR="runs/$RUN_GROUP/log_reviews"
-
-          if [ ! -d "$REVIEWS_DIR" ]; then
-            echo "⚠️  No log reviews directory found at $REVIEWS_DIR"
-            exit 0
-          fi
-
-          echo ""
-          echo "=========================================="
-          echo "Agent Log Summaries"
-          echo "=========================================="
-          echo "Run group: $RUN_GROUP"
-          echo ""
-
-          # Display summaries for each competition
-          for run_dir in "$REVIEWS_DIR"/*; do
-            if [ -d "$run_dir" ]; then
-              RUN_NAME=$(basename "$run_dir")
-              SUMMARY_FILE="$run_dir/claude-summary.txt"
-
-              if [ -f "$SUMMARY_FILE" ]; then
-                echo "────────────────────────────────────────"
-                echo "Competition: $RUN_NAME"
-                echo "────────────────────────────────────────"
-                cat "$SUMMARY_FILE"
-                echo ""
-              fi
-            fi
-          done
-
-          echo "=========================================="
-          echo "Download 'agent-log-summaries' artifact for full details"
-          echo "=========================================="
+          ./RUN_AGENT_V6.sh
 
       - name: Upload results
         if: always() && github.event.inputs.dry_run == 'false'
@@ -251,15 +175,6 @@ jobs:
           path: |
             ${{ github.workspace }}/mle-bench/runs/*/*_grading_report.json
             ${{ github.workspace }}/mle-bench/runs/*/results.json
-          retention-days: 90
-
-      - name: Upload log summaries
-        if: always() && github.event.inputs.dry_run == 'false'
-        uses: actions/upload-artifact@v4
-        with:
-          name: agent-log-summaries-${{ github.ref_name }}-run${{ github.run_number }}
-          path: ${{ github.workspace }}/mle-bench/runs/*/log_reviews.zip
-          if-no-files-found: warn
           retention-days: 90
 
       - name: Display results summary
@@ -313,7 +228,7 @@ jobs:
           echo "Cleaning up Docker images..."
 
           # Remove the specific image we built
-          docker image rm agent_v5_kaggle:run-${{ github.run_id }} 2>/dev/null || true
+          docker image rm agent_v6:run-${{ github.run_id }} 2>/dev/null || true
 
           # Clean up stopped containers
           docker container prune -f

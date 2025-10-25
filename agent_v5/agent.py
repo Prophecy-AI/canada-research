@@ -118,7 +118,7 @@ class ResearchAgent:
             log(f"→ API call (turn {len(self.conversation_history)//2})")
 
             with self.anthropic_client.messages.stream(
-                model="claude-sonnet-4-5-20250929",
+                model="claude-opus-4-1-20250805", #claude-opus-4-1-20250805 claude-sonnet-4-5-20250929
                 max_tokens=20000,
                 system=self.system_prompt,
                 messages=self.conversation_history,

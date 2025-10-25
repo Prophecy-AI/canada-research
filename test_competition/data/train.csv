@@ -1,0 +1,6 @@
+PassengerId,Age,Fare,Transported
+1,25,50.0,True
+2,30,100.0,False
+3,22,75.0,True
+4,35,120.0,False
+5,28,80.0,True
