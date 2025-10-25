@@ -20,7 +20,6 @@ class FallbackManager:
         """Create a minimal baseline submission when everything else fails"""
         print("🚨 Creating emergency fallback submission...")
         
-        # Try to find any CSV file to understand the structure
         test_file = None
         for file_pattern in ['test.csv', 'Test.csv', '*test*.csv', '*.csv']:
             matches = list(self.data_dir.glob(file_pattern))
